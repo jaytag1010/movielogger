@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { useMedia } from '@/hooks/useMedia'
 import { useMediaStore } from '@/store/mediaStore'
 import { MediaEntry } from '@/types/media'
+import { getEffectiveMediaType } from '@/utils/formatters'
 import { Film, Tv, List } from 'lucide-react'
 
 const ITEMS_PER_PAGE = 20
@@ -28,14 +29,14 @@ export default function MyListPage() {
   const [page, setPage] = useState(1)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const movieCount = entries.filter((e) => e.type === 'movie').length
-  const seriesCount = entries.filter((e) => e.type === 'series').length
+  const movieCount = entries.filter((e) => getEffectiveMediaType(e) === 'movie').length
+  const seriesCount = entries.filter((e) => getEffectiveMediaType(e) === 'series').length
 
-  // For "All" tab, show all filteredEntries; otherwise filter by type
+  // For "All" tab, show all filteredEntries; otherwise filter by effective type
   const tabEntries =
     activeTab === 'all'
       ? filteredEntries
-      : filteredEntries.filter((e) => e.type === activeTab)
+      : filteredEntries.filter((e) => getEffectiveMediaType(e) === activeTab)
 
   const paginatedEntries = tabEntries.slice(0, page * ITEMS_PER_PAGE)
   const hasMore = tabEntries.length > page * ITEMS_PER_PAGE
@@ -108,20 +109,20 @@ export default function MyListPage() {
             </TabsContent>
             <TabsContent value="movie">
               <MediaList
-                entries={paginatedEntries.filter((e) => e.type === 'movie')}
+                entries={paginatedEntries.filter((e) => getEffectiveMediaType(e) === 'movie')}
                 emptyLabel="movies"
-                totalCount={tabEntries.filter((e) => e.type === 'movie').length}
-                allCount={filteredEntries.filter((e) => e.type === 'movie').length}
+                totalCount={tabEntries.filter((e) => getEffectiveMediaType(e) === 'movie').length}
+                allCount={filteredEntries.filter((e) => getEffectiveMediaType(e) === 'movie').length}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />
             </TabsContent>
             <TabsContent value="series">
               <MediaList
-                entries={paginatedEntries.filter((e) => e.type === 'series')}
+                entries={paginatedEntries.filter((e) => getEffectiveMediaType(e) === 'series')}
                 emptyLabel="series"
-                totalCount={tabEntries.filter((e) => e.type === 'series').length}
-                allCount={filteredEntries.filter((e) => e.type === 'series').length}
+                totalCount={tabEntries.filter((e) => getEffectiveMediaType(e) === 'series').length}
+                allCount={filteredEntries.filter((e) => getEffectiveMediaType(e) === 'series').length}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />

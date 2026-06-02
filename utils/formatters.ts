@@ -1,5 +1,6 @@
 import { Timestamp } from 'firebase/firestore'
 import { format, formatDistanceToNow } from 'date-fns'
+import type { MediaEntry, MediaType } from '@/types/media'
 
 export function formatDate(date: Timestamp | Date | null | undefined): string {
   if (!date) return '—'
@@ -81,4 +82,32 @@ export function getDisplayTitle(entry: {
     return `${entry.title} — Season ${entry.seasonNumber}`
   }
   return entry.title
+}
+
+/**
+ * Derives the effective media type using a strict authority hierarchy:
+ *
+ *  1. TMDB-linked entry  → stored `type` was set authoritatively by TMDB.
+ *  2. Unlinked entry with totalEpisodes > 1 → 'series' (structural signal).
+ *  3. Fallback → stored `type`.
+ *
+ * Title patterns (Season 1, Part 2, etc.) are deliberately NOT used because
+ * movie franchises share the same naming conventions.
+ *
+ * This is the single source of truth for media-type classification across
+ * My List, Dashboard, Top Rankings, Statistics, and Progress.
+ */
+export function getEffectiveMediaType(
+  entry: Pick<MediaEntry, 'tmdbId' | 'type' | 'totalEpisodes'>
+): MediaType {
+  // TMDB-linked: type was set by TMDB — highest authority
+  if (entry.tmdbId != null) {
+    return entry.type
+  }
+  // Unlinked but has structural series signal (episode count > 1)
+  if (entry.totalEpisodes != null && entry.totalEpisodes > 1) {
+    return 'series'
+  }
+  // Default to stored type
+  return entry.type
 }

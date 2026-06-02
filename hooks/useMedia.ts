@@ -11,6 +11,7 @@ import {
   deleteMediaEntry,
 } from '@/lib/firebase/firestore'
 import { MediaEntry, MediaEntryInput, MediaEntryUpdate, MediaFilters } from '@/types/media'
+import { getEffectiveMediaType } from '@/utils/formatters'
 import { Timestamp } from 'firebase/firestore'
 
 export function useMedia() {
@@ -75,7 +76,7 @@ function getFilteredEntries(entries: MediaEntry[], filters: MediaFilters): Media
   let result = [...entries]
 
   if (filters.type !== 'all') {
-    result = result.filter((e) => e.type === filters.type)
+    result = result.filter((e) => getEffectiveMediaType(e) === filters.type)
   }
 
   if (filters.status !== 'all') {

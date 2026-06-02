@@ -156,7 +156,7 @@ export function FilterBar({ entries }: FilterBarProps) {
               <SelectValue placeholder="Age Rating" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Ratings</SelectItem>
+              <SelectItem value="all">All Age Ratings</SelectItem>
               {ageRatings.map((r) => (
                 <SelectItem key={r} value={r}>{r}</SelectItem>
               ))}

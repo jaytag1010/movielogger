@@ -6,7 +6,7 @@ import { Star, Film, Tv } from 'lucide-react'
 import { MediaEntry, MediaType } from '@/types/media'
 import { GlassCard } from '@/components/common/GlassCard'
 import { Badge } from '@/components/ui/badge'
-import { getDisplayTitle } from '@/utils/formatters'
+import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
 
 interface TopRankingListProps {
   entries: MediaEntry[]
@@ -16,7 +16,7 @@ interface TopRankingListProps {
 
 export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProps) {
   const filtered = entries
-    .filter((e) => e.type === type && e.personalRating !== null)
+    .filter((e) => getEffectiveMediaType(e) === type && e.personalRating !== null)
     .sort((a, b) => (b.personalRating ?? 0) - (a.personalRating ?? 0))
     .slice(0, limit)
 
@@ -94,7 +94,7 @@ export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProp
                   <p className="text-xs font-medium text-white truncate">{getDisplayTitle(entry)}</p>
                   <span className="text-xs font-bold text-amber-400 flex-shrink-0 flex items-center gap-0.5">
                     <Star className="w-2.5 h-2.5 fill-amber-400" />
-                    {entry.personalRating?.toFixed(1)}
+                    {entry.personalRating?.toFixed(2)}
                   </span>
                 </div>
                 <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">

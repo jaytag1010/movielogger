@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { Film, Tv, Clock, Star, TrendingUp } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { calculateTotalWatchHours } from '@/utils/watchTime'
-import { formatWatchTime } from '@/utils/formatters'
+import { formatWatchTime, getEffectiveMediaType } from '@/utils/formatters'
 import { GlassCard } from '@/components/common/GlassCard'
 
 interface StatsCardsProps {
@@ -13,8 +13,8 @@ interface StatsCardsProps {
 
 export function StatsCards({ entries }: StatsCardsProps) {
   const completed = entries.filter((e) => e.status === 'completed')
-  const movies = entries.filter((e) => e.type === 'movie')
-  const series = entries.filter((e) => e.type === 'series')
+  const movies = entries.filter((e) => getEffectiveMediaType(e) === 'movie')
+  const series = entries.filter((e) => getEffectiveMediaType(e) === 'series')
   const totalHours = calculateTotalWatchHours(completed)
 
   const ratedEntries = entries.filter((e) => e.personalRating !== null)
