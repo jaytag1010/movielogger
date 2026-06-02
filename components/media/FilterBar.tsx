@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Search, X } from 'lucide-react'
+import { Search, X, LayoutGrid, Table2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -13,12 +13,15 @@ import {
 import { Button } from '@/components/ui/button'
 import { MediaEntry, MediaFilters, MediaStatus, MEDIA_STATUS_LABELS } from '@/types/media'
 import { useMediaStore } from '@/store/mediaStore'
+import { cn } from '@/utils/cn'
 
 interface FilterBarProps {
   entries: MediaEntry[]
+  viewMode?: 'card' | 'table'
+  onViewModeChange?: (mode: 'card' | 'table') => void
 }
 
-export function FilterBar({ entries }: FilterBarProps) {
+export function FilterBar({ entries, viewMode, onViewModeChange }: FilterBarProps) {
   const { filters, setFilters, resetFilters } = useMediaStore()
 
   const genres = useMemo(() => {
@@ -199,6 +202,37 @@ export function FilterBar({ entries }: FilterBarProps) {
             <X className="w-3.5 h-3.5 mr-1" />
             Clear
           </Button>
+        )}
+
+        {onViewModeChange && viewMode && (
+          <div className="flex items-center rounded-lg border border-white/10 overflow-hidden flex-shrink-0 ml-auto">
+            <button
+              type="button"
+              onClick={() => onViewModeChange('card')}
+              title="Card view"
+              className={cn(
+                'h-8 w-8 flex items-center justify-center transition-colors',
+                viewMode === 'card'
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+              )}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewModeChange('table')}
+              title="Table view"
+              className={cn(
+                'h-8 w-8 flex items-center justify-center transition-colors border-l border-white/10',
+                viewMode === 'table'
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+              )}
+            >
+              <Table2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         )}
       </div>
     </div>

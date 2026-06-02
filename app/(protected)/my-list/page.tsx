@@ -2,11 +2,12 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { MediaCard } from '@/components/media/MediaCard'
+import { MediaTable } from '@/components/media/MediaTable'
 import { FilterBar } from '@/components/media/FilterBar'
 import { EditEntryModal } from '@/components/media/EditEntryModal'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
@@ -28,6 +29,20 @@ export default function MyListPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [page, setPage] = useState(1)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const VIEW_MODE_KEY = 'movielogger-view-mode'
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
+
+  // Initialise from localStorage on mount; write back on change
+  useEffect(() => {
+    const stored = localStorage.getItem(VIEW_MODE_KEY)
+    if (stored === 'table' || stored === 'card') setViewMode(stored)
+  }, [])
+
+  function handleViewModeChange(mode: 'card' | 'table') {
+    setViewMode(mode)
+    localStorage.setItem(VIEW_MODE_KEY, mode)
+  }
 
   const movieCount = entries.filter((e) => getEffectiveMediaType(e) === 'movie').length
   const seriesCount = entries.filter((e) => getEffectiveMediaType(e) === 'series').length
@@ -88,12 +103,27 @@ export default function MyListPage() {
 
         {/* Filters — shared across all tabs */}
         <div className="mb-4">
-          <FilterBar entries={entries} />
+          <FilterBar
+            entries={entries}
+            viewMode={viewMode}
+            onViewModeChange={handleViewModeChange}
+          />
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <LoadingSpinner size="lg" text="Loading your list..." />
+          </div>
+        ) : viewMode === 'table' ? (
+          <div className="mt-2">
+            <MediaTable
+              entries={paginatedEntries}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+            {paginatedEntries.length === 0 && (
+              <p className="text-center text-white/40 text-sm py-12">No titles found</p>
+            )}
           </div>
         ) : (
           <>

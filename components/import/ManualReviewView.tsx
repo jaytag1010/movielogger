@@ -16,6 +16,7 @@ export interface ManualReviewViewProps {
   onSkipRemaining: () => void
   loading?: boolean
   loadingRowIndex?: number | null
+  progress?: { current: number; total: number } | null
 }
 
 export function ManualReviewView({
@@ -29,6 +30,7 @@ export function ManualReviewView({
   onSkipRemaining,
   loading,
   loadingRowIndex,
+  progress,
 }: ManualReviewViewProps) {
   const remaining = queue.length
 
@@ -70,7 +72,14 @@ export function ManualReviewView({
           disabled={loading || loadingRowIndex != null}
           className="flex-1"
         >
-          {loading && loadingRowIndex == null ? (
+          {progress ? (
+            <span className="flex flex-col items-center leading-tight">
+              <span className="text-xs font-semibold">Adding Remaining…</span>
+              <span className="text-[10px] text-white/70 tabular-nums">
+                {progress.current} / {progress.total} ({Math.round((progress.current / progress.total) * 100)}%)
+              </span>
+            </span>
+          ) : loading && loadingRowIndex == null ? (
             <span className="flex items-center gap-2">
               <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
               Adding…

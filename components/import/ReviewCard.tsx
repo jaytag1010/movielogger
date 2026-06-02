@@ -18,6 +18,7 @@ import { CountrySelect } from '@/components/media/CountrySelect'
 import { ImportPreviewRow, ReviewCardEdits } from '@/types/import'
 import { NormalizedTMDBResult } from '@/types/tmdb'
 import { MediaStatus, MEDIA_STATUS_LABELS } from '@/types/media'
+import { fetchMovieMetadata, fetchTVMetadata } from '@/lib/tmdb/api'
 
 interface ReviewCardProps {
   row: ImportPreviewRow
@@ -41,6 +42,7 @@ export function ReviewCard({
   loading,
 }: ReviewCardProps) {
   const [mode, setMode] = useState<CardMode>('collapsed')
+  const [tmdbFetching, setTmdbFetching] = useState(false)
 
   const linked = !!tmdbLink
 
@@ -90,13 +92,46 @@ export function ReviewCard({
     }
   }
 
-  function handleTMDBSelect(result: NormalizedTMDBResult) {
-    onLinkTMDB(row.rowIndex, result)
-    // Auto-populate form fields from search result
+  async function handleTMDBSelect(result: NormalizedTMDBResult) {
+    // Immediately populate sparse fields from the search result
     if (result.title) setTitle(result.title)
     if (result.type) setType(result.type)
     if (result.year) setYearMade(String(result.year))
     if (result.country) setCountry(result.country)
+
+    // Store the sparse result first so "TMDB Linked" badge appears immediately
+    onLinkTMDB(row.rowIndex, result)
+
+    // Fetch full metadata: search results omit genres, ageRating, totalEpisodes, runtime.
+    // The full result replaces the sparse one in reviewTmdbLinks so buildEntryInput
+    // doesn't need to re-fetch during the actual import.
+    setTmdbFetching(true)
+    try {
+      const full = result.type === 'series'
+        ? await fetchTVMetadata(result.tmdbId)
+        : await fetchMovieMetadata(result.tmdbId)
+
+      onLinkTMDB(row.rowIndex, full)
+
+      if (full.genres && full.genres.length > 0) setGenres(full.genres.join(', '))
+      if (full.ageRating) setAgeRating(full.ageRating)
+      if (full.country) setCountry(full.country)
+      if (full.year) setYearMade(String(full.year))
+      if (full.totalEpisodes != null) setTotalEpisodes(String(full.totalEpisodes))
+      if (full.runtime != null) setEpisodeDuration(String(full.runtime))
+
+      // Recalculate watch hours from TMDB data when both values are available
+      const eps = full.totalEpisodes ?? (totalEpisodes ? parseInt(totalEpisodes) : null)
+      const dur = full.runtime ?? (episodeDuration ? parseInt(episodeDuration) : null)
+      if (eps != null && dur != null) {
+        setWatchHours(String(Math.round((eps * dur / 60) * 100) / 100))
+      }
+    } catch {
+      // Full fetch failed — sparse result remains linked; buildEntryInput will
+      // attempt its own full fetch during the actual import.
+    } finally {
+      setTmdbFetching(false)
+    }
   }
 
   function handleSave() {
@@ -121,8 +156,10 @@ export function ReviewCard({
             <p className="text-sm font-medium text-white truncate">{displayTitle}</p>
             {linked && (
               <Badge className="text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0 flex items-center gap-1 flex-shrink-0">
-                <CheckCircle className="w-2.5 h-2.5" />
-                TMDB Linked
+                {tmdbFetching
+                  ? <span className="w-2.5 h-2.5 border border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
+                  : <CheckCircle className="w-2.5 h-2.5" />}
+                {tmdbFetching ? 'Fetching…' : 'TMDB Linked'}
               </Badge>
             )}
           </div>

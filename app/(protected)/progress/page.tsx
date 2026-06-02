@@ -106,9 +106,10 @@ export default function ProgressPage() {
 
   async function handleIncrement(entry: MediaEntry) {
     const current = entry.nextEpisodeToWatch ?? 0
-    if (entry.totalEpisodes != null && current >= entry.totalEpisodes) return
     const next = current + 1
     try {
+      // Allow increment beyond totalEpisodes — the series may have more episodes
+      // than initially recorded. totalEpisodes is only updated on completion.
       if (entry.status === 'planned') {
         await editEntry(entry.id!, { status: 'watching', nextEpisodeToWatch: next })
       } else {
@@ -131,12 +132,23 @@ export default function ProgressPage() {
     if (!finishTarget?.id) return
     setFinishing(true)
     try {
+      // nextEpisodeToWatch is the NEXT unwatched episode, so episodes actually
+      // watched = nextEpisodeToWatch - 1. If the user watched past the recorded
+      // total (e.g. bonus episodes), update totalEpisodes to match — but never
+      // reduce it.
+      const watchedEpisodes = (finishTarget.nextEpisodeToWatch ?? 1) - 1
+      const shouldUpdateTotal =
+        finishTarget.type === 'series' &&
+        watchedEpisodes > 0 &&
+        (finishTarget.totalEpisodes == null || watchedEpisodes > finishTarget.totalEpisodes)
+
       await editEntry(finishTarget.id, {
         status: 'completed',
         dateFinished: Timestamp.fromDate(new Date(details.dateFinished)),
         personalRating: details.personalRating,
         specialNotes: details.specialNotes,
         nextEpisodeToWatch: null,
+        ...(shouldUpdateTotal ? { totalEpisodes: watchedEpisodes } : {}),
       })
       toast.success(`"${getDisplayTitle(finishTarget)}" marked as finished!`)
       setFinishTarget(null)

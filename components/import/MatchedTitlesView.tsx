@@ -11,9 +11,10 @@ export interface MatchedTitlesViewProps {
   onBack: () => void
   onAddAll: () => Promise<void>
   loading?: boolean
+  progress?: { current: number; total: number } | null
 }
 
-export function MatchedTitlesView({ rows, onBack, onAddAll, loading }: MatchedTitlesViewProps) {
+export function MatchedTitlesView({ rows, onBack, onAddAll, loading, progress }: MatchedTitlesViewProps) {
   return (
     <div className="space-y-4">
       <div>
@@ -83,7 +84,14 @@ export function MatchedTitlesView({ rows, onBack, onAddAll, loading }: MatchedTi
           Back
         </Button>
         <Button onClick={onAddAll} disabled={loading} className="flex-1">
-          {loading ? (
+          {progress ? (
+            <span className="flex flex-col items-center leading-tight">
+              <span className="text-xs font-semibold">Adding Titles…</span>
+              <span className="text-[10px] text-white/70 tabular-nums">
+                {progress.current} / {progress.total} ({Math.round((progress.current / progress.total) * 100)}%)
+              </span>
+            </span>
+          ) : loading ? (
             <span className="flex items-center gap-2">
               <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
               Adding…

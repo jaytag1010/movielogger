@@ -63,6 +63,10 @@ export default function ImportPage() {
   const [reviewLoading, setReviewLoading] = useState(false)
   const [reviewLoadingRowIndex, setReviewLoadingRowIndex] = useState<number | null>(null)
 
+  // Enhancement A — real-time progress counters for bulk build loops
+  const [matchedProgress, setMatchedProgress] = useState<{ current: number; total: number } | null>(null)
+  const [reviewProgress, setReviewProgress] = useState<{ current: number; total: number } | null>(null)
+
   const [importReport, setImportReport] = useState<ImportReport | null>(null)
 
   const { entries, loadEntries } = useMedia()
@@ -237,6 +241,7 @@ export default function ImportPage() {
   // ---------------------------------------------------------------------------
   async function handleImportMatched() {
     setMatchedLoading(true)
+    setMatchedProgress({ current: 0, total: matchedRows.length })
     try {
       const inputs: Omit<MediaEntryInput, 'userId'>[] = []
       const newIndexes = new Set(pendingRowIndexes)
@@ -244,11 +249,13 @@ export default function ImportPage() {
         const { input } = await buildEntryInput(row)
         inputs.push(input)
         newIndexes.add(row.rowIndex)
+        setMatchedProgress({ current: inputs.length, total: matchedRows.length })
       }
       setPendingImports((prev) => [...prev, ...inputs])
       setPendingRowIndexes(newIndexes)
     } finally {
       setMatchedLoading(false)
+      setMatchedProgress(null)
     }
 
     if (reviewQueue.length > 0) setStep('review')
@@ -291,6 +298,7 @@ export default function ImportPage() {
   // ---------------------------------------------------------------------------
   async function handleAddRemaining() {
     setReviewLoading(true)
+    setReviewProgress({ current: 0, total: reviewQueue.length })
     try {
       const inputs: Omit<MediaEntryInput, 'userId'>[] = []
       const newIndexes = new Set(pendingRowIndexes)
@@ -300,12 +308,14 @@ export default function ImportPage() {
         const { input } = await buildEntryInput(row, edits, tmdbLink)
         inputs.push(input)
         newIndexes.add(row.rowIndex)
+        setReviewProgress({ current: inputs.length, total: reviewQueue.length })
       }
       setPendingImports((prev) => [...prev, ...inputs])
       setPendingRowIndexes(newIndexes)
       setReviewQueue([])
     } finally {
       setReviewLoading(false)
+      setReviewProgress(null)
     }
 
     if (duplicateRows.length > 0) setStep('duplicates')
@@ -371,9 +381,10 @@ export default function ImportPage() {
       )
     } catch {
       toast.error('Import failed. Please try again.')
-      // Build a zero-count report and navigate to report so the user isn't
-      // permanently stuck on the importing spinner.
-      buildAndSetReport(0, pendingRowIndexes)
+      // Refresh the store — some chunks may have been partially committed.
+      try { await loadEntries() } catch { /* ignore secondary failure */ }
+      // Pass an empty set so no rows are falsely shown as "Imported" in the report.
+      buildAndSetReport(0, new Set<number>())
       setStep('report')
     }
   }
@@ -434,12 +445,14 @@ export default function ImportPage() {
     rows.sort((a, b) => a.rowIndex - b.rowIndex)
 
     const duplicatesImportedCount = duplicateRows.filter((r) => importedIndexes.has(r.rowIndex)).length
+    const matchedImportedCount = matchedRows.filter((r) => importedIndexes.has(r.rowIndex)).length
 
     setImportReport({
       importedCount,
-      duplicateCount: duplicateRows.length,
-      duplicatesImported: duplicatesImportedCount,
+      matchedImportedCount,
       similarFlaggedCount: reviewRows.filter((r) => importedIndexes.has(r.rowIndex)).length,
+      duplicatesImported: duplicatesImportedCount,
+      duplicateCount: duplicateRows.length,
       failedCount: errorRows.length,
       ignoredEmptyRows,
       rows,
@@ -462,6 +475,8 @@ export default function ImportPage() {
     setPendingRowIndexes(new Set())
     setImportReport(null)
     setParseProgress(0)
+    setMatchedProgress(null)
+    setReviewProgress(null)
   }
 
   // Trigger Firestore write exactly once when step becomes 'importing'
@@ -537,6 +552,7 @@ export default function ImportPage() {
                 onBack={() => setStep('summary')}
                 onAddAll={handleImportMatched}
                 loading={matchedLoading}
+                progress={matchedProgress}
               />
             </GlassCard>
           </motion.div>
@@ -556,6 +572,7 @@ export default function ImportPage() {
                 onSkipRemaining={handleSkipRemaining}
                 loading={reviewLoading}
                 loadingRowIndex={reviewLoadingRowIndex}
+                progress={reviewProgress}
               />
             </GlassCard>
           </motion.div>

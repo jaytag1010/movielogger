@@ -136,9 +136,10 @@ export interface ImportReportRow {
 
 export interface ImportReport {
   importedCount: number
-  duplicateCount: number
-  duplicatesImported: number
+  matchedImportedCount: number
   similarFlaggedCount: number
+  duplicatesImported: number
+  duplicateCount: number
   failedCount: number
   ignoredEmptyRows: number
   rows: ImportReportRow[]

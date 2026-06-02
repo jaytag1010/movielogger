@@ -49,7 +49,9 @@ export function ProgressCard({
   const totalDisplay = effectiveTotal != null ? `/ ${effectiveTotal}` : '/ ?'
 
   const canDecrement = currentProgress > 0
-  const canIncrement = effectiveTotal == null || currentProgress < effectiveTotal
+  // Always allow incrementing — the user may have watched past the recorded
+  // total (bonus/extra episodes). totalEpisodes is corrected on completion.
+  const canIncrement = entry.type !== 'movie'
 
   const statusColor = MEDIA_STATUS_COLORS[entry.status]
 

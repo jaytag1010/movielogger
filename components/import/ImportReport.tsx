@@ -130,44 +130,69 @@ export function ImportReportView({ report, onImportMore, onViewList }: ImportRep
         </p>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center">
-          <p className="text-3xl font-bold text-emerald-400">{report.importedCount}</p>
-          <p className="text-xs text-emerald-400/70 mt-0.5">Successfully Imported</p>
-        </div>
-        {report.duplicateCount > 0 && report.duplicatesImported === 0 && (
-          <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
-            <p className="text-3xl font-bold text-white/50">{report.duplicateCount}</p>
-            <p className="text-xs text-white/30 mt-0.5">Duplicates Skipped</p>
-          </div>
-        )}
-        {report.duplicatesImported > 0 && (
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-center">
-            <p className="text-3xl font-bold text-amber-400">{report.duplicatesImported}</p>
-            <p className="text-xs text-amber-400/70 mt-0.5">Duplicates Imported</p>
-          </div>
-        )}
-        {report.similarFlaggedCount > 0 && (
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-center">
-            <p className="text-3xl font-bold text-amber-400">{report.similarFlaggedCount}</p>
-            <p className="text-xs text-amber-400/70 mt-0.5">Imported After Review</p>
-          </div>
-        )}
-        {report.failedCount > 0 && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
-            <p className="text-3xl font-bold text-red-400">{report.failedCount}</p>
-            <p className="text-xs text-red-400/70 mt-0.5">Failed</p>
-          </div>
-        )}
+      {/* ── Primary summary card — Total Imported ── */}
+      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-5 text-center">
+        <p className="text-5xl font-bold text-emerald-400 tabular-nums">{report.importedCount}</p>
+        <p className="text-sm text-emerald-400/80 mt-1 font-medium">Total Imported</p>
       </div>
 
-      {report.ignoredEmptyRows > 0 && (
-        <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5 border border-white/10 opacity-50">
-          <span className="text-xs text-white/50">Ignored Empty Rows</span>
-          <span className="text-xs font-semibold text-white/40 tabular-nums">{report.ignoredEmptyRows}</span>
+      {/* ── Secondary breakdown cards ── */}
+      {(report.matchedImportedCount > 0 || report.similarFlaggedCount > 0 || report.duplicatesImported > 0) && (
+        <div className="grid grid-cols-3 gap-2">
+          {report.matchedImportedCount > 0 && (
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-blue-400 tabular-nums">{report.matchedImportedCount}</p>
+              <p className="text-[10px] text-blue-400/70 mt-0.5 leading-tight">TMDB Matched</p>
+            </div>
+          )}
+          {report.similarFlaggedCount > 0 && (
+            <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-purple-400 tabular-nums">{report.similarFlaggedCount}</p>
+              <p className="text-[10px] text-purple-400/70 mt-0.5 leading-tight">After Review</p>
+            </div>
+          )}
+          {report.duplicatesImported > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-amber-400 tabular-nums">{report.duplicatesImported}</p>
+              <p className="text-[10px] text-amber-400/70 mt-0.5 leading-tight">Duplicates Added</p>
+            </div>
+          )}
         </div>
       )}
+
+      {/* ── Rejected / Not Added ── */}
+      {(() => {
+        const skippedReview = report.rows.filter((r) => r.result === 'skipped_review').length
+        const skippedDupe = report.duplicateCount - report.duplicatesImported
+        return (skippedReview > 0 || skippedDupe > 0 || report.failedCount > 0 || report.ignoredEmptyRows > 0) ? (
+          <div className="space-y-1.5">
+            {skippedReview > 0 && (
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5 border border-white/10">
+                <span className="text-xs text-white/50">Rejected / Not Added</span>
+                <span className="text-xs font-semibold text-white/50 tabular-nums">{skippedReview}</span>
+              </div>
+            )}
+            {skippedDupe > 0 && (
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5 border border-white/10">
+                <span className="text-xs text-white/40">Duplicates Skipped</span>
+                <span className="text-xs font-semibold text-white/40 tabular-nums">{skippedDupe}</span>
+              </div>
+            )}
+            {report.failedCount > 0 && (
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                <span className="text-xs text-red-400/80">Invalid Rows</span>
+                <span className="text-xs font-semibold text-red-400 tabular-nums">{report.failedCount}</span>
+              </div>
+            )}
+            {report.ignoredEmptyRows > 0 && (
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5 border border-white/10 opacity-40">
+                <span className="text-xs text-white/50">Ignored Empty Rows</span>
+                <span className="text-xs font-semibold text-white/40 tabular-nums">{report.ignoredEmptyRows}</span>
+              </div>
+            )}
+          </div>
+        ) : null
+      })()}
 
       {/* ── Errors section (prominent, always at top when failures exist) ── */}
       {errorRows.length > 0 && (

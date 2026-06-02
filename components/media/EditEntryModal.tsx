@@ -103,14 +103,29 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
   async function onSubmit(data: FormData) {
     if (!entry?.id) return
     try {
+      // When saving as Completed for a series, ensure totalEpisodes is never
+      // less than the number of episodes the user actually watched.
+      // nextEpisodeToWatch is the NEXT unwatched episode, so watched = value - 1.
+      const nextEp = data.type === 'series' ? (data.nextEpisodeToWatch ?? null) : null
+      const watchedEpisodes = nextEp != null ? nextEp - 1 : null
+      const recordedTotal = data.totalEpisodes ?? null
+      const correctedTotal =
+        data.type === 'series' &&
+        data.status === 'completed' &&
+        watchedEpisodes != null &&
+        watchedEpisodes > 0 &&
+        (recordedTotal == null || watchedEpisodes > recordedTotal)
+          ? watchedEpisodes
+          : recordedTotal
+
       await editEntry(entry.id, {
         title: data.title,
         type: data.type,
         status: data.status,
         seasonNumber: data.type === 'series' ? (data.seasonNumber ?? null) : null,
-        nextEpisodeToWatch: data.type === 'series' ? (data.nextEpisodeToWatch ?? null) : null,
+        nextEpisodeToWatch: data.status === 'completed' ? null : nextEp,
         yearMade: data.yearMade ?? null,
-        totalEpisodes: data.totalEpisodes ?? null,
+        totalEpisodes: correctedTotal,
         episodeDurationMinutes: data.episodeDurationMinutes ?? null,
         watchHours: data.watchHours ?? null,
         personalRating: data.personalRating ?? null,
