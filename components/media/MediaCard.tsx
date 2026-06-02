@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
-import { formatDate, formatWatchTime, formatGenres, truncateText, getDisplayTitle } from '@/utils/formatters'
+import { formatDate, formatWatchHours, formatGenres, truncateText, getDisplayTitle } from '@/utils/formatters'
 import { calculateEntryWatchHours } from '@/utils/watchTime'
 
 interface MediaCardProps {
@@ -141,7 +141,7 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
               {watchHours > 0 && (
                 <span className="flex items-center gap-0.5">
                   <Clock className="w-3 h-3" />
-                  {formatWatchTime(watchHours)}
+                  {formatWatchHours(watchHours)}
                 </span>
               )}
               {entry.dateFinished && (

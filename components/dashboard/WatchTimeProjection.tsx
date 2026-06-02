@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { Clock, Zap } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { calculateWatchTimeProjection } from '@/utils/watchTime'
+import { formatWatchHours } from '@/utils/formatters'
 import { GlassCard } from '@/components/common/GlassCard'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -83,7 +84,7 @@ export function WatchTimeProjection({ entries }: WatchTimeProjectionProps) {
           <span>Total content watched</span>
         </div>
         <p className="text-2xl font-bold text-white">
-          {projection.totalHours.toFixed(1)}
+          {projection.totalHours.toFixed(2)}
           <span className="text-sm font-normal text-white/50 ml-1">hours</span>
         </p>
       </div>

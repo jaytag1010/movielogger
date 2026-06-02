@@ -108,12 +108,19 @@ export function TMDBSearch({ mediaType = 'all', onSelect, placeholder, defaultQu
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">{result.title}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-white/40">{result.year || '—'}</span>
-                      <span className="flex items-center gap-0.5 text-xs text-white/30">
-                        <Icon className="w-3 h-3" />
-                        {result.type}
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      {/* Type badge — high-contrast, colour-coded */}
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-1.5 py-0.5 border ${
+                        result.type === 'movie'
+                          ? 'bg-purple-500/15 text-purple-300 border-purple-500/25'
+                          : 'bg-blue-500/15 text-blue-300 border-blue-500/25'
+                      }`}>
+                        <Icon className="w-2.5 h-2.5" />
+                        {result.type === 'movie' ? 'Movie' : 'Series'}
                       </span>
+                      {result.year && (
+                        <span className="text-xs text-white/40">{result.year}</span>
+                      )}
                       {result.country && (
                         <span className="text-xs text-white/30">{result.country}</span>
                       )}

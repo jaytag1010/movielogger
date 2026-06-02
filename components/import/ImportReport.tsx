@@ -55,6 +55,13 @@ const RESULT_CONFIG = {
     bg: 'bg-red-500/10',
     border: 'border-red-500/20',
   },
+  skipped_review: {
+    label: 'Skipped (Review)',
+    icon: SkipForward,
+    color: 'text-white/40',
+    bg: 'bg-white/5',
+    border: 'border-white/10',
+  },
 } as const
 
 /**
@@ -127,12 +134,20 @@ export function ImportReportView({ report, onImportMore, onViewList }: ImportRep
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center">
           <p className="text-3xl font-bold text-emerald-400">{report.importedCount}</p>
-          <p className="text-xs text-emerald-400/70 mt-0.5">Imported</p>
+          <p className="text-xs text-emerald-400/70 mt-0.5">Successfully Imported</p>
         </div>
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-center">
-          <p className="text-3xl font-bold text-amber-400">{report.duplicateCount}</p>
-          <p className="text-xs text-amber-400/70 mt-0.5">Duplicates Skipped</p>
-        </div>
+        {report.duplicateCount > 0 && report.duplicatesImported === 0 && (
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
+            <p className="text-3xl font-bold text-white/50">{report.duplicateCount}</p>
+            <p className="text-xs text-white/30 mt-0.5">Duplicates Skipped</p>
+          </div>
+        )}
+        {report.duplicatesImported > 0 && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-center">
+            <p className="text-3xl font-bold text-amber-400">{report.duplicatesImported}</p>
+            <p className="text-xs text-amber-400/70 mt-0.5">Duplicates Imported</p>
+          </div>
+        )}
         {report.similarFlaggedCount > 0 && (
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-center">
             <p className="text-3xl font-bold text-amber-400">{report.similarFlaggedCount}</p>
@@ -146,6 +161,13 @@ export function ImportReportView({ report, onImportMore, onViewList }: ImportRep
           </div>
         )}
       </div>
+
+      {report.ignoredEmptyRows > 0 && (
+        <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5 border border-white/10 opacity-50">
+          <span className="text-xs text-white/50">Ignored Empty Rows</span>
+          <span className="text-xs font-semibold text-white/40 tabular-nums">{report.ignoredEmptyRows}</span>
+        </div>
+      )}
 
       {/* ── Errors section (prominent, always at top when failures exist) ── */}
       {errorRows.length > 0 && (

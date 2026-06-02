@@ -101,6 +101,24 @@ export interface ImportPreviewRow {
   willImport: boolean
   /** TMDB enrichment result found during the preview step. */
   tmdbMatch: TMDBMatchResult
+  /** True when ALL column values for this row are null/empty. Completely ignored — not counted as errors. */
+  isEmptyRow: boolean
+}
+
+/** User edits made inside a review card. Merged on top of mapped data before TMDB overrides. */
+export interface ReviewCardEdits {
+  title?: string
+  type?: 'movie' | 'series'
+  status?: import('./media').MediaStatus
+  yearMade?: number | null
+  country?: string | null
+  genres?: string[]
+  ageRating?: string | null
+  totalEpisodes?: number | null
+  episodeDurationMinutes?: number | null
+  watchHours?: number | null
+  personalRating?: number | null
+  specialNotes?: string | null
 }
 
 export interface ImportReportRow {
@@ -111,6 +129,7 @@ export interface ImportReportRow {
     | 'imported_reviewed'   // imported after user review (title match / similar title)
     | 'skipped_duplicate'   // auto-skipped: TMDB ID match or legacy duplicate
     | 'skipped_error'       // skipped due to validation error
+    | 'skipped_review'      // review card that user chose not to import
   reason: string
   tmdbMatch: string | null
 }
@@ -118,8 +137,10 @@ export interface ImportReportRow {
 export interface ImportReport {
   importedCount: number
   duplicateCount: number
+  duplicatesImported: number
   similarFlaggedCount: number
   failedCount: number
+  ignoredEmptyRows: number
   rows: ImportReportRow[]
   timestamp: Date
 }

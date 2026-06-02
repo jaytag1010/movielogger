@@ -11,6 +11,7 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { GlassCard } from '@/components/common/GlassCard'
 import { ProgressCard } from '@/components/progress/ProgressCard'
 import { FinishConfirmDialog } from '@/components/progress/FinishConfirmDialog'
+import { CompletionDetailsModal, CompletionDetails } from '@/components/progress/CompletionDetailsModal'
 import { TMDBLinkDialog } from '@/components/progress/TMDBLinkDialog'
 import { EditEntryModal } from '@/components/media/EditEntryModal'
 import { TMDBSearch } from '@/components/media/TMDBSearch'
@@ -44,8 +45,11 @@ export default function ProgressPage() {
   // ── Filter state ──────────────────────────────────────────────────────────
   const [filter, setFilter] = useState<ProgressFilter>('watching')
 
-  // ── Finish dialog ─────────────────────────────────────────────────────────
+  // ── Finish flow (two-step) ────────────────────────────────────────────────
+  // Step 1: FinishConfirmDialog — user confirms they want to mark as finished
+  // Step 2: CompletionDetailsModal — user fills in rating, date, notes
   const [finishTarget, setFinishTarget] = useState<MediaEntry | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [finishing, setFinishing] = useState(false)
 
   // ── Bulk refresh ──────────────────────────────────────────────────────────
@@ -115,19 +119,28 @@ export default function ProgressPage() {
     }
   }
 
-  // ── Finish confirmation ───────────────────────────────────────────────────
+  // ── Finish flow ───────────────────────────────────────────────────────────
 
-  async function handleConfirmFinish() {
+  /** Step 1 confirmed — open the Completion Details modal. */
+  function handleFinishConfirmed() {
+    setDetailsOpen(true)
+  }
+
+  /** Step 2 submitted — write the completion to Firestore. */
+  async function handleSaveAndComplete(details: CompletionDetails) {
     if (!finishTarget?.id) return
     setFinishing(true)
     try {
       await editEntry(finishTarget.id, {
         status: 'completed',
-        dateFinished: Timestamp.fromDate(new Date()),
+        dateFinished: Timestamp.fromDate(new Date(details.dateFinished)),
+        personalRating: details.personalRating,
+        specialNotes: details.specialNotes,
         nextEpisodeToWatch: null,
       })
       toast.success(`"${getDisplayTitle(finishTarget)}" marked as finished!`)
       setFinishTarget(null)
+      setDetailsOpen(false)
     } catch {
       toast.error('Failed to update entry')
     } finally {
@@ -502,9 +515,19 @@ export default function ProgressPage() {
 
       <FinishConfirmDialog
         entry={finishTarget}
-        open={finishTarget != null}
+        open={finishTarget != null && !detailsOpen}
         onOpenChange={(open) => { if (!open) setFinishTarget(null) }}
-        onConfirm={handleConfirmFinish}
+        onConfirm={handleFinishConfirmed}
+      />
+
+      <CompletionDetailsModal
+        entry={finishTarget}
+        open={detailsOpen}
+        onOpenChange={(open) => {
+          setDetailsOpen(open)
+          if (!open) setFinishTarget(null)
+        }}
+        onConfirm={handleSaveAndComplete}
         loading={finishing}
       />
 

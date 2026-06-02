@@ -10,7 +10,7 @@ import {
 } from '@/types/import'
 import { detectColumnMapping, mapRow } from './columnMapper'
 import { MediaEntry } from '@/types/media'
-import { searchMulti } from '@/lib/tmdb/api'
+import { searchMultiNormalized } from '@/lib/tmdb/api'
 import { NormalizedTMDBResult } from '@/types/tmdb'
 import { normalizeCountry } from '@/utils/countries'
 
@@ -280,47 +280,32 @@ function detectDuplicate(
 async function findTMDBMatch(mapped: MappedRow): Promise<TMDBMatchResult> {
   if (!mapped.title) return { status: 'no_match', result: null, confidence: 0 }
 
-  // If the row already supplies a tmdbId we skip the search — the page will
-  // fetch full metadata using that ID directly.
-  if (mapped.tmdbId) return { status: 'no_match', result: null, confidence: 0 }
+  // Row already has an explicit tmdbId — treat as a confident match so it goes to the Matched screen.
+  // Full metadata is fetched later in buildEntryInput; we build a minimal NormalizedTMDBResult here.
+  if (mapped.tmdbId) {
+    const syntheticResult: NormalizedTMDBResult = {
+      tmdbId: mapped.tmdbId,
+      title: mapped.title,
+      type: (mapped.type === 'series' ? 'series' : 'movie') as 'movie' | 'series',
+      year: mapped.yearMade ?? null,
+      posterUrl: mapped.posterUrl ?? null,
+      backdropUrl: mapped.backdropUrl ?? null,
+      genres: mapped.genres ?? [],
+      country: mapped.country ?? null,
+      runtime: mapped.episodeDurationMinutes ?? null,
+      totalEpisodes: mapped.totalEpisodes ?? null,
+      ageRating: mapped.ageRating ?? null,
+      overview: '',
+    }
+    return { status: 'matched', result: syntheticResult, confidence: 1.0 }
+  }
 
   try {
-    const { movies, series } = await searchMulti(mapped.title)
-
-    const allResults: NormalizedTMDBResult[] = [
-      ...movies.map((m) => ({
-        tmdbId: m.id,
-        title: m.title,
-        type: 'movie' as const,
-        year: m.release_date ? parseInt(m.release_date.split('-')[0]) : null,
-        posterUrl: null,
-        backdropUrl: null,
-        genres: [],
-        country: null,
-        runtime: null,
-        totalEpisodes: null,
-        ageRating: null,
-        overview: m.overview,
-      })),
-      ...series.map((s) => ({
-        tmdbId: s.id,
-        title: s.name,
-        type: 'series' as const,
-        year: s.first_air_date ? parseInt(s.first_air_date.split('-')[0]) : null,
-        posterUrl: null,
-        backdropUrl: null,
-        genres: [],
-        country: s.origin_country?.[0] || null,
-        runtime: null,
-        totalEpisodes: null,
-        ageRating: null,
-        overview: s.overview,
-      })),
-    ]
+    const allResults = await searchMultiNormalized(mapped.title)
 
     if (allResults.length === 0) return { status: 'no_match', result: null, confidence: 0 }
 
-    // ── Series signals from the source row ────────────────────────────────
+    // ── Series signals from the source row ──────────────────────────────
     // These are strong indicators that the entry should be a TV series, regardless
     // of what the spreadsheet's Type column says (which is often wrong).
     const rowHasEpisodes = (mapped.totalEpisodes ?? 0) > 1
@@ -389,15 +374,19 @@ async function findTMDBMatch(mapped: MappedRow): Promise<TMDBMatchResult> {
 // Main preview builder
 // ---------------------------------------------------------------------------
 
+function isRowCompletelyEmpty(row: ImportRow): boolean {
+  return Object.values(row).every(
+    (v) => v === null || v === undefined || String(v).trim() === ''
+  )
+}
+
 export async function buildImportPreview(
   data: ParsedImportData,
   existingEntries: MediaEntry[],
   onProgress?: (current: number, total: number) => void
-): Promise<ImportPreviewRow[]> {
+): Promise<{ rows: ImportPreviewRow[]; ignoredEmptyRows: number }> {
   const existingTitlesLower = new Set(existingEntries.map((e) => e.title.toLowerCase().trim()))
 
-  // Season-aware identity keys: "<tmdbId>-S<seasonNumber|all>"
-  // Entries without a season number (legacy or full-series) use "Sall".
   const existingSeasonKeys = new Set<string>(
     existingEntries
       .filter((e) => e.tmdbId != null)
@@ -405,16 +394,37 @@ export async function buildImportPreview(
   )
 
   const result: ImportPreviewRow[] = []
+  let ignoredCount = 0
 
   for (let index = 0; index < data.rows.length; index++) {
     const row = data.rows[index]
+
+    if (isRowCompletelyEmpty(row)) {
+      ignoredCount++
+      result.push({
+        rowIndex: index + 1,
+        raw: row,
+        mapped: {},
+        errors: [],
+        isDuplicate: false,
+        needsReview: false,
+        reviewReason: null,
+        duplicateType: null,
+        similarTitles: [],
+        existingEntry: undefined,
+        willImport: false,
+        tmdbMatch: { status: 'no_match', result: null, confidence: 0 },
+        isEmptyRow: true,
+      })
+      onProgress?.(index + 1, data.rows.length)
+      continue
+    }
+
     const mapped = mapRow(row, data.columnMapping)
     const errors = validateMappedRow(mapped, index + 1)
 
-    // Duplicate detection (season-aware)
     const dupResult = detectDuplicate(mapped, existingEntries, existingSeasonKeys, existingTitlesLower)
 
-    // TMDB enrichment — only for rows with no errors and no auto-skip duplicates
     let tmdbMatch: TMDBMatchResult = { status: 'no_match', result: null, confidence: 0 }
     if (errors.length === 0 && !dupResult.isDuplicate) {
       tmdbMatch = await findTMDBMatch(mapped)
@@ -433,11 +443,11 @@ export async function buildImportPreview(
       duplicateType: dupResult.duplicateType,
       similarTitles: dupResult.similarTitles,
       existingEntry: dupResult.existingEntry,
-      // Review rows start pre-checked — user can uncheck to skip them
       willImport: errors.length === 0 && !dupResult.isDuplicate,
       tmdbMatch,
+      isEmptyRow: false,
     })
   }
 
-  return result
+  return { rows: result, ignoredEmptyRows: ignoredCount }
 }

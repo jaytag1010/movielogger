@@ -13,17 +13,26 @@ const BASE_URL = process.env.NEXT_PUBLIC_TMDB_BASE_URL || 'https://api.themovied
 const IMAGE_BASE = process.env.NEXT_PUBLIC_TMDB_IMAGE_BASE_URL || 'https://image.tmdb.org/t/p'
 const API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY
 
+const TMDB_TIMEOUT_MS = 10_000
+
 async function tmdbFetch<T>(path: string, params: Record<string, string> = {}): Promise<T> {
   const url = new URL(`${BASE_URL}${path}`)
   url.searchParams.set('api_key', API_KEY || '')
   url.searchParams.set('language', 'en-US')
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
 
-  const res = await fetch(url.toString())
-  if (!res.ok) {
-    throw new Error(`TMDB API error: ${res.status} ${res.statusText}`)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TMDB_TIMEOUT_MS)
+
+  try {
+    const res = await fetch(url.toString(), { signal: controller.signal })
+    if (!res.ok) {
+      throw new Error(`TMDB API error: ${res.status} ${res.statusText}`)
+    }
+    return res.json()
+  } finally {
+    clearTimeout(timer)
   }
-  return res.json()
 }
 
 export function getTMDBImageUrl(path: string | null, size = 'w500'): string | null {
@@ -63,6 +72,34 @@ export async function searchMulti(
     .slice(0, 5) as TMDBSeries[]
 
   return { movies, series }
+}
+
+/**
+ * Searches TMDB using /search/multi and returns up to 10 results preserving
+ * TMDB's own relevance ordering. Movies and TV series are interleaved as
+ * ranked by TMDB — neither type is deprioritised.
+ *
+ * Use this for any "search all" UI (e.g. Add Entry, Progress TMDB Repair).
+ */
+export async function searchMultiNormalized(
+  query: string
+): Promise<NormalizedTMDBResult[]> {
+  const data = await tmdbFetch<{
+    results: ((TMDBMovie | TMDBSeries) & { media_type: string })[]
+  }>('/search/multi', { query })
+
+  const relevant = data.results
+    .filter((r) => r.media_type === 'movie' || r.media_type === 'tv')
+    .slice(0, 10)
+
+  const normalized = await Promise.all(
+    relevant.map((r) =>
+      r.media_type === 'movie'
+        ? normalizeMovieResult(r as TMDBMovie)
+        : normalizeSeriesResult(r as TMDBSeries)
+    )
+  )
+  return normalized
 }
 
 export async function getMovieDetails(tmdbId: number): Promise<TMDBMovie> {

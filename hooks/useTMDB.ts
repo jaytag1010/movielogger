@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react'
 import {
   searchMovies,
   searchTVSeries,
+  searchMultiNormalized,
   fetchMovieMetadata,
   fetchTVMetadata,
   fetchSeasonMetadata,
@@ -34,16 +35,23 @@ export function useTMDBSearch(mediaType: MediaType | 'all' = 'all') {
         try {
           const items: NormalizedTMDBResult[] = []
 
-          if (mediaType === 'movie' || mediaType === 'all') {
-            const movies = await searchMovies(query, year)
-            const normalized = await Promise.all(movies.map(normalizeMovieResult))
-            items.push(...normalized)
-          }
-
-          if (mediaType === 'series' || mediaType === 'all') {
-            const series = await searchTVSeries(query, year)
-            const normalized = await Promise.all(series.map(normalizeSeriesResult))
-            items.push(...normalized)
+          if (mediaType === 'all') {
+            // Use /search/multi so TMDB's relevance ranking is preserved across
+            // both types. The old approach (movie first, then series) hid TV
+            // results entirely when ≥10 movie results existed.
+            const results = await searchMultiNormalized(query)
+            items.push(...results)
+          } else {
+            if (mediaType === 'movie') {
+              const movies = await searchMovies(query, year)
+              const normalized = await Promise.all(movies.map(normalizeMovieResult))
+              items.push(...normalized)
+            }
+            if (mediaType === 'series') {
+              const series = await searchTVSeries(query, year)
+              const normalized = await Promise.all(series.map(normalizeSeriesResult))
+              items.push(...normalized)
+            }
           }
 
           setResults(items.slice(0, 10))

@@ -20,6 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { TMDBSearch } from './TMDBSearch'
 import { CountrySelect } from './CountrySelect'
 import { NormalizedTMDBResult } from '@/types/tmdb'
@@ -54,12 +60,15 @@ type FormData = z.infer<typeof schema>
 
 interface AddEntryFormProps {
   onSuccess?: () => void
+  /** Called when the user chooses to cancel adding an entry. */
+  onCancel?: () => void
 }
 
-export function AddEntryForm({ onSuccess }: AddEntryFormProps) {
+export function AddEntryForm({ onSuccess, onCancel }: AddEntryFormProps) {
   const [tmdbData, setTmdbData] = useState<NormalizedTMDBResult | null>(null)
   const [genres, setGenres] = useState<string[]>([])
   const [genreInput, setGenreInput] = useState('')
+  const [showDiscard, setShowDiscard] = useState(false)
   const { fetchDetails, loading: tmdbLoading } = useTMDBDetails()
   const { fetchSeason, loading: seasonLoading } = useTMDBSeasonDetails()
   const { addEntry, entries } = useMedia()
@@ -71,7 +80,7 @@ export function AddEntryForm({ onSuccess }: AddEntryFormProps) {
     watch,
     control,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     // No type pre-selection — user picks after TMDB selection auto-fills it,
@@ -123,6 +132,14 @@ export function AddEntryForm({ onSuccess }: AddEntryFormProps) {
     toast.success(`Season ${seasonNum} metadata loaded`)
   }
 
+  function handleCancelClick() {
+    if (isDirty || tmdbData || genres.length > 0) {
+      setShowDiscard(true)
+    } else {
+      onCancel?.()
+    }
+  }
+
   function addGenre(genre: string) {
     const g = genre.trim()
     if (g && !genres.includes(g)) setGenres([...genres, g])
@@ -169,12 +186,53 @@ export function AddEntryForm({ onSuccess }: AddEntryFormProps) {
   }
 
   return (
+    <>
+    {/* Discard Changes confirmation dialog */}
+    <Dialog open={showDiscard} onOpenChange={setShowDiscard}>
+      <DialogContent className="max-w-xs">
+        <DialogHeader>
+          <DialogTitle>Discard Changes?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-white/60">Your unsaved entry will be lost.</p>
+        <div className="flex gap-3 mt-4">
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => setShowDiscard(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+            onClick={() => { setShowDiscard(false); onCancel?.() }}
+          >
+            Discard
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
     <motion.form
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       onSubmit={handleSubmit(onSubmit)}
       className="space-y-5"
     >
+      {/* Cancel button — only shown when onCancel is provided */}
+      {onCancel && (
+        <div className="flex items-center justify-between -mt-1 mb-1">
+          <p className="text-sm font-semibold text-white">New Entry</p>
+          <button
+            type="button"
+            onClick={handleCancelClick}
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-white/70 hover:bg-white/10 transition-all"
+            aria-label="Cancel adding entry"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* TMDB Search */}
       <div className="space-y-1.5">
         <Label>Search TMDB (optional)</Label>
@@ -435,5 +493,6 @@ export function AddEntryForm({ onSuccess }: AddEntryFormProps) {
         )}
       </Button>
     </motion.form>
+    </>
   )
 }

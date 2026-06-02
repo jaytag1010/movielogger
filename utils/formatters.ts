@@ -46,6 +46,18 @@ export function formatRating(rating: number | null | undefined): string {
   return rating.toFixed(1)
 }
 
+/**
+ * Formats a watch-hours value as a decimal number with exactly two decimal
+ * places followed by "h".  Use this wherever an individual entry's watch
+ * hours (or an aggregate) must be rendered with full precision.
+ *
+ * Examples: 8.76 → "8.76h"   3101.17 → "3101.17h"   0 → "0.00h"
+ */
+export function formatWatchHours(hours: number | null | undefined): string {
+  if (hours == null || hours === 0) return '0.00h'
+  return `${hours.toFixed(2)}h`
+}
+
 export function formatNumber(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
   return n.toLocaleString()

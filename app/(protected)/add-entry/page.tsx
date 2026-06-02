@@ -16,7 +16,10 @@ export default function AddEntryPage() {
         animate={{ opacity: 1, y: 0 }}
       >
         <GlassCard padding="md">
-          <AddEntryForm onSuccess={() => router.push('/my-list')} />
+          <AddEntryForm
+            onSuccess={() => router.push('/my-list')}
+            onCancel={() => router.back()}
+          />
         </GlassCard>
       </motion.div>
     </AppLayout>
