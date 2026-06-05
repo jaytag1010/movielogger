@@ -110,9 +110,12 @@ export async function getUserMediaEntriesPaginated(
 
 export async function batchCreateMediaEntries(
   userId: string,
-  inputs: Omit<MediaEntryInput, 'userId'>[]
+  inputs: Omit<MediaEntryInput, 'userId'>[],
+  onProgress?: (current: number, total: number) => void
 ): Promise<number> {
-  const BATCH_SIZE = 499
+  // 100-entry chunks: each commit() call advances the progress bar,
+  // giving ~10 visible updates for a 1000-row import.
+  const BATCH_SIZE = 100
   let importedCount = 0
 
   for (let i = 0; i < inputs.length; i += BATCH_SIZE) {
@@ -130,10 +133,12 @@ export async function batchCreateMediaEntries(
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
-      importedCount++
     }
 
     await batch.commit()
+    importedCount += chunk.length
+    // Report progress only after a real commit — no false positives.
+    onProgress?.(importedCount, inputs.length)
   }
 
   return importedCount

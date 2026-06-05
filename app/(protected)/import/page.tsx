@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { AppLayout } from '@/components/layout/AppLayout'
@@ -12,6 +12,7 @@ import { MatchedTitlesView } from '@/components/import/MatchedTitlesView'
 import { ManualReviewView } from '@/components/import/ManualReviewView'
 import { DuplicatesView } from '@/components/import/DuplicatesView'
 import { ImportReportView } from '@/components/import/ImportReport'
+import { ImportingProgress } from '@/components/import/ImportingProgress'
 import { GlassCard } from '@/components/common/GlassCard'
 import { parseImportFile, buildImportPreview } from '@/lib/import/parser'
 import { fetchMovieMetadata, fetchTVMetadata, fetchSeasonMetadata } from '@/lib/tmdb/api'
@@ -29,6 +30,7 @@ import { MediaEntryInput, MediaType, MediaStatus } from '@/types/media'
 import { NormalizedTMDBResult, SeasonMetadata } from '@/types/tmdb'
 import { Progress } from '@/components/ui/progress'
 import { getDisplayTitle } from '@/utils/formatters'
+import { parseEpisodeDurationRange } from '@/utils/episodeDuration'
 
 type ImportStep =
   | 'upload'
@@ -37,7 +39,6 @@ type ImportStep =
   | 'matched'
   | 'review'
   | 'duplicates'
-  | 'importing'
   | 'report'
 
 export default function ImportPage() {
@@ -56,18 +57,22 @@ export default function ImportPage() {
   const [reviewEdits, setReviewEdits] = useState<Record<number, ReviewCardEdits>>({})
   const [reviewTmdbLinks, setReviewTmdbLinks] = useState<Record<number, NormalizedTMDBResult>>({})
 
-  const [pendingImports, setPendingImports] = useState<Omit<MediaEntryInput, 'userId'>[]>([])
-  const [pendingRowIndexes, setPendingRowIndexes] = useState<Set<number>>(new Set())
-
   const [matchedLoading, setMatchedLoading] = useState(false)
   const [reviewLoading, setReviewLoading] = useState(false)
   const [reviewLoadingRowIndex, setReviewLoadingRowIndex] = useState<number | null>(null)
 
-  // Enhancement A — real-time progress counters for bulk build loops
+  // Build-phase progress (TMDB fetch loops)
   const [matchedProgress, setMatchedProgress] = useState<{ current: number; total: number } | null>(null)
   const [reviewProgress, setReviewProgress] = useState<{ current: number; total: number } | null>(null)
 
+  // Write-phase progress (Firestore commits) — shown as unified ImportingProgress overlay
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null)
+
   const [importReport, setImportReport] = useState<ImportReport | null>(null)
+
+  // Refs accumulate counts across steps; never cause stale-closure issues.
+  const accImportedCount = useRef(0)
+  const accImportedIndexes = useRef<Set<number>>(new Set())
 
   const { entries, loadEntries } = useMedia()
   const { user } = useAuthStore()
@@ -91,7 +96,6 @@ export default function ImportPage() {
       specialNotes: edits?.specialNotes ?? mapped.specialNotes ?? null,
     }
 
-    // Resolve TMDB ID: manual link from review card > existing match > explicit column
     const effectiveTmdbMatch = tmdbLink ?? row.tmdbMatch.result
     let resolvedTmdbId: number | null = mapped.tmdbId ?? null
     if (!resolvedTmdbId && effectiveTmdbMatch) {
@@ -105,9 +109,6 @@ export default function ImportPage() {
     if (resolvedTmdbId) {
       try {
         const matchType = effectiveTmdbMatch?.type
-        // Fall back to the existing library entry's type for duplicate rows where
-        // effectiveTmdbMatch is null (TMDB search was skipped). Without this,
-        // TV series duplicates call fetchMovieMetadata and get a 404.
         const type =
           matchType === 'series' ||
           (edits?.type ?? mapped.type ?? row.existingEntry?.type) === 'series'
@@ -133,9 +134,31 @@ export default function ImportPage() {
       }
     }
 
+    // ── Episode duration: TMDB > imported range-parsed value > null ──
+    const importedDuration = parseEpisodeDurationRange(edits?.episodeDurationMinutes ?? mapped.episodeDurationMinutes)
+    const episodeDurationMinutes: number | null =
+      seasonMeta?.avgRuntime ?? tmdbData?.runtime ?? importedDuration ?? null
+
+    // ── Total episodes ──
+    const totalEpisodes: number | null =
+      seasonMeta?.episodeCount ?? tmdbData?.totalEpisodes ?? (edits?.totalEpisodes ?? mapped.totalEpisodes) ?? null
+
+    // ── Watch hours ──
+    // Season TMDB data > movie TMDB runtime > computed from episodes × duration > user/Excel > null
     const watchHours: number | null = (() => {
       if (seasonMeta && seasonMeta.episodeCount > 0 && seasonMeta.avgRuntime) {
         return Math.round((seasonMeta.episodeCount * seasonMeta.avgRuntime / 60) * 100) / 100
+      }
+      if (resolvedType === 'movie') {
+        const movieRuntime = tmdbData?.runtime ?? importedDuration
+        if (movieRuntime) return Math.round((movieRuntime / 60) * 100) / 100
+      }
+      if (totalEpisodes != null && totalEpisodes > 1 && episodeDurationMinutes) {
+        return Math.round((totalEpisodes * episodeDurationMinutes / 60) * 100) / 100
+      }
+      if (totalEpisodes != null && totalEpisodes <= 1 && episodeDurationMinutes) {
+        // Single-episode entry treated as movie
+        return Math.round((episodeDurationMinutes / 60) * 100) / 100
       }
       return edits?.watchHours ?? mapped.watchHours ?? null
     })()
@@ -146,8 +169,8 @@ export default function ImportPage() {
       posterUrl: seasonMeta?.posterUrl ?? tmdbData?.posterUrl ?? mapped.posterUrl ?? null,
       backdropUrl: tmdbData?.backdropUrl ?? mapped.backdropUrl ?? null,
       yearMade: seasonMeta?.year ?? tmdbData?.year ?? (edits?.yearMade ?? mapped.yearMade) ?? null,
-      totalEpisodes: seasonMeta?.episodeCount ?? tmdbData?.totalEpisodes ?? (edits?.totalEpisodes ?? mapped.totalEpisodes) ?? null,
-      episodeDurationMinutes: seasonMeta?.avgRuntime ?? tmdbData?.runtime ?? (edits?.episodeDurationMinutes ?? mapped.episodeDurationMinutes) ?? null,
+      totalEpisodes,
+      episodeDurationMinutes,
       country: tmdbData?.country ?? (edits?.country ?? mapped.country) ?? null,
       ageRating: tmdbData?.ageRating ?? (edits?.ageRating ?? mapped.ageRating) ?? null,
       genres: (tmdbData?.genres && tmdbData.genres.length > 0)
@@ -163,7 +186,10 @@ export default function ImportPage() {
       return null
     })()
 
-    const mergedTitle = edits?.title ?? mapped.title!
+    const mergedTitle = edits?.title || mapped.title || null
+    if (!mergedTitle) {
+      throw new Error(`Row ${row.rowIndex}: title is required but missing`)
+    }
 
     return {
       input: {
@@ -176,6 +202,40 @@ export default function ImportPage() {
       },
       tmdbTitle,
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Write helper — runs batchCreateMediaEntries with live progress overlay
+  // ---------------------------------------------------------------------------
+  async function writeToFirestore(
+    inputs: Omit<MediaEntryInput, 'userId'>[],
+    rowIndexes: number[]
+  ): Promise<number> {
+    if (!user) throw new Error('Not authenticated')
+    setImportProgress({ current: 0, total: inputs.length })
+    try {
+      const count = await batchCreateMediaEntries(
+        user.uid,
+        inputs,
+        (current, total) => setImportProgress({ current, total })
+      )
+      // Accumulate into refs so buildAndSetReport always reads fresh totals
+      accImportedCount.current += count
+      rowIndexes.forEach((idx) => accImportedIndexes.current.add(idx))
+      return count
+    } finally {
+      setImportProgress(null)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Finalise: build report, navigate, refresh store in background
+  // ---------------------------------------------------------------------------
+  function finalizeImport() {
+    buildAndSetReport()
+    setStep('report')
+    // Non-blocking: refresh My List store so "Go to My List" shows new entries
+    loadEntries().catch(() => {})
   }
 
   // ---------------------------------------------------------------------------
@@ -197,7 +257,7 @@ export default function ImportPage() {
         (r) => r.tmdbMatch.status === 'matched' && r.errors.length === 0 && !r.isDuplicate
       )
       const review = rows.filter(
-        (r) => r.errors.length === 0 && !r.isDuplicate && r.tmdbMatch.status === 'no_match'
+        (r) => r.errors.length === 0 && !r.isDuplicate && !r.isEmptyRow && r.tmdbMatch.status === 'no_match'
       )
       const duplicates = rows.filter((r) => r.isDuplicate)
       const errors = rows.filter((r) => r.errors.length > 0 && !r.isEmptyRow)
@@ -209,10 +269,10 @@ export default function ImportPage() {
       setReviewQueue(review)
       setDuplicateRows(duplicates)
       setErrorRows(errors)
-      setPendingImports([])
-      setPendingRowIndexes(new Set())
       setReviewEdits({})
       setReviewTmdbLinks({})
+      accImportedCount.current = 0
+      accImportedIndexes.current = new Set()
       setStep('summary')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to parse file'
@@ -222,45 +282,49 @@ export default function ImportPage() {
   }
 
   // ---------------------------------------------------------------------------
-  // Summary → next step navigation
+  // Summary → next step
   // ---------------------------------------------------------------------------
   function handleSummaryContinue() {
-    if (matchedRows.length > 0) {
-      setStep('matched')
-    } else if (reviewQueue.length > 0) {
-      setStep('review')
-    } else if (duplicateRows.length > 0) {
-      setStep('duplicates')
-    } else {
-      setStep('importing')
-    }
+    if (matchedRows.length > 0) setStep('matched')
+    else if (reviewRows.length > 0) setStep('review')
+    else if (duplicateRows.length > 0) setStep('duplicates')
+    else finalizeImport()
   }
 
   // ---------------------------------------------------------------------------
   // Matched screen: "Add All N Titles"
+  // Phase 1 — build entries (TMDB fetch, shown in button)
+  // Phase 2 — write to Firestore (ImportingProgress overlay)
   // ---------------------------------------------------------------------------
   async function handleImportMatched() {
     setMatchedLoading(true)
     setMatchedProgress({ current: 0, total: matchedRows.length })
+
+    const inputs: Omit<MediaEntryInput, 'userId'>[] = []
+    const rowIndexes: number[] = []
+
     try {
-      const inputs: Omit<MediaEntryInput, 'userId'>[] = []
-      const newIndexes = new Set(pendingRowIndexes)
       for (const row of matchedRows) {
         const { input } = await buildEntryInput(row)
         inputs.push(input)
-        newIndexes.add(row.rowIndex)
+        rowIndexes.push(row.rowIndex)
         setMatchedProgress({ current: inputs.length, total: matchedRows.length })
       }
-      setPendingImports((prev) => [...prev, ...inputs])
-      setPendingRowIndexes(newIndexes)
     } finally {
       setMatchedLoading(false)
       setMatchedProgress(null)
     }
 
+    try {
+      await writeToFirestore(inputs, rowIndexes)
+    } catch {
+      toast.error('Import failed. Please try again.')
+      return
+    }
+
     if (reviewQueue.length > 0) setStep('review')
     else if (duplicateRows.length > 0) setStep('duplicates')
-    else setStep('importing')
+    else finalizeImport()
   }
 
   // ---------------------------------------------------------------------------
@@ -275,7 +339,7 @@ export default function ImportPage() {
   }
 
   // ---------------------------------------------------------------------------
-  // Review card: add individual card
+  // Review card: "Add to List" (single entry — writes immediately)
   // ---------------------------------------------------------------------------
   async function handleAddOne(rowIndex: number) {
     const row = reviewQueue.find((r) => r.rowIndex === rowIndex)
@@ -285,9 +349,10 @@ export default function ImportPage() {
       const edits = reviewEdits[rowIndex]
       const tmdbLink = reviewTmdbLinks[rowIndex]
       const { input } = await buildEntryInput(row, edits, tmdbLink)
-      setPendingImports((prev) => [...prev, input])
-      setPendingRowIndexes((prev) => { const s = new Set(prev); s.add(rowIndex); return s })
+      await writeToFirestore([input], [rowIndex])
       setReviewQueue((prev) => prev.filter((r) => r.rowIndex !== rowIndex))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to import entry')
     } finally {
       setReviewLoadingRowIndex(null)
     }
@@ -295,31 +360,40 @@ export default function ImportPage() {
 
   // ---------------------------------------------------------------------------
   // Review screen: "Add Remaining N to List"
+  // Phase 1 — build entries (shown in button)
+  // Phase 2 — write to Firestore (ImportingProgress overlay)
   // ---------------------------------------------------------------------------
   async function handleAddRemaining() {
     setReviewLoading(true)
     setReviewProgress({ current: 0, total: reviewQueue.length })
+
+    const inputs: Omit<MediaEntryInput, 'userId'>[] = []
+    const rowIndexes: number[] = []
+
     try {
-      const inputs: Omit<MediaEntryInput, 'userId'>[] = []
-      const newIndexes = new Set(pendingRowIndexes)
       for (const row of reviewQueue) {
         const edits = reviewEdits[row.rowIndex]
         const tmdbLink = reviewTmdbLinks[row.rowIndex]
         const { input } = await buildEntryInput(row, edits, tmdbLink)
         inputs.push(input)
-        newIndexes.add(row.rowIndex)
+        rowIndexes.push(row.rowIndex)
         setReviewProgress({ current: inputs.length, total: reviewQueue.length })
       }
-      setPendingImports((prev) => [...prev, ...inputs])
-      setPendingRowIndexes(newIndexes)
-      setReviewQueue([])
     } finally {
       setReviewLoading(false)
       setReviewProgress(null)
     }
 
+    try {
+      await writeToFirestore(inputs, rowIndexes)
+    } catch {
+      toast.error('Import failed. Please try again.')
+      return
+    }
+
+    setReviewQueue([])
     if (duplicateRows.length > 0) setStep('duplicates')
-    else setStep('importing')
+    else finalizeImport()
   }
 
   // ---------------------------------------------------------------------------
@@ -328,71 +402,48 @@ export default function ImportPage() {
   function handleSkipRemaining() {
     setReviewQueue([])
     if (duplicateRows.length > 0) setStep('duplicates')
-    else setStep('importing')
-    // Note: handleDoImport checks pendingImports.length === 0 and navigates
-    // directly to 'report' if there is nothing to write, so we do not need
-    // to read pendingImports here (which could be a stale closure value if
-    // an individual handleAddOne was still in-flight).
+    else finalizeImport()
   }
 
   // ---------------------------------------------------------------------------
   // Duplicates screen
   // ---------------------------------------------------------------------------
   async function handleDuplicatesDecision(importThem: boolean) {
-    if (importThem) {
-      const inputs: Omit<MediaEntryInput, 'userId'>[] = []
-      const newIndexes = new Set(pendingRowIndexes)
-      for (const row of duplicateRows) {
-        const { input } = await buildEntryInput(row)
-        inputs.push(input)
-        newIndexes.add(row.rowIndex)
-      }
-      setPendingImports((prev) => [...prev, ...inputs])
-      setPendingRowIndexes(newIndexes)
-    }
-
-    if (pendingImports.length === 0 && !importThem) {
-      buildAndSetReport(0, pendingRowIndexes)
-      setStep('report')
-    } else {
-      setStep('importing')
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Firestore write
-  // ---------------------------------------------------------------------------
-  async function handleDoImport() {
-    if (!user) return
-
-    if (pendingImports.length === 0) {
-      buildAndSetReport(0, pendingRowIndexes)
-      setStep('report')
+    if (!importThem) {
+      finalizeImport()
       return
     }
 
+    const inputs: Omit<MediaEntryInput, 'userId'>[] = []
+    const rowIndexes: number[] = []
+
+    for (const row of duplicateRows) {
+      try {
+        const { input } = await buildEntryInput(row)
+        inputs.push(input)
+        rowIndexes.push(row.rowIndex)
+      } catch {
+        // Skip rows that fail to build
+      }
+    }
+
     try {
-      const count = await batchCreateMediaEntries(user.uid, pendingImports)
-      await loadEntries()
-      buildAndSetReport(count, pendingRowIndexes)
-      setStep('report')
-      toast.success(
-        `Imported ${count} entr${count === 1 ? 'y' : 'ies'}`
-      )
+      await writeToFirestore(inputs, rowIndexes)
     } catch {
       toast.error('Import failed. Please try again.')
-      // Refresh the store — some chunks may have been partially committed.
-      try { await loadEntries() } catch { /* ignore secondary failure */ }
-      // Pass an empty set so no rows are falsely shown as "Imported" in the report.
-      buildAndSetReport(0, new Set<number>())
-      setStep('report')
+      return
     }
+
+    finalizeImport()
   }
 
   // ---------------------------------------------------------------------------
-  // Report construction
+  // Report construction — reads from refs, no stale-closure risk
   // ---------------------------------------------------------------------------
-  function buildAndSetReport(importedCount: number, importedIndexes: Set<number>) {
+  function buildAndSetReport() {
+    const importedCount = accImportedCount.current
+    const importedIndexes = accImportedIndexes.current
+
     const rows: ImportReportRow[] = []
 
     for (const row of matchedRows) {
@@ -471,26 +522,14 @@ export default function ImportPage() {
     setReviewQueue([])
     setReviewEdits({})
     setReviewTmdbLinks({})
-    setPendingImports([])
-    setPendingRowIndexes(new Set())
     setImportReport(null)
     setParseProgress(0)
     setMatchedProgress(null)
     setReviewProgress(null)
+    setImportProgress(null)
+    accImportedCount.current = 0
+    accImportedIndexes.current = new Set()
   }
-
-  // Trigger Firestore write exactly once when step becomes 'importing'
-  const importFiredRef = useRef(false)
-  useEffect(() => {
-    if (step === 'importing' && !importFiredRef.current) {
-      importFiredRef.current = true
-      handleDoImport()
-    }
-    if (step !== 'importing') {
-      importFiredRef.current = false
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step])
 
   // ---------------------------------------------------------------------------
   // Render
@@ -499,7 +538,16 @@ export default function ImportPage() {
     <AppLayout title="Import" subtitle="Bulk import from Excel or CSV">
       <AnimatePresence mode="wait">
 
-        {step === 'upload' && (
+        {/* ── Unified write-progress overlay ── */}
+        {importProgress && (
+          <motion.div key="writing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+            <GlassCard padding="md">
+              <ImportingProgress progress={importProgress} />
+            </GlassCard>
+          </motion.div>
+        )}
+
+        {!importProgress && step === 'upload' && (
           <motion.div key="upload" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
             <GlassCard padding="md">
               <ImportDropzone onFileParsed={handleFileParsed} loading={false} />
@@ -507,7 +555,7 @@ export default function ImportPage() {
           </motion.div>
         )}
 
-        {step === 'parsing' && (
+        {!importProgress && step === 'parsing' && (
           <motion.div key="parsing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
             <GlassCard padding="md">
               <div className="py-8 text-center space-y-4">
@@ -527,7 +575,7 @@ export default function ImportPage() {
           </motion.div>
         )}
 
-        {step === 'summary' && (
+        {!importProgress && step === 'summary' && (
           <motion.div key="summary" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
             <GlassCard padding="md">
               <ImportSummary
@@ -544,7 +592,7 @@ export default function ImportPage() {
           </motion.div>
         )}
 
-        {step === 'matched' && (
+        {!importProgress && step === 'matched' && (
           <motion.div key="matched" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
             <GlassCard padding="md">
               <MatchedTitlesView
@@ -558,7 +606,7 @@ export default function ImportPage() {
           </motion.div>
         )}
 
-        {step === 'review' && (
+        {!importProgress && step === 'review' && (
           <motion.div key="review" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
             <GlassCard padding="md">
               <ManualReviewView
@@ -578,7 +626,7 @@ export default function ImportPage() {
           </motion.div>
         )}
 
-        {step === 'duplicates' && (
+        {!importProgress && step === 'duplicates' && (
           <motion.div key="duplicates" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
             <GlassCard padding="md">
               <DuplicatesView
@@ -590,21 +638,7 @@ export default function ImportPage() {
           </motion.div>
         )}
 
-        {step === 'importing' && (
-          <motion.div key="importing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-            <GlassCard padding="md">
-              <div className="py-10 text-center space-y-3">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 flex items-center justify-center mx-auto">
-                  <div className="w-6 h-6 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
-                </div>
-                <p className="text-white font-medium">Saving to your list…</p>
-                <p className="text-sm text-white/40">Writing entries to Firestore</p>
-              </div>
-            </GlassCard>
-          </motion.div>
-        )}
-
-        {step === 'report' && importReport && (
+        {!importProgress && step === 'report' && importReport && (
           <motion.div key="report" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
             <GlassCard padding="md">
               <ImportReportView

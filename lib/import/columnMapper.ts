@@ -1,4 +1,5 @@
 import { COLUMN_ALIASES, ImportRow, MappedRow } from '@/types/import'
+import { parseEpisodeDurationRange } from '@/utils/episodeDuration'
 
 // ---------------------------------------------------------------------------
 // Season extraction
@@ -214,7 +215,7 @@ export function mapRow(row: ImportRow, columnMapping: Record<string, string>): M
     status: parseStatus(get('status')),
     yearMade: parseNumber(get('yearMade')),
     totalEpisodes: parseNumber(get('totalEpisodes')),
-    episodeDurationMinutes: parseNumber(get('episodeDurationMinutes')),
+    episodeDurationMinutes: parseEpisodeDurationRange(get('episodeDurationMinutes')),
     watchHours: parseNumber(get('watchHours')),
     personalRating: parseNumber(get('personalRating')),
     ageRating: get('ageRating') != null ? String(get('ageRating')).trim() : null,

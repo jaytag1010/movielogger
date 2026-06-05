@@ -19,6 +19,7 @@ import { ImportPreviewRow, ReviewCardEdits } from '@/types/import'
 import { NormalizedTMDBResult } from '@/types/tmdb'
 import { MediaStatus, MEDIA_STATUS_LABELS } from '@/types/media'
 import { fetchMovieMetadata, fetchTVMetadata } from '@/lib/tmdb/api'
+import { parseEpisodeDurationRange } from '@/utils/episodeDuration'
 
 interface ReviewCardProps {
   row: ImportPreviewRow
@@ -121,10 +122,13 @@ export function ReviewCard({
       if (full.runtime != null) setEpisodeDuration(String(full.runtime))
 
       // Recalculate watch hours from TMDB data when both values are available
-      const eps = full.totalEpisodes ?? (totalEpisodes ? parseInt(totalEpisodes) : null)
-      const dur = full.runtime ?? (episodeDuration ? parseInt(episodeDuration) : null)
-      if (eps != null && dur != null) {
+      const eps = full.totalEpisodes ?? (totalEpisodes ? parseFloat(totalEpisodes) : null)
+      const dur = full.runtime ?? parseEpisodeDurationRange(episodeDuration)
+      if (eps != null && eps > 1 && dur != null) {
         setWatchHours(String(Math.round((eps * dur / 60) * 100) / 100))
+      } else if (dur != null) {
+        // Single episode or movie: runtime / 60
+        setWatchHours(String(Math.round((dur / 60) * 100) / 100))
       }
     } catch {
       // Full fetch failed — sparse result remains linked; buildEntryInput will
