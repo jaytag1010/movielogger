@@ -12,7 +12,12 @@ export const metadata: Metadata = {
   keywords: ['movies', 'series', 'tracking', 'letterboxd', 'analytics'],
   manifest: '/manifest.json',
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/logo.png', type: 'image/png' },
+    ],
+    shortcut: '/logo.png',
+    apple: '/logo.png',
   },
 }
 

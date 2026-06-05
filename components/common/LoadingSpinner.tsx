@@ -1,6 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import Image from 'next/image'
 import { cn } from '@/utils/cn'
 
 interface LoadingSpinnerProps {
@@ -33,23 +34,25 @@ export function PageLoader() {
   return (
     <div className="min-h-screen bg-cinema-darker flex items-center justify-center">
       <motion.div
-        initial={{ opacity: 0, scale: 0.8 }}
+        initial={{ opacity: 0, scale: 0.92 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="flex flex-col items-center gap-4"
+        className="flex flex-col items-center gap-5"
       >
-        <div className="w-12 h-12 rounded-full border-2 border-white/20 border-t-blue-500 animate-spin" />
-        <div className="flex gap-1.5">
-          {['M', 'L'].map((char, i) => (
-            <motion.span
-              key={char}
-              className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent"
-              animate={{ opacity: [0.4, 1, 0.4] }}
-              transition={{ duration: 1.5, delay: i * 0.2, repeat: Infinity }}
-            >
-              {char}
-            </motion.span>
-          ))}
-        </div>
+        <motion.div
+          animate={{ opacity: [0.65, 1, 0.65] }}
+          transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <Image
+            src="/logo.png"
+            alt="MovieLogger"
+            width={260}
+            height={170}
+            priority
+            unoptimized
+            className="w-[220px] sm:w-[260px] h-auto"
+          />
+        </motion.div>
+        <div className="w-10 h-10 rounded-full border-2 border-white/15 border-t-blue-500 animate-spin" />
       </motion.div>
     </div>
   )
