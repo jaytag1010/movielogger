@@ -74,24 +74,28 @@ export default function DashboardPage() {
           </motion.div>
 
           {/* Watch History */}
-          <motion.div variants={itemVariants}>
+          <motion.div variants={itemVariants} id="watch-history" className="scroll-mt-20">
             <WatchHistoryChart entries={entries} />
           </motion.div>
 
           {/* Top Rankings */}
-          <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <motion.div
+            variants={itemVariants}
+            id="top-rankings"
+            className="grid grid-cols-1 sm:grid-cols-2 gap-4 scroll-mt-20"
+          >
             <TopRankingList entries={entries} type="movie" />
             <TopRankingList entries={entries} type="series" />
+          </motion.div>
+
+          {/* Country Analytics — placed above Genre Distribution */}
+          <motion.div variants={itemVariants}>
+            <CountryChart entries={entries} />
           </motion.div>
 
           {/* Genre Distribution */}
           <motion.div variants={itemVariants}>
             <GenreChart entries={entries} />
-          </motion.div>
-
-          {/* Country Analytics */}
-          <motion.div variants={itemVariants}>
-            <CountryChart entries={entries} />
           </motion.div>
         </motion.div>
       )}

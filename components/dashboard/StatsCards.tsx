@@ -1,6 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import { Film, Tv, Clock, Star, TrendingUp } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { calculateTotalWatchHours } from '@/utils/watchTime'
@@ -11,7 +12,12 @@ interface StatsCardsProps {
   entries: MediaEntry[]
 }
 
+function scrollToId(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 export function StatsCards({ entries }: StatsCardsProps) {
+  const router = useRouter()
   const completed = entries.filter((e) => e.status === 'completed')
   const movies = entries.filter((e) => getEffectiveMediaType(e) === 'movie')
   const series = entries.filter((e) => getEffectiveMediaType(e) === 'series')
@@ -30,6 +36,7 @@ export function StatsCards({ entries }: StatsCardsProps) {
       icon: TrendingUp,
       gradient: 'from-blue-600 to-purple-600',
       glow: 'shadow-glow',
+      onClick: () => router.push('/my-list?tab=all&sort=title_asc'),
     },
     {
       label: 'Movies',
@@ -37,6 +44,7 @@ export function StatsCards({ entries }: StatsCardsProps) {
       icon: Film,
       gradient: 'from-purple-600 to-pink-600',
       glow: 'shadow-glow-purple',
+      onClick: () => router.push('/my-list?tab=movie&sort=title_asc'),
     },
     {
       label: 'Series',
@@ -44,6 +52,7 @@ export function StatsCards({ entries }: StatsCardsProps) {
       icon: Tv,
       gradient: 'from-blue-600 to-cyan-600',
       glow: 'shadow-glow',
+      onClick: () => router.push('/my-list?tab=series&sort=title_asc'),
     },
     {
       label: 'Watch Time',
@@ -51,6 +60,7 @@ export function StatsCards({ entries }: StatsCardsProps) {
       icon: Clock,
       gradient: 'from-amber-500 to-orange-600',
       glow: '',
+      onClick: () => scrollToId('watch-history'),
     },
     {
       label: 'Avg Rating',
@@ -58,6 +68,7 @@ export function StatsCards({ entries }: StatsCardsProps) {
       icon: Star,
       gradient: 'from-yellow-500 to-amber-600',
       glow: '',
+      onClick: () => scrollToId('top-rankings'),
     },
   ]
 
@@ -72,7 +83,8 @@ export function StatsCards({ entries }: StatsCardsProps) {
         >
           <GlassCard
             padding="sm"
-            className="hover:border-white/20 transition-all duration-300 cursor-default group"
+            onClick={stat.onClick}
+            className="hover:border-white/20 transition-all duration-300 cursor-pointer group"
             whileHover={{ y: -2, scale: 1.01 }}
           >
             <div className="flex flex-col gap-2">

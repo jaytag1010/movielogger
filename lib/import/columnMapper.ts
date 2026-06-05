@@ -48,7 +48,12 @@ export function extractSeasonFromTitle(title: string): {
 }
 
 function normalizeHeader(header: string): string {
-  return header.toLowerCase().trim().replace(/[_\-\/]/g, ' ')
+  return header
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')   // strip parenthetical units e.g. "(min)", "(hrs)"
+    .replace(/[_\-\/.]/g, ' ')     // separators → space
+    .replace(/\s+/g, ' ')          // collapse whitespace
+    .trim()
 }
 
 export function detectColumnMapping(headers: string[]): Record<string, string> {
@@ -216,6 +221,7 @@ export function mapRow(row: ImportRow, columnMapping: Record<string, string>): M
     yearMade: parseNumber(get('yearMade')),
     totalEpisodes: parseNumber(get('totalEpisodes')),
     episodeDurationMinutes: parseEpisodeDurationRange(get('episodeDurationMinutes')),
+    episodeAverageDuration: parseNumber(get('episodeAverageDuration')),
     watchHours: parseNumber(get('watchHours')),
     personalRating: parseNumber(get('personalRating')),
     ageRating: get('ageRating') != null ? String(get('ageRating')).trim() : null,

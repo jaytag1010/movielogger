@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
-import { formatDate, formatWatchHours, formatGenres, truncateText, getDisplayTitle } from '@/utils/formatters'
+import { formatDate, formatWatchHours, formatGenres, truncateText, getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
 import { calculateEntryWatchHours } from '@/utils/watchTime'
 
 interface MediaCardProps {
@@ -28,7 +28,8 @@ interface MediaCardProps {
 export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps) {
   const [imgError, setImgError] = useState(false)
   const watchHours = calculateEntryWatchHours(entry)
-  const Icon = entry.type === 'movie' ? Film : Tv
+  const effectiveType = getEffectiveMediaType(entry)
+  const Icon = effectiveType === 'movie' ? Film : Tv
 
   return (
     <motion.div

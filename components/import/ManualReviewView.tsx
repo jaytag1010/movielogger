@@ -11,12 +11,12 @@ export interface ManualReviewViewProps {
   tmdbLinks: Record<number, NormalizedTMDBResult>
   onSaveEdits: (rowIndex: number, edits: ReviewCardEdits) => void
   onLinkTMDB: (rowIndex: number, result: NormalizedTMDBResult) => void
-  onAddOne: (rowIndex: number) => Promise<void>
+  onAddOne: (rowIndex: number, immediateEdits?: ReviewCardEdits) => Promise<void>
   onAddRemaining: () => void
   onSkipRemaining: () => void
   loading?: boolean
   loadingRowIndex?: number | null
-  progress?: { current: number; total: number } | null
+  progress?: { current: number; total: number; phase: 'building' | 'saving' } | null
 }
 
 export function ManualReviewView({
@@ -74,9 +74,11 @@ export function ManualReviewView({
         >
           {progress ? (
             <span className="flex flex-col items-center leading-tight">
-              <span className="text-xs font-semibold">Adding Remaining…</span>
+              <span className="text-xs font-semibold">
+                {progress.phase === 'saving' ? 'Saving to your list…' : 'Adding Remaining…'}
+              </span>
               <span className="text-[10px] text-white/70 tabular-nums">
-                {progress.current} / {progress.total} ({Math.round((progress.current / progress.total) * 100)}%)
+                {progress.current} / {progress.total} ({progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0}%)
               </span>
             </span>
           ) : loading && loadingRowIndex == null ? (

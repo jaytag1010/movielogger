@@ -100,8 +100,9 @@ export function getDisplayTitle(entry: {
  * Derives the effective media type using a strict authority hierarchy:
  *
  *  1. TMDB-linked entry  → stored `type` was set authoritatively by TMDB.
- *  2. Unlinked entry with totalEpisodes > 1 → 'series' (structural signal).
- *  3. Fallback → stored `type`.
+ *  2. Unlinked entry with totalEpisodes > 1  → 'series' (structural signal).
+ *  3. Unlinked entry with totalEpisodes <= 1 → 'movie'  (structural signal).
+ *  4. Fallback (no episode data) → stored `type`.
  *
  * Title patterns (Season 1, Part 2, etc.) are deliberately NOT used because
  * movie franchises share the same naming conventions.
@@ -109,6 +110,20 @@ export function getDisplayTitle(entry: {
  * This is the single source of truth for media-type classification across
  * My List, Dashboard, Top Rankings, Statistics, and Progress.
  */
+/**
+ * Episodes the user has watched for an entry.
+ *
+ * Canonical storage is the `nextEpisodeToWatch` field, which the progress UI
+ * has always displayed directly as the watched count (0 = none watched).
+ * This helper migrates safely: existing values are preserved 1:1, and a
+ * missing value defaults to 0. Movies use an effective total of 1.
+ */
+export function getEpisodesWatched(
+  entry: Pick<MediaEntry, 'nextEpisodeToWatch'>
+): number {
+  return entry.nextEpisodeToWatch ?? 0
+}
+
 export function getEffectiveMediaType(
   entry: Pick<MediaEntry, 'tmdbId' | 'type' | 'totalEpisodes'>
 ): MediaType {
@@ -116,10 +131,12 @@ export function getEffectiveMediaType(
   if (entry.tmdbId != null) {
     return entry.type
   }
-  // Unlinked but has structural series signal (episode count > 1)
-  if (entry.totalEpisodes != null && entry.totalEpisodes > 1) {
-    return 'series'
+  // Unlinked: classify purely by episode count.
+  //   > 1 episode  → series
+  //   <= 1 episode → movie
+  if (entry.totalEpisodes != null) {
+    return entry.totalEpisodes > 1 ? 'series' : 'movie'
   }
-  // Default to stored type
+  // No episode data — default to stored type
   return entry.type
 }

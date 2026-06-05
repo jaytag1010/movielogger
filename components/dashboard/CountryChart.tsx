@@ -80,8 +80,9 @@ function makeTooltip(mode: CountryMode) {
 
 export function CountryChart({ entries }: CountryChartProps) {
   const [mode, setMode] = useState<CountryMode>('titles')
+  const [showOthers, setShowOthers] = useState(false)
 
-  const data = useMemo<ChartData[]>(() => {
+  const { data, othersBreakdown } = useMemo<{ data: ChartData[]; othersBreakdown: ChartData[] }>(() => {
     // Authority: only completed titles count toward country analytics
     const completed = entries.filter((e) => e.status === 'completed')
 
@@ -106,21 +107,20 @@ export function CountryChart({ entries }: CountryChartProps) {
     }
 
     const sorted = Object.entries(totals)
-      .map(([name, value]) => ({ name, value }))
+      .map(([name, value]) => ({ name, value: Math.round(value * 10) / 10 }))
       .sort((a, b) => b.value - a.value)
 
-    if (sorted.length <= MAX_COUNTRIES) return sorted
+    if (sorted.length <= MAX_COUNTRIES) return { data: sorted, othersBreakdown: [] }
 
     // Top 6 + collapse the rest into "Others"
     const top = sorted.slice(0, MAX_COUNTRIES)
-    const othersValue = sorted
-      .slice(MAX_COUNTRIES)
-      .reduce((sum, d) => sum + d.value, 0)
+    const rest = sorted.slice(MAX_COUNTRIES)
+    const othersValue = rest.reduce((sum, d) => sum + d.value, 0)
 
     if (othersValue > 0) {
       top.push({ name: 'Others', value: Math.round(othersValue * 10) / 10 })
     }
-    return top
+    return { data: top, othersBreakdown: rest }
   }, [entries, mode])
 
   // Recreate tooltip component when mode changes so it captures the new value
@@ -221,6 +221,44 @@ export function CountryChart({ entries }: CountryChartProps) {
               </div>
             ))}
           </div>
+
+          {/* Others breakdown — which countries are aggregated into "Others" */}
+          {othersBreakdown.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowOthers((v) => !v)}
+              className="mt-3 w-full text-left rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/[0.07] transition-colors"
+              title={othersBreakdown.map((c) => c.name).join(', ')}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-white/60">
+                  <span className="font-medium text-white/80">Others:</span>{' '}
+                  {othersBreakdown.slice(0, 3).map((c) => c.name).join(', ')}
+                  {othersBreakdown.length > 3 && (
+                    <span className="text-white/40"> +{othersBreakdown.length - 3} more</span>
+                  )}
+                </span>
+                <span className="text-[10px] text-blue-400 flex-shrink-0">
+                  {showOthers ? 'Hide' : 'Show all'}
+                </span>
+              </div>
+
+              {showOthers && (
+                <div className="mt-2 pt-2 border-t border-white/10 grid grid-cols-2 gap-x-3 gap-y-1">
+                  {othersBreakdown.map((c) => (
+                    <div key={c.name} className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-white/50 truncate">{c.name}</span>
+                      <span className="text-[10px] text-white/40 tabular-nums flex-shrink-0">
+                        {mode === 'titles'
+                          ? `${c.value} title${c.value !== 1 ? 's' : ''}`
+                          : `${c.value} hrs`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </button>
+          )}
         </>
       )}
     </GlassCard>

@@ -44,7 +44,7 @@ const schema = z.object({
   type: z.enum(['movie', 'series']),
   status: z.enum(['completed', 'watching', 'planned', 'dropped', 'on_hold']),
   seasonNumber: z.coerce.number().int().min(1).nullable().optional(),
-  nextEpisodeToWatch: z.coerce.number().int().min(1).nullable().optional(),
+  nextEpisodeToWatch: z.coerce.number().int().min(0).nullable().optional(),
   yearMade: z.coerce.number().min(1888).max(2100).nullable().optional(),
   totalEpisodes: z.coerce.number().min(1).nullable().optional(),
   episodeDurationMinutes: z.coerce.number().min(1).nullable().optional(),
@@ -91,6 +91,7 @@ export function AddEntryForm({ onSuccess, onCancel }: AddEntryFormProps) {
   const watchType = watch('type')
   const watchRating = watch('personalRating')
   const watchSeasonNumber = watch('seasonNumber')
+  const watchStatus = watch('status')
 
   async function handleTMDBSelect(result: NormalizedTMDBResult) {
     const details = await fetchDetails(result.tmdbId, result.type as 'movie' | 'series')
@@ -152,15 +153,22 @@ export function AddEntryForm({ onSuccess, onCancel }: AddEntryFormProps) {
 
   async function onSubmit(data: FormData) {
     try {
+      // Episodes Watched: hidden (null) for completed; otherwise the entered count (default 0).
+      // Applies to both movies and series.
+      const episodesWatched = data.status === 'completed' ? null : (data.nextEpisodeToWatch ?? 0)
+      // Movies use Total Episodes = 1 so progress shows out of 1.
+      const resolvedTotalEpisodes =
+        data.type === 'movie' ? (data.totalEpisodes ?? 1) : (data.totalEpisodes ?? null)
+
       await addEntry({
         title: data.title,
         type: data.type,
         status: data.status,
         seasonNumber: data.type === 'series' ? (data.seasonNumber ?? null) : null,
-        nextEpisodeToWatch: data.type === 'series' ? (data.nextEpisodeToWatch ?? null) : null,
+        nextEpisodeToWatch: episodesWatched,
         tmdbId: tmdbData?.tmdbId ?? null,
         yearMade: data.yearMade ?? null,
-        totalEpisodes: data.totalEpisodes ?? null,
+        totalEpisodes: resolvedTotalEpisodes,
         episodeDurationMinutes: data.episodeDurationMinutes ?? null,
         watchHours: data.watchHours ?? null,
         personalRating: data.personalRating ?? null,
@@ -404,17 +412,23 @@ export function AddEntryForm({ onSuccess, onCancel }: AddEntryFormProps) {
               <Input type="number" placeholder="24" {...register('episodeDurationMinutes')} />
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label>Next Episode to Watch</Label>
-            <Input
-              type="number"
-              min={1}
-              placeholder="1"
-              className="w-32"
-              {...register('nextEpisodeToWatch')}
-            />
-            <p className="text-xs text-white/30">Leave blank for planned entries — defaults to 1</p>
-          </div>
+        </div>
+      )}
+
+      {/* Episodes Watched — shown for any non-completed entry (movies & series) */}
+      {watchStatus !== 'completed' && (
+        <div className="space-y-1.5">
+          <Label>Episodes Watched</Label>
+          <Input
+            type="number"
+            min={0}
+            placeholder="0"
+            className="w-32"
+            {...register('nextEpisodeToWatch')}
+          />
+          <p className="text-xs text-white/30">
+            How many episodes you&apos;ve watched so far. Defaults to 0. Movies count out of 1.
+          </p>
         </div>
       )}
 

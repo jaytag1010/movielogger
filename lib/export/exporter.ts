@@ -28,6 +28,7 @@ function entryToRow(entry: MediaEntry) {
     'Year Made': entry.yearMade ?? '',
     'Total Episodes': entry.totalEpisodes ?? '',
     'Episode Duration': entry.episodeDurationMinutes ?? '',
+    'Episode Average Duration': entry.episodeDurationMinutes ?? '',
     // ── User-owned fields (never overwritten by TMDB on re-import) ─────────
     'Watch Hours': entry.watchHours ?? '',
     'Personal Rating': entry.personalRating ?? '',
@@ -62,6 +63,7 @@ export function exportToExcel(entries: MediaEntry[], filename = 'movielogger_exp
     { wch: 10 }, // Year Made
     { wch: 14 }, // Total Episodes
     { wch: 16 }, // Episode Duration
+    { wch: 22 }, // Episode Average Duration
     { wch: 12 }, // Watch Hours
     { wch: 14 }, // Personal Rating
     { wch: 14 }, // Date Finished

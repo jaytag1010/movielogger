@@ -27,7 +27,7 @@ interface ReviewCardProps {
   tmdbLink: NormalizedTMDBResult | undefined
   onSaveEdits: (rowIndex: number, edits: ReviewCardEdits) => void
   onLinkTMDB: (rowIndex: number, result: NormalizedTMDBResult) => void
-  onAddOne: (rowIndex: number) => Promise<void>
+  onAddOne: (rowIndex: number, immediateEdits?: ReviewCardEdits) => Promise<void>
   loading: boolean
 }
 
@@ -50,8 +50,13 @@ export function ReviewCard({
   // Local form state — initialised from saved edits or mapped data
   const mapped = row.mapped
   const [title, setTitle] = useState(edits?.title ?? mapped.title ?? '')
+  // Type defaults by episode-count heuristic when no explicit type is given:
+  // imported totalEpisodes > 1 → series, otherwise movie. This ensures titles
+  // with imported episode data are recognised as series in Needs Review.
   const [type, setType] = useState<'movie' | 'series'>(
-    edits?.type ?? (mapped.type as 'movie' | 'series') ?? 'movie'
+    edits?.type ??
+    (mapped.type as 'movie' | 'series') ??
+    ((mapped.totalEpisodes != null && mapped.totalEpisodes > 1) ? 'series' : 'movie')
   )
   const [status, setStatus] = useState<MediaStatus>(
     edits?.status ?? (mapped.status as MediaStatus) ?? 'completed'
@@ -66,11 +71,23 @@ export function ReviewCard({
     String(edits?.totalEpisodes ?? mapped.totalEpisodes ?? '')
   )
   const [episodeDuration, setEpisodeDuration] = useState(
-    String(edits?.episodeDurationMinutes ?? mapped.episodeDurationMinutes ?? '')
+    String(edits?.episodeDurationMinutes ?? mapped.episodeAverageDuration ?? mapped.episodeDurationMinutes ?? '')
   )
-  const [watchHours, setWatchHours] = useState(
+  const [watchHoursManual, setWatchHoursManual] = useState(
     String(edits?.watchHours ?? mapped.watchHours ?? '')
   )
+
+  // For series: watch hours are always auto-calculated from episodes × duration
+  const isSeries = type === 'series'
+  const calculatedSeriesHours: string = (() => {
+    const eps = totalEpisodes ? parseFloat(totalEpisodes) : null
+    const dur = episodeDuration ? parseFloat(episodeDuration) : (mapped.episodeAverageDuration ?? null)
+    if (eps != null && eps > 0 && dur != null && dur > 0) {
+      return String(Math.round((eps * dur / 60) * 100) / 100)
+    }
+    return ''
+  })()
+  const watchHours = isSeries ? calculatedSeriesHours : watchHoursManual
   const [personalRating, setPersonalRating] = useState(
     String(edits?.personalRating ?? mapped.personalRating ?? '')
   )
@@ -86,7 +103,7 @@ export function ReviewCard({
       genres: genres ? genres.split(',').map((g) => g.trim()).filter(Boolean) : [],
       ageRating: ageRating || null,
       totalEpisodes: totalEpisodes ? parseInt(totalEpisodes) : null,
-      episodeDurationMinutes: episodeDuration ? parseInt(episodeDuration) : null,
+      episodeDurationMinutes: episodeDuration ? parseFloat(episodeDuration) : null,
       watchHours: watchHours ? parseFloat(watchHours) : null,
       personalRating: personalRating ? parseFloat(personalRating) : null,
       specialNotes: notes || null,
@@ -121,14 +138,13 @@ export function ReviewCard({
       if (full.totalEpisodes != null) setTotalEpisodes(String(full.totalEpisodes))
       if (full.runtime != null) setEpisodeDuration(String(full.runtime))
 
-      // Recalculate watch hours from TMDB data when both values are available
-      const eps = full.totalEpisodes ?? (totalEpisodes ? parseFloat(totalEpisodes) : null)
-      const dur = full.runtime ?? parseEpisodeDurationRange(episodeDuration)
-      if (eps != null && eps > 1 && dur != null) {
-        setWatchHours(String(Math.round((eps * dur / 60) * 100) / 100))
-      } else if (dur != null) {
-        // Single episode or movie: runtime / 60
-        setWatchHours(String(Math.round((dur / 60) * 100) / 100))
+      // For movies: set watch hours from runtime. Series auto-derive from the
+      // calculatedSeriesHours expression when totalEpisodes/episodeDuration change.
+      if (full.type !== 'series') {
+        const dur = full.runtime ?? parseEpisodeDurationRange(episodeDuration)
+        if (dur != null) {
+          setWatchHoursManual(String(Math.round((dur / 60) * 100) / 100))
+        }
       }
     } catch {
       // Full fetch failed — sparse result remains linked; buildEntryInput will
@@ -144,8 +160,11 @@ export function ReviewCard({
   }
 
   async function handleAddToList() {
-    onSaveEdits(row.rowIndex, collectEdits())
-    await onAddOne(row.rowIndex)
+    const currentEdits = collectEdits()
+    onSaveEdits(row.rowIndex, currentEdits)
+    // Pass edits directly — onSaveEdits queues a React state update that
+    // won't flush before onAddOne reads reviewEdits from its closure.
+    await onAddOne(row.rowIndex, currentEdits)
   }
 
   const displayTitle = edits?.title ?? mapped.title ?? '—'
@@ -175,6 +194,19 @@ export function ReviewCard({
           )}
           {!row.reviewReason && (
             <p className="text-xs text-white/30 mt-0.5">No confident TMDB match found</p>
+          )}
+
+          {/* Imported metadata summary — always visible in collapsed state */}
+          {!isExpanded && (
+            <div className="flex items-center gap-x-3 gap-y-0.5 flex-wrap mt-1.5 text-[11px] text-white/40">
+              {yearMade && <span>{yearMade}</span>}
+              {country && <span>{country}</span>}
+              {type && <span className={type === 'series' ? 'text-blue-400/60' : 'text-purple-400/60'}>{type === 'series' ? 'Series' : 'Movie'}</span>}
+              {totalEpisodes && <span>{totalEpisodes} eps</span>}
+              {episodeDuration && <span>{episodeDuration} min/ep</span>}
+              {watchHours && <span>{watchHours} hrs</span>}
+              {personalRating && <span>★ {personalRating}</span>}
+            </div>
           )}
         </div>
 
@@ -335,9 +367,13 @@ export function ReviewCard({
                 type="number"
                 step="0.01"
                 value={watchHours}
-                onChange={(e) => setWatchHours(e.target.value)}
-                className="h-8 text-sm bg-white/5 border-white/10"
+                onChange={(e) => !isSeries && setWatchHoursManual(e.target.value)}
+                readOnly={isSeries}
+                className={`h-8 text-sm border-white/10 ${isSeries ? 'bg-white/[0.02] text-white/50 cursor-not-allowed' : 'bg-white/5'}`}
               />
+              {isSeries && (
+                <p className="text-[10px] text-white/30 mt-0.5">Auto-calculated from Episodes × Duration</p>
+              )}
             </div>
 
             <div>

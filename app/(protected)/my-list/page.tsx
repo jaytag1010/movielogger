@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { AppLayout } from '@/components/layout/AppLayout'
@@ -22,9 +23,30 @@ import { Film, Tv, List } from 'lucide-react'
 
 const ITEMS_PER_PAGE = 20
 
+type SortByValue = 'title' | 'rating' | 'year' | 'dateFinished' | 'createdAt'
+
 export default function MyListPage() {
   const { entries, filteredEntries, loading, removeEntry } = useMedia()
   const { activeTab, setActiveTab } = useMediaStore()
+  const searchParams = useSearchParams()
+
+  // Apply navigation intent from URL params (e.g. dashboard stat cards / See All).
+  // ?tab=all|movie|series  ·  ?sort=title_asc|rating_desc|year_desc|createdAt_desc
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab === 'all' || tab === 'movie' || tab === 'series') {
+      setActiveTab(tab)
+    }
+    const sort = searchParams.get('sort')
+    if (sort) {
+      const [by, order] = sort.split('_')
+      const validBy: SortByValue[] = ['title', 'rating', 'year', 'dateFinished', 'createdAt']
+      if (validBy.includes(by as SortByValue) && (order === 'asc' || order === 'desc')) {
+        useMediaStore.getState().setFilters({ sortBy: by as SortByValue, sortOrder: order })
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
   const [editingEntry, setEditingEntry] = useState<MediaEntry | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [page, setPage] = useState(1)

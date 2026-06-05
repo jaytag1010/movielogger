@@ -6,18 +6,34 @@ export function formatInternalId(num: number): string {
 }
 
 export async function generateInternalId(userId: string): Promise<string> {
+  const [first] = await reserveInternalIds(userId, 1)
+  return first
+}
+
+/**
+ * Reserve a contiguous block of `count` internal IDs in a SINGLE transaction.
+ *
+ * Used by bulk import so that creating N entries costs one counter transaction
+ * instead of N. Returns the formatted IDs (e.g. ["ML-000101", … ]) in order.
+ */
+export async function reserveInternalIds(userId: string, count: number): Promise<string[]> {
+  if (count <= 0) return []
   const firestore = getFirestore(initApp())
   const counterRef = doc(firestore, 'counters', `user_${userId}`)
 
-  const nextId = await runTransaction(firestore, async (transaction) => {
+  const startCount = await runTransaction(firestore, async (transaction) => {
     const counterDoc = await transaction.get(counterRef)
     const currentCount = counterDoc.exists() ? (counterDoc.data().count as number) : 0
-    const newCount = currentCount + 1
+    const newCount = currentCount + count
     transaction.set(counterRef, { count: newCount })
-    return newCount
+    return currentCount // first reserved number is currentCount + 1
   })
 
-  return formatInternalId(nextId)
+  const ids: string[] = []
+  for (let i = 1; i <= count; i++) {
+    ids.push(formatInternalId(startCount + i))
+  }
+  return ids
 }
 
 export function parseInternalIdNumber(internalId: string): number | null {

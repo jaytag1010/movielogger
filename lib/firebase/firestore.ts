@@ -18,7 +18,7 @@ import {
 } from 'firebase/firestore'
 import { initApp } from './config'
 import { MediaEntry, MediaEntryInput, MediaEntryUpdate } from '@/types/media'
-import { generateInternalId } from '@/utils/idGenerator'
+import { generateInternalId, reserveInternalIds } from '@/utils/idGenerator'
 
 const COLLECTION = 'mediaEntries'
 
@@ -113,8 +113,14 @@ export async function batchCreateMediaEntries(
   inputs: Omit<MediaEntryInput, 'userId'>[],
   onProgress?: (current: number, total: number) => void
 ): Promise<number> {
-  // 100-entry chunks: each commit() call advances the progress bar,
-  // giving ~10 visible updates for a 1000-row import.
+  if (inputs.length === 0) return 0
+
+  // Reserve ALL internal IDs in a single counter transaction up front.
+  // Previously this ran one transaction per entry — the dominant cost that
+  // made the write phase hang after the build progress reached 100%.
+  const ids = await reserveInternalIds(userId, inputs.length)
+
+  // 100-entry chunks: each commit() call advances the progress bar.
   const BATCH_SIZE = 100
   let importedCount = 0
 
@@ -123,17 +129,16 @@ export async function batchCreateMediaEntries(
     const batch = writeBatch(firestore)
     const chunk = inputs.slice(i, i + BATCH_SIZE)
 
-    for (const input of chunk) {
-      const internalId = await generateInternalId(userId)
+    chunk.forEach((input, j) => {
       const docRef = doc(collection(firestore, COLLECTION))
       batch.set(docRef, {
         ...input,
         userId,
-        internalId,
+        internalId: ids[i + j],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
-    }
+    })
 
     await batch.commit()
     importedCount += chunk.length

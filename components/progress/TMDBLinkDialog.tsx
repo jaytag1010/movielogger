@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { MediaEntry } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
-import { getDisplayTitle } from '@/utils/formatters'
+import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
 
 interface TMDBLinkDialogProps {
   /** The library entry that will be updated. */
@@ -91,7 +91,7 @@ export function TMDBLinkDialog({
                 {getDisplayTitle(entry)}
               </p>
               <p className="text-[10px] text-white/40 capitalize">
-                {entry.type} · {entry.yearMade ?? '—'}
+                {getEffectiveMediaType(entry)} · {entry.yearMade ?? '—'}
               </p>
             </div>
 

@@ -28,11 +28,16 @@ export const useMediaStore = create<MediaState>((set) => ({
     set((state) => ({ entries: [entry, ...state.entries] })),
 
   updateEntry: (id, updates) =>
-    set((state) => ({
-      entries: state.entries.map((e) =>
-        e.id === id ? { ...e, ...updates } : e
-      ),
-    })),
+    set((state) => {
+      // Move the updated entry to the front so the Progress tab surfaces the
+      // most-recently-touched title at the top. Other views sort independently.
+      const updated = state.entries.find((e) => e.id === id)
+      if (!updated) return {}
+      const merged = { ...updated, ...updates }
+      return {
+        entries: [merged, ...state.entries.filter((e) => e.id !== id)],
+      }
+    }),
 
   removeEntry: (id) =>
     set((state) => ({

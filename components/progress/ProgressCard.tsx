@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import { Minus, Plus, CheckCircle, Film, MoreVertical, Pencil, Search, RefreshCw } from 'lucide-react'
 import { MediaEntry, MEDIA_STATUS_COLORS } from '@/types/media'
-import { getDisplayTitle } from '@/utils/formatters'
+import { getDisplayTitle, getEffectiveMediaType, getEpisodesWatched } from '@/utils/formatters'
 import { cn } from '@/utils/cn'
 import {
   DropdownMenu,
@@ -37,11 +37,13 @@ export function ProgressCard({
 }: ProgressCardProps) {
   const displayTitle = getDisplayTitle(entry)
 
+  const effectiveType = getEffectiveMediaType(entry)
+
   // Universal progress tracker — works for movies, series, and unknown types.
   // Movies have an effective total of 1 (0 = unwatched, 1 = watched).
   // Series / unknown use totalEpisodes (null = unknown → displayed as ?).
-  const currentProgress = entry.nextEpisodeToWatch ?? 0
-  const effectiveTotal = entry.type === 'movie'
+  const currentProgress = getEpisodesWatched(entry)
+  const effectiveTotal = effectiveType === 'movie'
     ? (entry.totalEpisodes ?? 1)
     : entry.totalEpisodes   // null means unknown for series/other
 
@@ -49,9 +51,12 @@ export function ProgressCard({
   const totalDisplay = effectiveTotal != null ? `/ ${effectiveTotal}` : '/ ?'
 
   const canDecrement = currentProgress > 0
-  // Always allow incrementing — the user may have watched past the recorded
-  // total (bonus/extra episodes). totalEpisodes is corrected on completion.
-  const canIncrement = entry.type !== 'movie'
+  // Increment works for all entry types regardless of TMDB match status,
+  // poster, or metadata completeness.
+  //   Series: unlimited (may exceed recorded totalEpisodes; corrected on finish).
+  //   Movies: capped at the effective total of 1 (0/1 → 1/1, then mark Finished).
+  const canIncrement =
+    effectiveType === 'series' ? true : currentProgress < (effectiveTotal ?? 1)
 
   const statusColor = MEDIA_STATUS_COLORS[entry.status]
 

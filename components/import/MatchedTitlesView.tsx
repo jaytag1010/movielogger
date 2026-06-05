@@ -11,7 +11,7 @@ export interface MatchedTitlesViewProps {
   onBack: () => void
   onAddAll: () => Promise<void>
   loading?: boolean
-  progress?: { current: number; total: number } | null
+  progress?: { current: number; total: number; phase: 'building' | 'saving' } | null
 }
 
 export function MatchedTitlesView({ rows, onBack, onAddAll, loading, progress }: MatchedTitlesViewProps) {
@@ -86,9 +86,11 @@ export function MatchedTitlesView({ rows, onBack, onAddAll, loading, progress }:
         <Button onClick={onAddAll} disabled={loading} className="flex-1">
           {progress ? (
             <span className="flex flex-col items-center leading-tight">
-              <span className="text-xs font-semibold">Adding Titles…</span>
+              <span className="text-xs font-semibold">
+                {progress.phase === 'saving' ? 'Saving to your list…' : 'Adding Titles…'}
+              </span>
               <span className="text-[10px] text-white/70 tabular-nums">
-                {progress.current} / {progress.total} ({Math.round((progress.current / progress.total) * 100)}%)
+                {progress.current} / {progress.total} ({progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0}%)
               </span>
             </span>
           ) : loading ? (

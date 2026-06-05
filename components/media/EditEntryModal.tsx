@@ -40,7 +40,7 @@ const schema = z.object({
   type: z.enum(['movie', 'series']),
   status: z.enum(['completed', 'watching', 'planned', 'dropped', 'on_hold']),
   seasonNumber: z.coerce.number().int().min(1).nullable().optional(),
-  nextEpisodeToWatch: z.coerce.number().int().min(1).nullable().optional(),
+  nextEpisodeToWatch: z.coerce.number().int().min(0).nullable().optional(),
   yearMade: z.coerce.number().nullable().optional(),
   totalEpisodes: z.coerce.number().nullable().optional(),
   episodeDurationMinutes: z.coerce.number().nullable().optional(),
@@ -69,6 +69,20 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
     useForm<FormData>({ resolver: zodResolver(schema) })
 
   const watchType = watch('type')
+  const watchTotalEpisodes = watch('totalEpisodes')
+  const watchEpDuration = watch('episodeDurationMinutes')
+
+  // For series: auto-calculate watch hours from episodes × duration
+  const isSeriesType = watchType === 'series'
+  const calculatedSeriesWatchHours: number | null = (() => {
+    if (!isSeriesType) return null
+    const eps = watchTotalEpisodes ?? null
+    const dur = watchEpDuration ?? null
+    if (eps != null && eps > 0 && dur != null && dur > 0) {
+      return Math.round((eps * dur / 60) * 100) / 100
+    }
+    return null
+  })()
 
   useEffect(() => {
     if (entry) {
@@ -103,31 +117,35 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
   async function onSubmit(data: FormData) {
     if (!entry?.id) return
     try {
-      // When saving as Completed for a series, ensure totalEpisodes is never
-      // less than the number of episodes the user actually watched.
-      // nextEpisodeToWatch is the NEXT unwatched episode, so watched = value - 1.
-      const nextEp = data.type === 'series' ? (data.nextEpisodeToWatch ?? null) : null
-      const watchedEpisodes = nextEp != null ? nextEp - 1 : null
+      // "Episodes Watched" is stored in nextEpisodeToWatch (canonical count).
+      const watched = data.nextEpisodeToWatch ?? 0
       const recordedTotal = data.totalEpisodes ?? null
-      const correctedTotal =
-        data.type === 'series' &&
+      let correctedTotal: number | null
+      if (data.type === 'movie') {
+        // Movies use Total Episodes = 1.
+        correctedTotal = recordedTotal ?? 1
+      } else if (
         data.status === 'completed' &&
-        watchedEpisodes != null &&
-        watchedEpisodes > 0 &&
-        (recordedTotal == null || watchedEpisodes > recordedTotal)
-          ? watchedEpisodes
-          : recordedTotal
+        watched > 0 &&
+        (recordedTotal == null || watched > recordedTotal)
+      ) {
+        // Completing a series with more watched than recorded — bump the total.
+        correctedTotal = watched
+      } else {
+        correctedTotal = recordedTotal
+      }
+      const episodesWatched = data.status === 'completed' ? null : watched
 
       await editEntry(entry.id, {
         title: data.title,
         type: data.type,
         status: data.status,
         seasonNumber: data.type === 'series' ? (data.seasonNumber ?? null) : null,
-        nextEpisodeToWatch: data.status === 'completed' ? null : nextEp,
+        nextEpisodeToWatch: episodesWatched,
         yearMade: data.yearMade ?? null,
         totalEpisodes: correctedTotal,
         episodeDurationMinutes: data.episodeDurationMinutes ?? null,
-        watchHours: data.watchHours ?? null,
+        watchHours: isSeriesType ? (calculatedSeriesWatchHours ?? null) : (data.watchHours ?? null),
         personalRating: data.personalRating ?? null,
         ageRating: data.ageRating || null,
         genres,
@@ -236,24 +254,43 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                   <Input type="number" {...register('episodeDurationMinutes')} />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label>Next Episode to Watch</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  placeholder="1"
-                  className="w-32"
-                  {...register('nextEpisodeToWatch')}
-                />
-                <p className="text-xs text-white/30">Leave blank if position is unknown</p>
-              </div>
+            </div>
+          )}
+
+          {/* Episodes Watched — shown for any non-completed entry (movies & series) */}
+          {watch('status') !== 'completed' && (
+            <div className="space-y-1.5">
+              <Label>Episodes Watched</Label>
+              <Input
+                type="number"
+                min={0}
+                placeholder="0"
+                className="w-32"
+                {...register('nextEpisodeToWatch')}
+              />
+              <p className="text-xs text-white/30">
+                Episodes watched so far. Defaults to 0. Movies count out of 1.
+              </p>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Watch Hours</Label>
-              <Input type="number" step={0.5} {...register('watchHours')} />
+              {isSeriesType ? (
+                <>
+                  <Input
+                    type="number"
+                    step={0.01}
+                    value={calculatedSeriesWatchHours ?? ''}
+                    readOnly
+                    className="bg-white/[0.02] text-white/50 cursor-not-allowed"
+                  />
+                  <p className="text-[10px] text-white/30">Auto-calculated from Episodes × Episode Duration.</p>
+                </>
+              ) : (
+                <Input type="number" step={0.5} {...register('watchHours')} />
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Date Finished</Label>

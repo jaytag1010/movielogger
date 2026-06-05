@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { MediaEntry } from '@/types/media'
-import { getDisplayTitle } from '@/utils/formatters'
+import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
 
 interface FinishConfirmDialogProps {
   entry: MediaEntry | null
@@ -32,7 +32,7 @@ export function FinishConfirmDialog({
 
   // Build a friendly description of the current progress
   const progressLine = (() => {
-    if (entry.type === 'movie') return null
+    if (getEffectiveMediaType(entry) === 'movie') return null
     if (entry.nextEpisodeToWatch != null && entry.totalEpisodes != null) {
       return `Currently at episode ${entry.nextEpisodeToWatch} of ${entry.totalEpisodes}`
     }

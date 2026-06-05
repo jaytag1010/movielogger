@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { useMedia } from '@/hooks/useMedia'
 import { MediaEntry, MediaStatus } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
-import { getDisplayTitle } from '@/utils/formatters'
+import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
 import {
   fetchMovieMetadata,
   fetchTVMetadata,
@@ -138,7 +138,7 @@ export default function ProgressPage() {
       // reduce it.
       const watchedEpisodes = (finishTarget.nextEpisodeToWatch ?? 1) - 1
       const shouldUpdateTotal =
-        finishTarget.type === 'series' &&
+        getEffectiveMediaType(finishTarget) === 'series' &&
         watchedEpisodes > 0 &&
         (finishTarget.totalEpisodes == null || watchedEpisodes > finishTarget.totalEpisodes)
 

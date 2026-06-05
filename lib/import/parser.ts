@@ -380,6 +380,32 @@ function isRowCompletelyEmpty(row: ImportRow): boolean {
   )
 }
 
+/**
+ * True when a mapped row carries no importable content: no title AND no other
+ * meaningful field. Such rows are ignored (not counted as validation errors),
+ * even if the raw row had stray values in unmapped columns.
+ */
+function isMappedRowEmpty(mapped: MappedRow): boolean {
+  const hasTitle = !!(mapped.title && mapped.title.trim() !== '')
+  if (hasTitle) return false
+  const meaningful =
+    mapped.totalEpisodes != null ||
+    mapped.episodeDurationMinutes != null ||
+    mapped.episodeAverageDuration != null ||
+    mapped.watchHours != null ||
+    mapped.personalRating != null ||
+    mapped.yearMade != null ||
+    mapped.tmdbId != null ||
+    mapped.seasonNumber != null ||
+    mapped.nextEpisodeToWatch != null ||
+    !!(mapped.country && mapped.country.trim() !== '') ||
+    !!(mapped.ageRating && mapped.ageRating.trim() !== '') ||
+    !!(mapped.dateFinished && mapped.dateFinished.trim() !== '') ||
+    !!(mapped.specialNotes && mapped.specialNotes.trim() !== '') ||
+    (Array.isArray(mapped.genres) && mapped.genres.length > 0)
+  return !meaningful
+}
+
 export async function buildImportPreview(
   data: ParsedImportData,
   existingEntries: MediaEntry[],
@@ -421,6 +447,30 @@ export async function buildImportPreview(
     }
 
     const mapped = mapRow(row, data.columnMapping)
+
+    // A row with no title and no other meaningful data is treated as empty
+    // (ignored), not as a validation error — even if unmapped columns had stray values.
+    if (isMappedRowEmpty(mapped)) {
+      ignoredCount++
+      result.push({
+        rowIndex: index + 1,
+        raw: row,
+        mapped: {},
+        errors: [],
+        isDuplicate: false,
+        needsReview: false,
+        reviewReason: null,
+        duplicateType: null,
+        similarTitles: [],
+        existingEntry: undefined,
+        willImport: false,
+        tmdbMatch: { status: 'no_match', result: null, confidence: 0 },
+        isEmptyRow: true,
+      })
+      onProgress?.(index + 1, data.rows.length)
+      continue
+    }
+
     const errors = validateMappedRow(mapped, index + 1)
 
     const dupResult = detectDuplicate(mapped, existingEntries, existingSeasonKeys, existingTitlesLower)

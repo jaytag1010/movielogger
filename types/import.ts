@@ -12,6 +12,8 @@ export interface MappedRow {
   yearMade?: number | null
   totalEpisodes?: number | null
   episodeDurationMinutes?: number | null
+  /** Numeric average duration from a dedicated spreadsheet column. Higher priority than range parsing. */
+  episodeAverageDuration?: number | null
   watchHours?: number | null
   personalRating?: number | null
   ageRating?: string | null
@@ -194,12 +196,17 @@ export const COLUMN_ALIASES: Record<string, string[]> = {
   ],
   totalEpisodes: [
     'episodes',
+    'episode',
     'total episodes',
+    'total episode',
+    'total eps',
     'episode count',
     'num episodes',
+    'no of episodes',
     'number of episodes',
     'ep count',
     'eps',
+    'episodes count',
   ],
   episodeDurationMinutes: [
     'episode duration',
@@ -212,11 +219,29 @@ export const COLUMN_ALIASES: Record<string, string[]> = {
     'episode length',
     'length',
   ],
+  episodeAverageDuration: [
+    'episode average duration',
+    'episode avg duration',
+    'average episode duration',
+    'avg episode duration',
+    'average duration',
+    'avg duration',
+    'avg runtime',
+    'average runtime',
+    'ep avg duration',
+    'avg ep duration',
+    'mean duration',
+    'mean episode duration',
+  ],
   watchHours: [
     'watch hours',
+    'watch hour',
+    'watched hours',
     'hours watched',
     'total hours',
+    'total hour',
     'hours',
+    'hour',
     'time watched',
     'viewing time',
     'watch time',

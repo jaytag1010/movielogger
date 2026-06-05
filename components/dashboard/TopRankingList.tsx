@@ -2,7 +2,8 @@
 
 import { motion } from 'framer-motion'
 import Image from 'next/image'
-import { Star, Film, Tv } from 'lucide-react'
+import Link from 'next/link'
+import { Star, Film, Tv, ChevronRight } from 'lucide-react'
 import { MediaEntry, MediaType } from '@/types/media'
 import { GlassCard } from '@/components/common/GlassCard'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +24,7 @@ export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProp
   const title = type === 'movie' ? 'Top Movies' : 'Top Series'
   const Icon = type === 'movie' ? Film : Tv
   const maxRating = 10
+  const seeAllHref = `/my-list?tab=${type}&sort=rating_desc`
 
   if (filtered.length === 0) {
     return (
@@ -45,9 +47,13 @@ export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProp
           <Icon className="w-4 h-4 text-white" />
         </div>
         <h3 className="text-base font-semibold text-white">{title}</h3>
-        <Badge variant="secondary" className="ml-auto">
-          Top {filtered.length}
-        </Badge>
+        <Link
+          href={seeAllHref}
+          className="ml-auto inline-flex items-center gap-0.5 text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
+        >
+          See All
+          <ChevronRight className="w-3.5 h-3.5" />
+        </Link>
       </div>
 
       <div className="space-y-2">
