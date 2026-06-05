@@ -9,8 +9,11 @@ import { CountryChart } from '@/components/dashboard/CountryChart'
 import { WatchTimeProjection } from '@/components/dashboard/WatchTimeProjection'
 import { WatchHistoryChart } from '@/components/dashboard/WatchHistoryChart'
 import { GenreChart } from '@/components/dashboard/GenreChart'
+import { GlobalSearch } from '@/components/dashboard/GlobalSearch'
+import { DataQualityCenter } from '@/components/dashboard/DataQualityCenter'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { useMedia } from '@/hooks/useMedia'
+import { useDataQuality } from '@/hooks/useDataQuality'
 import { useAuthStore } from '@/store/authStore'
 
 const containerVariants = {
@@ -29,6 +32,7 @@ const itemVariants = {
 export default function DashboardPage() {
   const { user } = useAuthStore()
   const { entries, loading, loadEntries } = useMedia()
+  const { result: dqResult, ignoreDuplicate } = useDataQuality(entries)
 
   const displayName = user?.displayName?.split(' ')[0] || 'Cinephile'
   const hour = new Date().getHours()
@@ -36,20 +40,32 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
-      {/* Hero greeting */}
+      {/* Hero greeting + Data Quality bell */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-6"
+        className="mb-4 flex items-start justify-between gap-3"
       >
-        <p className="text-sm text-white/40 mb-1">{greeting},</p>
-        <h1 className="text-2xl font-bold text-white">
-          {displayName}{' '}
-          <span className="text-gradient">Dashboard</span>
-        </h1>
-        <p className="text-sm text-white/40 mt-1">
-          {entries.length} titles in your collection
-        </p>
+        <div>
+          <p className="text-sm text-white/40 mb-1">{greeting},</p>
+          <h1 className="text-2xl font-bold text-white">
+            {displayName}{' '}
+            <span className="text-gradient">Dashboard</span>
+          </h1>
+          <p className="text-sm text-white/40 mt-1">
+            {entries.length} titles in your collection
+          </p>
+        </div>
+        <DataQualityCenter result={dqResult} ignoreDuplicate={ignoreDuplicate} />
+      </motion.div>
+
+      {/* Global search */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6 flex"
+      >
+        <GlobalSearch entries={entries} />
       </motion.div>
 
       {loading ? (

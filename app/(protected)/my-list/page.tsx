@@ -47,6 +47,19 @@ export default function MyListPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
+
+  // Open the edit modal for a specific entry when arriving via ?entry=<id>
+  // (used by global search and the Data Quality Center).
+  useEffect(() => {
+    const entryId = searchParams.get('entry')
+    if (!entryId || entries.length === 0) return
+    const target = entries.find((e) => e.id === entryId)
+    if (target) {
+      setEditingEntry(target)
+      setEditOpen(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, entries])
   const [editingEntry, setEditingEntry] = useState<MediaEntry | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [page, setPage] = useState(1)

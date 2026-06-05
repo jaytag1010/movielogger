@@ -447,7 +447,17 @@ export function AddEntryForm({ onSuccess, onCancel }: AddEntryFormProps) {
       {/* Date Finished */}
       <div className="space-y-1.5">
         <Label>Date Finished</Label>
-        <Input type="date" {...register('dateFinished')} className="text-white/70" />
+        <div className="flex items-center gap-2">
+          <Input type="date" {...register('dateFinished')} className="text-white/70 flex-1" />
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 text-xs"
+            onClick={() => setValue('dateFinished', new Date().toLocaleDateString('en-CA'), { shouldDirty: true })}
+          >
+            Set as Today
+          </Button>
+        </div>
       </div>
 
       {/* Genres */}
