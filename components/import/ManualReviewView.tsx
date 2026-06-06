@@ -58,7 +58,7 @@ export function ManualReviewView({
         ))}
       </div>
 
-      <div className="border-t border-white/10 pt-4 mt-4 flex gap-3">
+      <div className="border-t border-white/10 pt-4 mt-4 flex flex-col-reverse sm:flex-row gap-2 sm:gap-3">
         <Button
           variant="outline"
           onClick={onSkipRemaining}

@@ -26,6 +26,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
+  viewportFit: 'cover', // enables env(safe-area-inset-*) for iOS notch/home-bar
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

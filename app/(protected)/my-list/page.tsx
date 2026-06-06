@@ -128,20 +128,20 @@ export default function MyListPage() {
         }}
       >
         <TabsList className="w-full mb-4">
-          <TabsTrigger value="all" className="flex-1 gap-2">
-            <List className="w-3.5 h-3.5" />
-            All
-            <Badge variant="secondary" className="ml-1">{entries.length}</Badge>
+          <TabsTrigger value="all" className="flex-1 min-w-0 gap-1 sm:gap-2 text-[11px] sm:text-sm px-2 sm:px-4">
+            <List className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
+            <span>All</span>
+            <Badge variant="secondary" className="ml-0.5 sm:ml-1 px-1 sm:px-1.5 text-[10px] sm:text-xs tabular-nums flex-shrink-0">{entries.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="movie" className="flex-1 gap-2">
-            <Film className="w-3.5 h-3.5" />
-            Movies
-            <Badge variant="secondary" className="ml-1">{movieCount}</Badge>
+          <TabsTrigger value="movie" className="flex-1 min-w-0 gap-1 sm:gap-2 text-[11px] sm:text-sm px-2 sm:px-4">
+            <Film className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
+            <span>Movies</span>
+            <Badge variant="secondary" className="ml-0.5 sm:ml-1 px-1 sm:px-1.5 text-[10px] sm:text-xs tabular-nums flex-shrink-0">{movieCount}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="series" className="flex-1 gap-2">
-            <Tv className="w-3.5 h-3.5" />
-            Series
-            <Badge variant="secondary" className="ml-1">{seriesCount}</Badge>
+          <TabsTrigger value="series" className="flex-1 min-w-0 gap-1 sm:gap-2 text-[11px] sm:text-sm px-2 sm:px-4">
+            <Tv className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
+            <span>Series</span>
+            <Badge variant="secondary" className="ml-0.5 sm:ml-1 px-1 sm:px-1.5 text-[10px] sm:text-xs tabular-nums flex-shrink-0">{seriesCount}</Badge>
           </TabsTrigger>
         </TabsList>
 

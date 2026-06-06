@@ -170,43 +170,127 @@ export function ReviewCard({
   const displayTitle = edits?.title ?? mapped.title ?? '—'
   const isExpanded = mode === 'editing' || mode === 'searching'
 
+  // Shared badge element
+  const tmdbBadge = linked ? (
+    <Badge className="text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0 flex items-center gap-1 flex-shrink-0 w-fit">
+      {tmdbFetching
+        ? <span className="w-2.5 h-2.5 border border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
+        : <CheckCircle className="w-2.5 h-2.5" />}
+      {tmdbFetching ? 'Fetching…' : 'TMDB Linked'}
+    </Badge>
+  ) : null
+
+  // Shared review reason/status element
+  const reviewReasonEl = row.reviewReason ? (
+    <div className="flex items-center gap-1.5">
+      <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0" />
+      <p className="text-xs text-amber-400/80 leading-tight">{row.reviewReason}</p>
+    </div>
+  ) : (
+    <p className="text-xs text-white/30">No confident TMDB match found</p>
+  )
+
+  // Shared metadata strip
+  const metadataEl = (
+    <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap text-[11px] text-white/40">
+      {yearMade && <span>{yearMade}</span>}
+      {country && <span>{country}</span>}
+      {type && <span className={type === 'series' ? 'text-blue-400/60' : 'text-purple-400/60'}>{type === 'series' ? 'Series' : 'Movie'}</span>}
+      {totalEpisodes && <span>{totalEpisodes} eps</span>}
+      {episodeDuration && <span>{episodeDuration} min/ep</span>}
+      {watchHours && <span>{watchHours} hrs</span>}
+      {personalRating && <span>★ {personalRating}</span>}
+    </div>
+  )
+
   return (
     <div className="border border-white/10 rounded-xl overflow-hidden bg-white/[0.03]">
-      {/* Card header — always visible */}
-      <div className="flex items-start gap-3 px-4 py-3">
+      {/* ── MOBILE header — 3-row layout (hidden on sm+) ── */}
+      <div className="sm:hidden px-3 py-3 space-y-2">
+        {!isExpanded ? (
+          <>
+            {/* Row 1: Title (wraps) | Search TMDB */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <p className="text-sm font-medium text-white leading-snug">{displayTitle}</p>
+                {tmdbBadge}
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[11px] text-white/50 hover:text-white flex-shrink-0"
+                onClick={() => setMode('searching')}
+                disabled={loading}
+              >
+                <Search className="w-3 h-3 mr-1" />
+                Search TMDB
+              </Button>
+            </div>
+
+            {/* Row 2: Review reason/status | Edit */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">{reviewReasonEl}</div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[11px] text-white/50 hover:text-white flex-shrink-0"
+                onClick={() => setMode('editing')}
+                disabled={loading}
+              >
+                <Edit2 className="w-3 h-3 mr-1" />
+                Edit
+              </Button>
+            </div>
+
+            {/* Row 3: Metadata | Add (+) */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">{metadataEl}</div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 flex-shrink-0"
+                onClick={() => onAddOne(row.rowIndex)}
+                disabled={loading}
+                title="Quick add to list"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+          </>
+        ) : (
+          /* Expanded mobile header: title + review reason + Add */
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0 space-y-0.5">
+              <p className="text-sm font-medium text-white leading-snug">{displayTitle}</p>
+              {tmdbBadge}
+              <div className="mt-0.5">{reviewReasonEl}</div>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 flex-shrink-0"
+              onClick={() => onAddOne(row.rowIndex)}
+              disabled={loading}
+              title="Quick add to list"
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* ── DESKTOP header — original side-by-side layout (hidden on mobile) ── */}
+      <div className="hidden sm:flex items-start gap-3 px-4 py-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-medium text-white truncate">{displayTitle}</p>
-            {linked && (
-              <Badge className="text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0 flex items-center gap-1 flex-shrink-0">
-                {tmdbFetching
-                  ? <span className="w-2.5 h-2.5 border border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
-                  : <CheckCircle className="w-2.5 h-2.5" />}
-                {tmdbFetching ? 'Fetching…' : 'TMDB Linked'}
-              </Badge>
-            )}
+            {tmdbBadge}
           </div>
-          {row.reviewReason && (
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0" />
-              <p className="text-xs text-amber-400/80">{row.reviewReason}</p>
-            </div>
-          )}
-          {!row.reviewReason && (
-            <p className="text-xs text-white/30 mt-0.5">No confident TMDB match found</p>
-          )}
+          <div className="mt-0.5">{reviewReasonEl}</div>
 
-          {/* Imported metadata summary — always visible in collapsed state */}
+          {/* Metadata — desktop collapsed only */}
           {!isExpanded && (
-            <div className="flex items-center gap-x-3 gap-y-0.5 flex-wrap mt-1.5 text-[11px] text-white/40">
-              {yearMade && <span>{yearMade}</span>}
-              {country && <span>{country}</span>}
-              {type && <span className={type === 'series' ? 'text-blue-400/60' : 'text-purple-400/60'}>{type === 'series' ? 'Series' : 'Movie'}</span>}
-              {totalEpisodes && <span>{totalEpisodes} eps</span>}
-              {episodeDuration && <span>{episodeDuration} min/ep</span>}
-              {watchHours && <span>{watchHours} hrs</span>}
-              {personalRating && <span>★ {personalRating}</span>}
-            </div>
+            <div className="mt-1.5">{metadataEl}</div>
           )}
         </div>
 

@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   getDocs,
@@ -210,4 +211,32 @@ export async function deleteAllUserEntries(userId: string): Promise<number> {
   await deleteDoc(counterRef)
 
   return deleted
+}
+
+// ── User Profile ──────────────────────────────────────────────────────────────
+
+const PROFILES_COLLECTION = 'userProfiles'
+
+export interface UserProfile {
+  displayName: string | null
+  profilePhotoUrl: string | null
+}
+
+/** Fetch the user's customization profile. Returns defaults if no doc exists. */
+export async function getUserProfile(userId: string): Promise<UserProfile> {
+  const snap = await getDoc(doc(db(), PROFILES_COLLECTION, userId))
+  if (!snap.exists()) return { displayName: null, profilePhotoUrl: null }
+  const data = snap.data()
+  return {
+    displayName: data.displayName ?? null,
+    profilePhotoUrl: data.profilePhotoUrl ?? null,
+  }
+}
+
+/** Merge updates into the user's customization profile (creates if missing). */
+export async function updateUserProfile(
+  userId: string,
+  updates: Partial<UserProfile>
+): Promise<void> {
+  await setDoc(doc(db(), PROFILES_COLLECTION, userId), updates, { merge: true })
 }

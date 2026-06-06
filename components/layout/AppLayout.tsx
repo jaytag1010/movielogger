@@ -23,7 +23,10 @@ export function AppLayout({ children, className, title, subtitle, headerRight }:
       </div>
 
       {/* Content */}
-      <main className={cn('relative z-10 pb-28 px-4 pt-6 max-w-4xl mx-auto', className)}>
+      <main
+        className={cn('relative z-10 px-4 pt-6 max-w-4xl mx-auto', className)}
+        style={{ paddingBottom: 'max(7rem, calc(env(safe-area-inset-bottom) + 5.5rem))' }}
+      >
         {(title || subtitle || headerRight) && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
