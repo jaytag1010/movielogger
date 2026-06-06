@@ -13,7 +13,6 @@ import { GlobalSearch } from '@/components/dashboard/GlobalSearch'
 import { DataQualityCenter } from '@/components/dashboard/DataQualityCenter'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { useMedia } from '@/hooks/useMedia'
-import { useDataQuality } from '@/hooks/useDataQuality'
 import { useAuthStore } from '@/store/authStore'
 
 const containerVariants = {
@@ -32,7 +31,6 @@ const itemVariants = {
 export default function DashboardPage() {
   const { user } = useAuthStore()
   const { entries, loading, loadEntries } = useMedia()
-  const { result: dqResult, ignoreDuplicate } = useDataQuality(entries)
 
   const displayName = user?.displayName?.split(' ')[0] || 'Cinephile'
   const hour = new Date().getHours()
@@ -56,7 +54,7 @@ export default function DashboardPage() {
             {entries.length} titles in your collection
           </p>
         </div>
-        <DataQualityCenter result={dqResult} ignoreDuplicate={ignoreDuplicate} />
+        <DataQualityCenter />
       </motion.div>
 
       {/* Global search */}

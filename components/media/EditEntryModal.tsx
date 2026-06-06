@@ -5,7 +5,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Loader2, X, Plus } from 'lucide-react'
+import { Loader2, X, Plus, Search } from 'lucide-react'
 import { Timestamp } from 'firebase/firestore'
 import {
   Dialog,
@@ -25,8 +25,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { MediaEntry, MEDIA_STATUS_LABELS } from '@/types/media'
+import { NormalizedTMDBResult } from '@/types/tmdb'
 import { useMedia } from '@/hooks/useMedia'
 import { CountrySelect } from './CountrySelect'
+import { TMDBSearch } from './TMDBSearch'
 import { format } from 'date-fns'
 
 const COMMON_GENRES = [
@@ -54,6 +56,13 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
+// Pending TMDB link state: null = no change; object = explicit user action.
+type TmdbChanges = {
+  tmdbId: number | null
+  posterUrl: string | null
+  backdropUrl: string | null
+} | null
+
 interface EditEntryModalProps {
   entry: MediaEntry | null
   open: boolean
@@ -63,6 +72,8 @@ interface EditEntryModalProps {
 export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProps) {
   const [genres, setGenres] = useState<string[]>([])
   const [genreInput, setGenreInput] = useState('')
+  const [showTmdbSearch, setShowTmdbSearch] = useState(false)
+  const [tmdbChanges, setTmdbChanges] = useState<TmdbChanges>(null)
   const { editEntry, entries } = useMedia()
 
   const { register, handleSubmit, setValue, control, reset, watch, formState: { errors, isSubmitting } } =
@@ -83,6 +94,9 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
     }
     return null
   })()
+
+  // Effective TMDB ID shown in the UI: reflects any pending user action.
+  const currentTmdbId = tmdbChanges !== null ? tmdbChanges.tmdbId : (entry?.tmdbId ?? null)
 
   useEffect(() => {
     if (entry) {
@@ -105,6 +119,8 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
         specialNotes: entry.specialNotes ?? '',
       })
       setGenres(entry.genres || [])
+      setShowTmdbSearch(false)
+      setTmdbChanges(null)
     }
   }, [entry, reset])
 
@@ -114,35 +130,66 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
     setGenreInput('')
   }
 
+  // ── TMDB rematch ─────────────────────────────────────────────────────────
+  function handleTmdbSelect(r: NormalizedTMDBResult) {
+    // Refresh TMDB-owned metadata in the form.
+    setValue('type', r.type)
+    setValue('yearMade', r.year ?? undefined)
+    setValue('totalEpisodes', r.totalEpisodes ?? undefined)
+    setValue('episodeDurationMinutes', r.runtime ?? undefined)
+    setValue('country', r.country ?? '')
+    if (r.ageRating) setValue('ageRating', r.ageRating)
+    // Refresh genres from TMDB (user-entered genres replaced with TMDB genres).
+    if (r.genres.length > 0) setGenres(r.genres)
+
+    // Preserve user-authored fields — do NOT touch:
+    //   personalRating, specialNotes, watchHours, status,
+    //   dateFinished, nextEpisodeToWatch, seasonNumber.
+
+    setTmdbChanges({ tmdbId: r.tmdbId, posterUrl: r.posterUrl, backdropUrl: r.backdropUrl })
+    setShowTmdbSearch(false)
+    toast.success(`Linked to "${r.title}" on TMDB`)
+  }
+
+  // ── TMDB removal ─────────────────────────────────────────────────────────
+  function handleTmdbRemove() {
+    setTmdbChanges({ tmdbId: null, posterUrl: null, backdropUrl: null })
+    setShowTmdbSearch(false)
+    toast.info('TMDB link will be removed when you save')
+  }
+
+  // ── Form submit ───────────────────────────────────────────────────────────
   async function onSubmit(data: FormData) {
     if (!entry?.id) return
     try {
-      // "Episodes Watched" is stored in nextEpisodeToWatch (canonical count).
       const watched = data.nextEpisodeToWatch ?? 0
       const recordedTotal = data.totalEpisodes ?? null
       let correctedTotal: number | null
       if (data.type === 'movie') {
-        // Movies use Total Episodes = 1.
         correctedTotal = recordedTotal ?? 1
       } else if (
         data.status === 'completed' &&
         watched > 0 &&
         (recordedTotal == null || watched > recordedTotal)
       ) {
-        // Completing a series with more watched than recorded — bump the total.
         correctedTotal = watched
       } else {
         correctedTotal = recordedTotal
       }
       const episodesWatched = data.status === 'completed' ? null : watched
 
-      // If the user changed the media type AND the entry was TMDB-linked, the
-      // existing TMDB record (movie vs. TV) would conflict with the new type.
-      // Safest resolution: clear the TMDB link so the entry can be rematched.
-      // All user-entered data (rating, notes, watch hours, etc.) is preserved.
+      // Determine TMDB fields for the Firestore update.
+      //  • tmdbChanges set  → user explicitly rematched or removed → honour it.
+      //  • tmdbChanges null + type changed + was linked → auto-clear to avoid conflict.
+      //  • Otherwise        → leave TMDB fields unchanged.
       const typeChanged   = data.type !== entry.type
       const wasTmdbLinked = entry.tmdbId != null
-      const clearTmdb     = typeChanged && wasTmdbLinked
+      const tmdbFields: Record<string, unknown> =
+        tmdbChanges !== null
+          ? tmdbChanges
+          : typeChanged && wasTmdbLinked
+            ? { tmdbId: null, posterUrl: null, backdropUrl: null }
+            : {}
 
       await editEntry(entry.id, {
         title: data.title,
@@ -162,12 +209,16 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
           ? Timestamp.fromDate(new Date(data.dateFinished))
           : null,
         specialNotes: data.specialNotes || null,
-        // Clear conflicting TMDB link when type changes
-        ...(clearTmdb ? { tmdbId: null, posterUrl: null, backdropUrl: null } : {}),
+        ...tmdbFields,
       })
 
-      if (clearTmdb) {
-        toast.success('Type updated — TMDB link removed. Open the entry to relink via TMDB Search.')
+      // Contextual success message.
+      if (tmdbChanges?.tmdbId != null) {
+        toast.success('Entry updated with new TMDB match')
+      } else if (tmdbChanges?.tmdbId === null) {
+        toast.success('Entry updated — TMDB link removed')
+      } else if (typeChanged && wasTmdbLinked) {
+        toast.success('Type updated — TMDB link removed. Use "Search TMDB" to relink.')
       } else {
         toast.success('Entry updated')
       }
@@ -179,7 +230,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Entry</DialogTitle>
         </DialogHeader>
@@ -202,10 +253,10 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                   </SelectContent>
                 </Select>
               )} />
-              {/* Warn when type change will clear the TMDB link */}
-              {watchType !== entry?.type && entry?.tmdbId != null && (
+              {/* Warn only when changing type without an active rematch */}
+              {watchType !== entry?.type && entry?.tmdbId != null && tmdbChanges === null && (
                 <p className="text-[10px] text-amber-400/80 leading-tight">
-                  ⚠️ TMDB link will be removed. You can relink after saving.
+                  ⚠️ Changing type will remove the TMDB link. Use "Search TMDB" below to relink.
                 </p>
               )}
             </div>
@@ -355,6 +406,52 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* TMDB Link management */}
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-2.5">
+            <div className="flex items-start gap-2 justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-white">TMDB Link</p>
+                <p className="text-xs text-white/40 mt-0.5 truncate">
+                  {currentTmdbId != null
+                    ? `Linked — TMDB #${currentTmdbId}`
+                    : tmdbChanges?.tmdbId === null
+                      ? 'Will be unlinked on save'
+                      : 'Not linked to TMDB'}
+                </p>
+              </div>
+              <div className="flex gap-1.5 flex-shrink-0">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs px-2"
+                  onClick={() => setShowTmdbSearch((v) => !v)}
+                >
+                  <Search className="w-3 h-3 mr-1" />
+                  {showTmdbSearch ? 'Cancel' : 'Search TMDB'}
+                </Button>
+                {currentTmdbId != null && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs px-2 text-red-400/70 hover:text-red-400 hover:bg-red-400/10"
+                    onClick={handleTmdbRemove}
+                  >
+                    <X className="w-3 h-3 mr-1" />
+                    Remove
+                  </Button>
+                )}
+              </div>
+            </div>
+            {showTmdbSearch && (
+              <TMDBSearch
+                defaultQuery={watch('title')}
+                onSelect={handleTmdbSelect}
+              />
+            )}
           </div>
 
           <div className="space-y-1.5">

@@ -13,19 +13,20 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { MediaEntry } from '@/types/media'
-import { DataQualityResult, DuplicateGroup } from '@/lib/dataQuality'
+import { DuplicateGroup } from '@/lib/dataQuality'
 import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
 import { useMedia } from '@/hooks/useMedia'
+import { useDataQuality } from '@/hooks/useDataQuality'
 
-interface DataQualityCenterProps {
-  result: DataQualityResult
-  ignoreDuplicate: (key: string) => void
-}
-
-export function DataQualityCenter({ result, ignoreDuplicate }: DataQualityCenterProps) {
+// DataQualityCenter is self-sufficient: it subscribes to the media store
+// directly so the bell badge and dialog content always reflect the current
+// data state without waiting for a parent re-render.
+export function DataQualityCenter() {
   const [open, setOpen] = useState(false)
   const router = useRouter()
-  const { editEntry } = useMedia()
+
+  const { entries, editEntry } = useMedia()
+  const { result, ignoreDuplicate } = useDataQuality(entries)
   const [fixingId, setFixingId] = useState<string | null>(null)
 
   const count = result.totalCount
@@ -164,7 +165,7 @@ export function DataQualityCenter({ result, ignoreDuplicate }: DataQualityCenter
                 ))}
               </Section>
 
-              {/* Missing Personal Rating */}
+              {/* Missing Personal Rating — completed titles only */}
               <Section
                 icon={<Star className="w-4 h-4 text-yellow-400" />}
                 title="Missing Personal Rating"
