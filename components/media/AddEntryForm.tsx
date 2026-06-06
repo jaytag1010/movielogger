@@ -436,7 +436,7 @@ export function AddEntryForm({ onSuccess, onCancel }: AddEntryFormProps) {
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>Watch Hours</Label>
-          <Input type="number" step={0.5} placeholder="2.5" {...register('watchHours')} />
+          <Input type="number" step={0.01} min={0} placeholder="e.g. 7.33" {...register('watchHours')} />
         </div>
         <div className="space-y-1.5">
           <Label>Age Rating</Label>

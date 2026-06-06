@@ -136,6 +136,14 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
       }
       const episodesWatched = data.status === 'completed' ? null : watched
 
+      // If the user changed the media type AND the entry was TMDB-linked, the
+      // existing TMDB record (movie vs. TV) would conflict with the new type.
+      // Safest resolution: clear the TMDB link so the entry can be rematched.
+      // All user-entered data (rating, notes, watch hours, etc.) is preserved.
+      const typeChanged   = data.type !== entry.type
+      const wasTmdbLinked = entry.tmdbId != null
+      const clearTmdb     = typeChanged && wasTmdbLinked
+
       await editEntry(entry.id, {
         title: data.title,
         type: data.type,
@@ -154,8 +162,15 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
           ? Timestamp.fromDate(new Date(data.dateFinished))
           : null,
         specialNotes: data.specialNotes || null,
+        // Clear conflicting TMDB link when type changes
+        ...(clearTmdb ? { tmdbId: null, posterUrl: null, backdropUrl: null } : {}),
       })
-      toast.success('Entry updated')
+
+      if (clearTmdb) {
+        toast.success('Type updated — TMDB link removed. Open the entry to relink via TMDB Search.')
+      } else {
+        toast.success('Entry updated')
+      }
       onOpenChange(false)
     } catch {
       toast.error('Failed to update entry')
@@ -187,6 +202,12 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                   </SelectContent>
                 </Select>
               )} />
+              {/* Warn when type change will clear the TMDB link */}
+              {watchType !== entry?.type && entry?.tmdbId != null && (
+                <p className="text-[10px] text-amber-400/80 leading-tight">
+                  ⚠️ TMDB link will be removed. You can relink after saving.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Status *</Label>
@@ -289,7 +310,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                   <p className="text-[10px] text-white/30">Auto-calculated from Episodes × Episode Duration.</p>
                 </>
               ) : (
-                <Input type="number" step={0.5} {...register('watchHours')} />
+                <Input type="number" step={0.01} min={0} placeholder="e.g. 7.33" {...register('watchHours')} />
               )}
             </div>
             <div className="space-y-1.5">
