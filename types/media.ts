@@ -45,6 +45,10 @@ export interface MediaEntry {
   backdropUrl: string | null
   /** User-uploaded poster stored in Firebase Storage. Shown only when posterUrl is absent. */
   manualPosterUrl: string | null
+  /** MDL show ID — set when metadataSource === 'mdl'. */
+  mdlId: number | null
+  /** Which provider last supplied metadata. null = legacy/unknown. */
+  metadataSource: 'tmdb' | 'mdl' | 'excel' | null
   createdAt: Timestamp
   updatedAt: Timestamp
   userId: string

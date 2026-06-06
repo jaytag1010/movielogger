@@ -10,9 +10,7 @@ import {
 } from '@/types/import'
 import { detectColumnMapping, mapRow } from './columnMapper'
 import { MediaEntry } from '@/types/media'
-import { searchMultiNormalized } from '@/lib/tmdb/api'
-import { NormalizedTMDBResult } from '@/types/tmdb'
-import { normalizeCountry } from '@/utils/countries'
+import { findMetadataMatch } from '@/lib/providers/metadata'
 
 export interface ParsedImportData {
   headers: string[]
@@ -270,105 +268,11 @@ function detectDuplicate(
 }
 
 // ---------------------------------------------------------------------------
-// TMDB enrichment
+// Metadata enrichment (TMDB → MDL → Excel authority chain)
 // ---------------------------------------------------------------------------
-
-/**
- * Search TMDB for the best match for a row that has no tmdbId.
- * Returns matched result + confidence score (0–1).
- */
-async function findTMDBMatch(mapped: MappedRow): Promise<TMDBMatchResult> {
-  if (!mapped.title) return { status: 'no_match', result: null, confidence: 0 }
-
-  // Row already has an explicit tmdbId — treat as a confident match so it goes to the Matched screen.
-  // Full metadata is fetched later in buildEntryInput; we build a minimal NormalizedTMDBResult here.
-  if (mapped.tmdbId) {
-    const syntheticResult: NormalizedTMDBResult = {
-      tmdbId: mapped.tmdbId,
-      title: mapped.title,
-      type: (mapped.type === 'series' ? 'series' : 'movie') as 'movie' | 'series',
-      year: mapped.yearMade ?? null,
-      posterUrl: mapped.posterUrl ?? null,
-      backdropUrl: mapped.backdropUrl ?? null,
-      genres: mapped.genres ?? [],
-      country: mapped.country ?? null,
-      runtime: mapped.episodeDurationMinutes ?? null,
-      totalEpisodes: mapped.totalEpisodes ?? null,
-      ageRating: mapped.ageRating ?? null,
-      overview: '',
-    }
-    return { status: 'matched', result: syntheticResult, confidence: 1.0 }
-  }
-
-  try {
-    const allResults = await searchMultiNormalized(mapped.title)
-
-    if (allResults.length === 0) return { status: 'no_match', result: null, confidence: 0 }
-
-    // ── Series signals from the source row ──────────────────────────────
-    // These are strong indicators that the entry should be a TV series, regardless
-    // of what the spreadsheet's Type column says (which is often wrong).
-    const rowHasEpisodes = (mapped.totalEpisodes ?? 0) > 1
-    const rowHasSeason = mapped.seasonNumber != null && mapped.seasonNumber >= 1
-
-    // Normalise the row's country for comparison (handles "TH" vs "Thailand")
-    const rowCountryNorm = normalizeCountry(mapped.country)?.toLowerCase() ?? null
-
-    const titleNorm = mapped.title.toLowerCase().trim()
-    const scored = allResults.map((r) => {
-      let score = 0
-      const rTitleNorm = r.title.toLowerCase().trim()
-
-      // ── Title similarity (primary signal, 0.60 max) ──────────────────────
-      if (rTitleNorm === titleNorm) {
-        score += 0.60
-      } else if (rTitleNorm.includes(titleNorm) || titleNorm.includes(rTitleNorm)) {
-        score += 0.30
-      }
-
-      // ── Year match (+0.20) ────────────────────────────────────────────────
-      if (mapped.yearMade && r.year && mapped.yearMade === r.year) score += 0.20
-
-      // ── Series structural signals (+0.20 max, overrides type column bias) ─
-      // Episode count > 1 or explicit season number are definitive proof of a series.
-      if (r.type === 'series') {
-        if (rowHasEpisodes) score += 0.15
-        if (rowHasSeason)   score += 0.15
-      } else {
-        // Penalise movie result when row has clear series signals
-        if (rowHasEpisodes) score -= 0.15
-        if (rowHasSeason)   score -= 0.15
-      }
-
-      // ── Type column match (+0.05, reduced from 0.10) ──────────────────────
-      // Kept at low weight because spreadsheets frequently misclassify series as movies.
-      // Series structural signals above take precedence.
-      if (mapped.type && r.type === mapped.type) score += 0.05
-
-      // ── Country match (+0.10) ─────────────────────────────────────────────
-      // Both sides normalised: ISO codes ("TH") → full names ("Thailand")
-      if (rowCountryNorm && r.country) {
-        const rCountryNorm = normalizeCountry(r.country)?.toLowerCase() ?? r.country.toLowerCase()
-        if (rowCountryNorm === rCountryNorm) score += 0.10
-      }
-
-      return { result: r, score }
-    })
-
-    scored.sort((a, b) => b.score - a.score)
-    const best = scored[0]
-
-    // Only return a match if confidence is reasonably high
-    if (best.score >= 0.55) {
-      return { status: 'matched', result: best.result, confidence: Math.min(best.score, 1) }
-    }
-
-    return { status: 'no_match', result: null, confidence: best.score }
-  } catch {
-    // TMDB search failure is non-fatal — proceed without enrichment
-    return { status: 'no_match', result: null, confidence: 0 }
-  }
-}
+// findMetadataMatch is imported from lib/providers/metadata.ts.
+// It tries TMDB first; if confidence < 0.55, falls back to MDL; if both fail,
+// returns no_match so the row goes to the Manual Review queue.
 
 // ---------------------------------------------------------------------------
 // Main preview builder
@@ -477,7 +381,7 @@ export async function buildImportPreview(
 
     let tmdbMatch: TMDBMatchResult = { status: 'no_match', result: null, confidence: 0 }
     if (errors.length === 0 && !dupResult.isDuplicate) {
-      tmdbMatch = await findTMDBMatch(mapped)
+      tmdbMatch = await findMetadataMatch(mapped)
     }
 
     onProgress?.(index + 1, data.rows.length)

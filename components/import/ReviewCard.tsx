@@ -13,12 +13,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { TMDBSearch } from '@/components/media/TMDBSearch'
+import { UnifiedSearch } from '@/components/media/UnifiedSearch'
 import { CountrySelect } from '@/components/media/CountrySelect'
 import { ImportPreviewRow, ReviewCardEdits } from '@/types/import'
 import { NormalizedTMDBResult } from '@/types/tmdb'
 import { MediaStatus, MEDIA_STATUS_LABELS } from '@/types/media'
 import { fetchMovieMetadata, fetchTVMetadata } from '@/lib/tmdb/api'
+import { fetchMDLDetails } from '@/lib/mdl/api'
 import { parseEpisodeDurationRange } from '@/utils/episodeDuration'
 
 interface ReviewCardProps {
@@ -111,25 +112,50 @@ export function ReviewCard({
   }
 
   async function handleTMDBSelect(result: NormalizedTMDBResult) {
+    const isMDL = result.source === 'mdl'
+
     // Immediately populate sparse fields from the search result
-    if (result.title) setTitle(result.title)
-    if (result.type) setType(result.type)
-    if (result.year) setYearMade(String(result.year))
+    if (result.title)   setTitle(result.title)
+    if (result.type)    setType(result.type)
+    if (result.year)    setYearMade(String(result.year))
     if (result.country) setCountry(result.country)
 
-    // Store the sparse result first so "TMDB Linked" badge appears immediately
+    // Store the sparse result first so the "Linked" badge appears immediately
     onLinkTMDB(row.rowIndex, result)
 
-    // Fetch full metadata: search results omit genres, ageRating, totalEpisodes, runtime.
-    // The full result replaces the sparse one in reviewTmdbLinks so buildEntryInput
-    // doesn't need to re-fetch during the actual import.
+    if (isMDL) {
+      // MDL search results are sparse (title/year/image only) — fetch full detail
+      // via the slug to get episodes, country, genres, duration, etc.
+      setTmdbFetching(true)
+      try {
+        const slug = result._mdlSlug
+        const full = slug ? await fetchMDLDetails(slug) : result
+        onLinkTMDB(row.rowIndex, full)
+        if (full.genres && full.genres.length > 0) setGenres(full.genres.join(', '))
+        if (full.country) setCountry(full.country)
+        if (full.year) setYearMade(String(full.year))
+        if (full.totalEpisodes != null) setTotalEpisodes(String(full.totalEpisodes))
+        if (full.runtime != null) setEpisodeDuration(String(full.runtime))
+        if (full.type !== 'series') {
+          const dur = full.runtime ?? parseEpisodeDurationRange(episodeDuration)
+          if (dur != null) setWatchHoursManual(String(Math.round((dur / 60) * 100) / 100))
+        }
+      } catch {
+        // Detail fetch failed — keep sparse search result that was already linked
+      } finally {
+        setTmdbFetching(false)
+      }
+      return
+    }
+
+    // TMDB path: fetch full metadata (search results omit genres, ageRating, etc.)
     setTmdbFetching(true)
     try {
       const full = result.type === 'series'
         ? await fetchTVMetadata(result.tmdbId)
         : await fetchMovieMetadata(result.tmdbId)
 
-      onLinkTMDB(row.rowIndex, full)
+      onLinkTMDB(row.rowIndex, { ...full, source: 'tmdb' })
 
       if (full.genres && full.genres.length > 0) setGenres(full.genres.join(', '))
       if (full.ageRating) setAgeRating(full.ageRating)
@@ -138,17 +164,12 @@ export function ReviewCard({
       if (full.totalEpisodes != null) setTotalEpisodes(String(full.totalEpisodes))
       if (full.runtime != null) setEpisodeDuration(String(full.runtime))
 
-      // For movies: set watch hours from runtime. Series auto-derive from the
-      // calculatedSeriesHours expression when totalEpisodes/episodeDuration change.
       if (full.type !== 'series') {
         const dur = full.runtime ?? parseEpisodeDurationRange(episodeDuration)
-        if (dur != null) {
-          setWatchHoursManual(String(Math.round((dur / 60) * 100) / 100))
-        }
+        if (dur != null) setWatchHoursManual(String(Math.round((dur / 60) * 100) / 100))
       }
     } catch {
-      // Full fetch failed — sparse result remains linked; buildEntryInput will
-      // attempt its own full fetch during the actual import.
+      // Full TMDB fetch failed — sparse result stays linked; buildEntryInput will retry.
     } finally {
       setTmdbFetching(false)
     }
@@ -171,12 +192,17 @@ export function ReviewCard({
   const isExpanded = mode === 'editing' || mode === 'searching'
 
   // Shared badge element
+  const isMDLLink = tmdbLink?.source === 'mdl'
   const tmdbBadge = linked ? (
-    <Badge className="text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0 flex items-center gap-1 flex-shrink-0 w-fit">
+    <Badge className={`text-[10px] px-1.5 py-0 flex items-center gap-1 flex-shrink-0 w-fit ${
+      isMDLLink
+        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+        : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+    }`}>
       {tmdbFetching
-        ? <span className="w-2.5 h-2.5 border border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
+        ? <span className={`w-2.5 h-2.5 border rounded-full animate-spin ${isMDLLink ? 'border-amber-400/40 border-t-amber-400' : 'border-blue-400/40 border-t-blue-400'}`} />
         : <CheckCircle className="w-2.5 h-2.5" />}
-      {tmdbFetching ? 'Fetching…' : 'TMDB Linked'}
+      {tmdbFetching ? 'Fetching…' : isMDLLink ? 'MDL Linked' : 'TMDB Linked'}
     </Badge>
   ) : null
 
@@ -209,7 +235,7 @@ export function ReviewCard({
       <div className="sm:hidden px-3 py-3 space-y-2">
         {!isExpanded ? (
           <>
-            {/* Row 1: Title (wraps) | Search TMDB */}
+            {/* Row 1: Title (wraps) | Search for Matches */}
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0 space-y-0.5">
                 <p className="text-sm font-medium text-white leading-snug">{displayTitle}</p>
@@ -223,7 +249,7 @@ export function ReviewCard({
                 disabled={loading}
               >
                 <Search className="w-3 h-3 mr-1" />
-                Search TMDB
+                Search for Matches
               </Button>
             </div>
 
@@ -305,7 +331,7 @@ export function ReviewCard({
                 disabled={loading}
               >
                 <Search className="w-3 h-3 mr-1" />
-                Search TMDB
+                Search for Matches
               </Button>
               <Button
                 size="sm"
@@ -335,11 +361,10 @@ export function ReviewCard({
       {/* Expanded editing form */}
       {isExpanded && (
         <div className="px-4 pb-4 space-y-3 border-t border-white/10 pt-3">
-          {/* TMDB search */}
+          {/* Unified metadata search (TMDB + MDL) */}
           <div>
-            <p className="text-xs text-white/40 mb-1.5">TMDB Search (optional)</p>
-            <TMDBSearch
-              mediaType="all"
+            <p className="text-xs text-white/40 mb-1.5">Search for Matches (optional)</p>
+            <UnifiedSearch
               onSelect={handleTMDBSelect}
               defaultQuery={mode === 'searching' ? (mapped.title ?? '') : undefined}
               key={mode}

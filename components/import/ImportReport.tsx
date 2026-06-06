@@ -94,7 +94,7 @@ function downloadCSV(rows: ImportReportRow[], filename: string) {
     Result: RESULT_CONFIG[r.result].label,
     Reason: r.reason,
     'Suggested Fix': getSuggestedFix(r.reason) ?? '',
-    'TMDB Match': r.tmdbMatch || '—',
+    'Metadata Match': r.tmdbMatch || '—',
   }))
   const csv = Papa.unparse(csvData)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -142,7 +142,7 @@ export function ImportReportView({ report, onImportMore, onViewList }: ImportRep
           {report.matchedImportedCount > 0 && (
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-center">
               <p className="text-2xl font-bold text-blue-400 tabular-nums">{report.matchedImportedCount}</p>
-              <p className="text-[10px] text-blue-400/70 mt-0.5 leading-tight">TMDB Matched</p>
+              <p className="text-[10px] text-blue-400/70 mt-0.5 leading-tight">Auto Matched</p>
             </div>
           )}
           {report.similarFlaggedCount > 0 && (

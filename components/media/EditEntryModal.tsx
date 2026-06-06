@@ -6,7 +6,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Loader2, X, Plus, Search, Upload, ImageIcon } from 'lucide-react'
+import { Loader2, X, Plus, Search, Upload, ImageIcon, Database } from 'lucide-react'
 import { Timestamp } from 'firebase/firestore'
 import {
   Dialog,
@@ -29,8 +29,9 @@ import { MediaEntry, MEDIA_STATUS_LABELS } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
 import { useMedia } from '@/hooks/useMedia'
 import { CountrySelect } from './CountrySelect'
-import { TMDBSearch } from './TMDBSearch'
+import { UnifiedSearch } from './UnifiedSearch'
 import { uploadPoster, deletePoster, validatePosterFile } from '@/lib/imgbb'
+import { fetchMDLDetails } from '@/lib/mdl/api'
 import { getDisplayPosterUrl } from '@/utils/formatters'
 import { format } from 'date-fns'
 
@@ -59,9 +60,12 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
-// Explicit TMDB link change — null means no user action this session.
-type TmdbChanges = {
+// Pending metadata link action — null = no user action this session.
+type MetadataChanges = {
+  /** Which provider the new link came from. null = user removed the link. */
+  source: 'tmdb' | 'mdl' | null
   tmdbId: number | null
+  mdlId: number | null
   posterUrl: string | null
   backdropUrl: string | null
 } | null
@@ -98,12 +102,20 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
   const [genres, setGenres]         = useState<string[]>([])
   const [genreInput, setGenreInput] = useState('')
 
-  // ── TMDB link state ──────────────────────────────────────────────────────
-  const [showTmdbSearch, setShowTmdbSearch] = useState(false)
-  const [tmdbChanges, setTmdbChanges]       = useState<TmdbChanges>(null)
+  // ── Metadata link state ───────────────────────────────────────────────────
+  const [showMetadataSearch, setShowMetadataSearch] = useState(false)
+  const [metadataChanges, setMetadataChanges]       = useState<MetadataChanges>(null)
 
-  // Effective TMDB ID shown in UI (reflects any pending action).
-  const currentTmdbId = tmdbChanges !== null ? tmdbChanges.tmdbId : (entry?.tmdbId ?? null)
+  // Derive effective source + IDs (pending changes take priority over saved entry values)
+  const effectiveSource: 'tmdb' | 'mdl' | 'excel' | null = (() => {
+    if (metadataChanges !== null) return metadataChanges.source ?? 'excel'
+    return entry?.metadataSource ?? (entry?.tmdbId ? 'tmdb' : entry?.mdlId ? 'mdl' : null)
+  })()
+  const currentTmdbId = metadataChanges !== null ? metadataChanges.tmdbId : (entry?.tmdbId ?? null)
+  const currentMdlId  = metadataChanges !== null ? metadataChanges.mdlId  : (entry?.mdlId  ?? null)
+  // True if entry currently has any metadata link (used in type-change warning)
+  const entryIsLinked = (entry?.tmdbId != null) || (entry?.mdlId != null) ||
+    !!(entry?.metadataSource && entry.metadataSource !== 'excel')
 
   // ── Manual poster state ──────────────────────────────────────────────────
   const fileInputRef                            = useRef<HTMLInputElement>(null)
@@ -114,13 +126,13 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
   // already disables the button for the entire onSubmit duration.
 
   // What to show in the poster thumbnail inside the modal:
-  //   pending local preview > (remove → null) > active TMDB poster > existing manual poster
-  const activeTmdbPoster   = tmdbChanges !== null ? tmdbChanges.posterUrl : (entry?.posterUrl ?? null)
+  //   pending local preview > (remove → null) > active metadata poster > existing manual poster
+  const activeTmdbPoster   = metadataChanges !== null ? metadataChanges.posterUrl : (entry?.posterUrl ?? null)
   const activeManualPoster = removingPoster ? null : (posterPreviewUrl ?? (entry?.manualPosterUrl ?? null))
   const modalPosterDisplay = posterPreviewUrl
     ? posterPreviewUrl               // local preview always wins thumbnail
     : removingPoster
-      ? (activeTmdbPoster ?? null)   // if removing manual, still show TMDB if any
+      ? (activeTmdbPoster ?? null)   // if removing manual, still show metadata poster if any
       : (activeTmdbPoster ?? activeManualPoster)
 
   // ── Populate form on entry change ────────────────────────────────────────
@@ -145,8 +157,8 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
         specialNotes: entry.specialNotes ?? '',
       })
       setGenres(entry.genres || [])
-      setShowTmdbSearch(false)
-      setTmdbChanges(null)
+      setShowMetadataSearch(false)
+      setMetadataChanges(null)
       setPosterFile(null)
       setPosterPreviewUrl(null)
       setRemovingPoster(false)
@@ -159,32 +171,62 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
     setGenreInput('')
   }
 
-  // ── TMDB rematch — safe merge ────────────────────────────────────────────
-  function handleTmdbSelect(r: NormalizedTMDBResult) {
-    // Refresh only fields where TMDB provides a valid (non-null, non-empty) value.
-    // User-entered values are kept whenever TMDB data is absent.
-    setValue('type', r.type)                                        // always present
-    if (r.year          != null) setValue('yearMade',               r.year)
-    if (r.totalEpisodes != null) setValue('totalEpisodes',          r.totalEpisodes)
-    if (r.runtime       != null) setValue('episodeDurationMinutes', r.runtime)
-    if (r.country)               setValue('country',                r.country)
-    if (r.ageRating)             setValue('ageRating',              r.ageRating)
-    if (r.genres.length > 0)     setGenres(r.genres)
+  // ── Unified metadata link — safe merge ───────────────────────────────────
+  async function handleMetadataSelect(r: NormalizedTMDBResult) {
+    const isMDL = r.source === 'mdl'
+
+    // For MDL: search results are sparse — fetch full detail for richer metadata.
+    let enriched = r
+    if (isMDL && r._mdlSlug) {
+      try {
+        enriched = await fetchMDLDetails(r._mdlSlug)
+      } catch {
+        // Non-fatal — fall back to the sparse search result
+      }
+    }
+
+    // Refresh only fields where the provider supplies a valid (non-null) value.
+    // User-authored fields are NEVER touched here.
+    setValue('type', enriched.type)
+    if (enriched.year          != null) setValue('yearMade',               enriched.year)
+    if (enriched.totalEpisodes != null) setValue('totalEpisodes',          enriched.totalEpisodes)
+    if (enriched.runtime       != null) setValue('episodeDurationMinutes', enriched.runtime)
+    if (enriched.country)               setValue('country',                enriched.country)
+    if (enriched.ageRating)             setValue('ageRating',              enriched.ageRating)
+    if (enriched.genres.length > 0)     setGenres(enriched.genres)
 
     // User-authored fields intentionally NOT touched:
     //   personalRating, specialNotes, watchHours, status,
     //   dateFinished, nextEpisodeToWatch, seasonNumber.
 
-    setTmdbChanges({ tmdbId: r.tmdbId, posterUrl: r.posterUrl, backdropUrl: r.backdropUrl })
-    setShowTmdbSearch(false)
-    toast.success(`Linked to "${r.title}" on TMDB`)
+    if (isMDL) {
+      setMetadataChanges({
+        source:      'mdl',
+        tmdbId:      null,
+        mdlId:       enriched.mdlId ?? r.mdlId ?? null,
+        posterUrl:   enriched.posterUrl,
+        backdropUrl: null,
+      })
+      toast.success(`Linked to "${enriched.title}" on MDL`)
+    } else {
+      setMetadataChanges({
+        source:      'tmdb',
+        tmdbId:      enriched.tmdbId,
+        mdlId:       null,
+        posterUrl:   enriched.posterUrl,
+        backdropUrl: enriched.backdropUrl,
+      })
+      toast.success(`Linked to "${enriched.title}" on TMDB`)
+    }
+
+    setShowMetadataSearch(false)
   }
 
-  // ── TMDB removal ─────────────────────────────────────────────────────────
-  function handleTmdbRemove() {
-    setTmdbChanges({ tmdbId: null, posterUrl: null, backdropUrl: null })
-    setShowTmdbSearch(false)
-    toast.info('TMDB link will be removed when you save')
+  // ── Remove metadata link ──────────────────────────────────────────────────
+  function handleMetadataRemove() {
+    setMetadataChanges({ source: null, tmdbId: null, mdlId: null, posterUrl: null, backdropUrl: null })
+    setShowMetadataSearch(false)
+    toast.info('Metadata link will be removed when you save')
   }
 
   // ── Manual poster file selection ─────────────────────────────────────────
@@ -236,17 +278,24 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
       }
       const episodesWatched = data.status === 'completed' ? null : watched
 
-      // Resolve TMDB link fields.
-      //   • tmdbChanges set            → honour explicit user action (rematch or removal)
-      //   • type changed + was linked  → auto-clear to avoid conflict
-      //   • otherwise                  → unchanged
-      const typeChanged   = data.type !== entry.type
-      const wasTmdbLinked = entry.tmdbId != null
+      // Resolve metadata link fields.
+      //   • metadataChanges set        → honour explicit user action (rematch or removal)
+      //   • type changed + was linked  → auto-clear to avoid stale link conflict
+      //   • otherwise                  → no change (leave Firestore fields as-is)
+      const typeChanged  = data.type !== entry.type
+      const wasLinked    = (entry.tmdbId != null) || (entry.mdlId != null) ||
+                           (entry.metadataSource != null && entry.metadataSource !== 'excel')
       const tmdbFields: Record<string, unknown> =
-        tmdbChanges !== null
-          ? tmdbChanges
-          : typeChanged && wasTmdbLinked
-            ? { tmdbId: null, posterUrl: null, backdropUrl: null }
+        metadataChanges !== null
+          ? {
+              tmdbId:         metadataChanges.tmdbId,
+              mdlId:          metadataChanges.mdlId,
+              posterUrl:      metadataChanges.posterUrl,
+              backdropUrl:    metadataChanges.backdropUrl,
+              metadataSource: metadataChanges.source ?? 'excel',
+            }
+          : typeChanged && wasLinked
+            ? { tmdbId: null, mdlId: null, posterUrl: null, backdropUrl: null, metadataSource: 'excel' }
             : {}
 
       // Resolve manual poster.
@@ -282,12 +331,14 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
       })
 
       // Contextual success message.
-      if (tmdbChanges?.tmdbId != null) {
+      if (metadataChanges?.source === 'tmdb') {
         toast.success('Entry updated with new TMDB match')
-      } else if (tmdbChanges?.tmdbId === null) {
-        toast.success('Entry updated — TMDB link removed')
-      } else if (typeChanged && wasTmdbLinked) {
-        toast.success('Type updated — TMDB link removed. Use "Search TMDB" to relink.')
+      } else if (metadataChanges?.source === 'mdl') {
+        toast.success('Entry updated with new MDL match')
+      } else if (metadataChanges?.source === null) {
+        toast.success('Entry updated — metadata link removed')
+      } else if (typeChanged && wasLinked) {
+        toast.success('Type updated — metadata link removed. Use "Search for Matches" to relink.')
       } else {
         toast.success('Entry updated')
       }
@@ -315,17 +366,22 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
             {errors.title && <p className="text-xs text-red-400">{errors.title.message}</p>}
           </div>
 
-          {/* ── TMDB Link (top, always visible) ── */}
+          {/* ── Metadata Link (TMDB or MDL, always visible) ── */}
           <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-2.5">
             <div className="flex items-start gap-2 justify-between">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-white">TMDB Link</p>
+                <p className="text-sm font-medium text-white flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-white/40" />
+                  Metadata Link
+                </p>
                 <p className="text-xs text-white/40 mt-0.5 truncate">
-                  {currentTmdbId != null
-                    ? `Linked — TMDB #${currentTmdbId}`
-                    : tmdbChanges?.tmdbId === null
-                      ? 'Will be unlinked on save'
-                      : 'Not linked to TMDB'}
+                  {metadataChanges?.source === null
+                    ? 'Will be unlinked on save'
+                    : effectiveSource === 'tmdb' && currentTmdbId != null
+                      ? `TMDB #${currentTmdbId}`
+                      : effectiveSource === 'mdl' && currentMdlId != null
+                        ? `MDL #${currentMdlId}`
+                        : 'Not linked to any metadata source'}
                 </p>
               </div>
               <div className="flex gap-1.5 flex-shrink-0">
@@ -334,18 +390,18 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs px-2"
-                  onClick={() => setShowTmdbSearch((v) => !v)}
+                  onClick={() => setShowMetadataSearch((v) => !v)}
                 >
                   <Search className="w-3 h-3 mr-1" />
-                  {showTmdbSearch ? 'Cancel' : 'Search TMDB'}
+                  {showMetadataSearch ? 'Cancel' : 'Search for Matches'}
                 </Button>
-                {currentTmdbId != null && (
+                {(currentTmdbId != null || currentMdlId != null) && metadataChanges?.source !== null && (
                   <Button
                     type="button"
                     size="sm"
                     variant="ghost"
                     className="h-7 text-xs px-2 text-red-400/70 hover:text-red-400 hover:bg-red-400/10"
-                    onClick={handleTmdbRemove}
+                    onClick={handleMetadataRemove}
                   >
                     <X className="w-3 h-3 mr-1" />
                     Remove
@@ -353,16 +409,16 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                 )}
               </div>
             </div>
-            {/* Type-change auto-clear warning (only when user hasn't done an explicit rematch) */}
-            {watchType !== entry?.type && entry?.tmdbId != null && tmdbChanges === null && (
+            {/* Type-change auto-clear warning */}
+            {watchType !== entry?.type && entryIsLinked && metadataChanges === null && (
               <p className="text-[10px] text-amber-400/80 leading-tight">
-                ⚠️ Changing type will remove the TMDB link. Use "Search TMDB" above to relink first.
+                ⚠️ Changing type will remove the metadata link. Use "Search for Matches" above to relink first.
               </p>
             )}
-            {showTmdbSearch && (
-              <TMDBSearch
+            {showMetadataSearch && (
+              <UnifiedSearch
                 defaultQuery={watch('title')}
-                onSelect={handleTmdbSelect}
+                onSelect={handleMetadataSelect}
               />
             )}
           </div>
