@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -50,11 +50,17 @@ export default function MyListPage() {
 
   // Open the edit modal for a specific entry when arriving via ?entry=<id>
   // (used by global search and the Data Quality Center).
+  // We track the last-opened entry ID in a ref so that Zustand store updates
+  // (which fire when an entry is saved) do NOT re-call setEditingEntry while
+  // the modal is already open — that would reset the modal mid-save.
   useEffect(() => {
     const entryId = searchParams.get('entry')
     if (!entryId || entries.length === 0) return
+    // Already opened for this entry — don't disrupt an in-progress save.
+    if (openedEntryIdRef.current === entryId) return
     const target = entries.find((e) => e.id === entryId)
     if (target) {
+      openedEntryIdRef.current = entryId
       setEditingEntry(target)
       setEditOpen(true)
     }
@@ -62,6 +68,9 @@ export default function MyListPage() {
   }, [searchParams, entries])
   const [editingEntry, setEditingEntry] = useState<MediaEntry | null>(null)
   const [editOpen, setEditOpen] = useState(false)
+  // Tracks which ?entry=<id> we have already opened so store updates
+  // (triggered by saves) don't re-fire setEditingEntry mid-save.
+  const openedEntryIdRef = useRef<string | null>(null)
   const [page, setPage] = useState(1)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -207,7 +216,12 @@ export default function MyListPage() {
       <EditEntryModal
         entry={editingEntry}
         open={editOpen}
-        onOpenChange={setEditOpen}
+        onOpenChange={(open) => {
+          setEditOpen(open)
+          // When the modal closes, clear the ref so the same ?entry=<id>
+          // can be re-opened if the user navigates back to it.
+          if (!open) openedEntryIdRef.current = null
+        }}
       />
     </AppLayout>
   )

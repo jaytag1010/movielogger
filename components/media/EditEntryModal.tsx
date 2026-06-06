@@ -108,11 +108,12 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
   const currentTmdbId = tmdbChanges !== null ? tmdbChanges.tmdbId : (entry?.tmdbId ?? null)
 
   // ── Manual poster state ──────────────────────────────────────────────────
-  const fileInputRef                        = useRef<HTMLInputElement>(null)
-  const [posterFile, setPosterFile]         = useState<File | null>(null)
+  const fileInputRef                            = useRef<HTMLInputElement>(null)
+  const [posterFile, setPosterFile]             = useState<File | null>(null)
   const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null)
-  const [removingPoster, setRemovingPoster] = useState(false)
-  const [uploadingPoster, setUploadingPoster] = useState(false)
+  const [removingPoster, setRemovingPoster]     = useState(false)
+  // NOTE: no separate uploadingPoster state — isSubmitting from react-hook-form
+  // already disables the button for the entire onSubmit duration.
 
   // What to show in the poster thumbnail inside the modal:
   //   pending local preview > (remove → null) > active TMDB poster > existing manual poster
@@ -258,12 +259,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
         }
         newManualPosterUrl = null
       } else if (posterFile && entry.id && user?.uid) {
-        setUploadingPoster(true)
-        try {
-          newManualPosterUrl = await uploadPoster(user.uid, entry.id, posterFile)
-        } finally {
-          setUploadingPoster(false)
-        }
+        newManualPosterUrl = await uploadPoster(user.uid, entry.id, posterFile)
       }
 
       await editEntry(entry.id, {
@@ -634,8 +630,8 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
             <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" className="flex-1" disabled={isSubmitting || uploadingPoster}>
-              {(isSubmitting || uploadingPoster)
+            <Button type="submit" className="flex-1" disabled={isSubmitting}>
+              {isSubmitting
                 ? <Loader2 className="w-4 h-4 animate-spin" />
                 : 'Save Changes'}
             </Button>
