@@ -28,10 +28,9 @@ import {
 import { MediaEntry, MEDIA_STATUS_LABELS } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
 import { useMedia } from '@/hooks/useMedia'
-import { useAuthStore } from '@/store/authStore'
 import { CountrySelect } from './CountrySelect'
 import { TMDBSearch } from './TMDBSearch'
-import { uploadPoster, deletePoster, validatePosterFile } from '@/lib/firebase/storage'
+import { uploadPoster, deletePoster, validatePosterFile } from '@/lib/imgbb'
 import { getDisplayPosterUrl } from '@/utils/formatters'
 import { format } from 'date-fns'
 
@@ -74,7 +73,6 @@ interface EditEntryModalProps {
 }
 
 export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProps) {
-  const { user } = useAuthStore()
   const { editEntry, entries } = useMedia()
 
   // ── Form ────────────────────────────────────────────────────────────────
@@ -254,12 +252,11 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
       // Resolve manual poster.
       let newManualPosterUrl: string | null = entry.manualPosterUrl ?? null
       if (removingPoster) {
-        if (entry.manualPosterUrl && entry.id && user?.uid) {
-          await deletePoster(user.uid, entry.id)
-        }
+        // deletePoster is a no-op on ImgBB free tier; just clear the Firestore field.
+        await deletePoster()
         newManualPosterUrl = null
-      } else if (posterFile && entry.id && user?.uid) {
-        newManualPosterUrl = await uploadPoster(user.uid, entry.id, posterFile)
+      } else if (posterFile) {
+        newManualPosterUrl = await uploadPoster(posterFile)
       }
 
       await editEntry(entry.id, {

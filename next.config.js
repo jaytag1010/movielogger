@@ -29,8 +29,9 @@ const nextConfig = {
         hostname: 'lh3.googleusercontent.com',
       },
       {
+        // ImgBB CDN — hosts manual poster uploads.
         protocol: 'https',
-        hostname: 'firebasestorage.googleapis.com',
+        hostname: 'i.ibb.co',
       },
     ],
   },
