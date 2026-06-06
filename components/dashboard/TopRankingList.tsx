@@ -7,7 +7,7 @@ import { Star, Film, Tv, ChevronRight } from 'lucide-react'
 import { MediaEntry, MediaType } from '@/types/media'
 import { GlassCard } from '@/components/common/GlassCard'
 import { Badge } from '@/components/ui/badge'
-import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
+import { getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
 
 interface TopRankingListProps {
   entries: MediaEntry[]
@@ -79,9 +79,9 @@ export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProp
 
               {/* Poster */}
               <div className="w-8 h-10 flex-shrink-0 rounded overflow-hidden bg-white/5 border border-white/10">
-                {entry.posterUrl ? (
+                {getDisplayPosterUrl(entry) ? (
                   <Image
-                    src={entry.posterUrl}
+                    src={getDisplayPosterUrl(entry)!}
                     alt={entry.title}
                     width={32}
                     height={40}

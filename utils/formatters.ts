@@ -140,3 +140,15 @@ export function getEffectiveMediaType(
   // No episode data — default to stored type
   return entry.type
 }
+
+/**
+ * Returns the best available poster URL for an entry using the priority:
+ *   1. TMDB poster  (official artwork, highest quality)
+ *   2. Manual poster (user-uploaded fallback)
+ *   3. null         (caller shows placeholder)
+ */
+export function getDisplayPosterUrl(
+  entry: Pick<MediaEntry, 'posterUrl' | 'manualPosterUrl'>
+): string | null {
+  return entry.posterUrl || entry.manualPosterUrl || null
+}

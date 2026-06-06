@@ -44,7 +44,9 @@ export function hasMissingCountry(entry: MediaEntry): boolean {
 }
 
 export function hasMissingPoster(entry: MediaEntry): boolean {
-  return !entry.posterUrl || entry.posterUrl.trim() === ''
+  const hasTmdb   = !!entry.posterUrl    && entry.posterUrl.trim()    !== ''
+  const hasManual = !!entry.manualPosterUrl && entry.manualPosterUrl.trim() !== ''
+  return !hasTmdb && !hasManual
 }
 
 /** Only completed titles with no personal rating. */

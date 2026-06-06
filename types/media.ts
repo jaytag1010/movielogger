@@ -43,6 +43,8 @@ export interface MediaEntry {
   specialNotes: string | null
   posterUrl: string | null
   backdropUrl: string | null
+  /** User-uploaded poster stored in Firebase Storage. Shown only when posterUrl is absent. */
+  manualPosterUrl: string | null
   createdAt: Timestamp
   updatedAt: Timestamp
   userId: string

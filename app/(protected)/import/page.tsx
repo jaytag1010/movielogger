@@ -202,6 +202,7 @@ export default function ImportPage() {
       input: {
         title: mergedTitle,
         legacyId: mapped.legacyId ?? null,
+        manualPosterUrl: null,
         ...tmdbFields,
         ...userFields,
         watchHours,

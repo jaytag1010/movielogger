@@ -47,7 +47,7 @@ const schema = z.object({
   nextEpisodeToWatch: z.coerce.number().int().min(0).nullable().optional(),
   yearMade: z.coerce.number().min(1888).max(2100).nullable().optional(),
   totalEpisodes: z.coerce.number().min(1).nullable().optional(),
-  episodeDurationMinutes: z.coerce.number().min(1).nullable().optional(),
+  episodeDurationMinutes: z.coerce.number().min(0.01).nullable().optional(),
   watchHours: z.coerce.number().min(0).nullable().optional(),
   personalRating: z.coerce.number().min(0).max(10).nullable().optional(),
   ageRating: z.string().nullable().optional(),
@@ -181,6 +181,7 @@ export function AddEntryForm({ onSuccess, onCancel }: AddEntryFormProps) {
         specialNotes: data.specialNotes ?? null,
         posterUrl: tmdbData?.posterUrl ?? null,
         backdropUrl: tmdbData?.backdropUrl ?? null,
+        manualPosterUrl: null,
         legacyId: null,
       })
       toast.success(`"${data.title}" added to your list!`)
@@ -409,7 +410,7 @@ export function AddEntryForm({ onSuccess, onCancel }: AddEntryFormProps) {
             </div>
             <div className="space-y-1.5">
               <Label>Ep Duration (min)</Label>
-              <Input type="number" placeholder="24" {...register('episodeDurationMinutes')} />
+              <Input type="number" step={0.01} min={0.01} placeholder="22.5" {...register('episodeDurationMinutes')} />
             </div>
           </div>
         </div>

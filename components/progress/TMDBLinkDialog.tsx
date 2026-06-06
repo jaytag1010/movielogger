@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { MediaEntry } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
-import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
+import { getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
 
 interface TMDBLinkDialogProps {
   /** The library entry that will be updated. */
@@ -79,8 +79,8 @@ export function TMDBLinkDialog({
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center space-y-2">
               <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">Your Entry</p>
               <div className="relative w-10 h-14 rounded-lg overflow-hidden bg-white/5 border border-white/10 mx-auto flex-shrink-0">
-                {entry.posterUrl ? (
-                  <Image src={entry.posterUrl} alt={entry.title} fill className="object-cover" sizes="40px" />
+                {getDisplayPosterUrl(entry) ? (
+                  <Image src={getDisplayPosterUrl(entry)!} alt={entry.title} fill className="object-cover" sizes="40px" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <Film className="w-4 h-4 text-white/15" />

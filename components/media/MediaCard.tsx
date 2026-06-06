@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
-import { formatDate, formatWatchHours, formatGenres, truncateText, getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
+import { formatDate, formatWatchHours, formatGenres, truncateText, getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
 import { calculateEntryWatchHours } from '@/utils/watchTime'
 
 interface MediaCardProps {
@@ -27,6 +27,7 @@ interface MediaCardProps {
 
 export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps) {
   const [imgError, setImgError] = useState(false)
+  const displayPoster = getDisplayPosterUrl(entry)
   const watchHours = calculateEntryWatchHours(entry)
   const effectiveType = getEffectiveMediaType(entry)
   const Icon = effectiveType === 'movie' ? Film : Tv
@@ -42,9 +43,9 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
         <div className="flex gap-3 p-3">
           {/* Poster */}
           <div className="relative w-16 h-24 flex-shrink-0 rounded-xl overflow-hidden bg-white/5 border border-white/10">
-            {entry.posterUrl && !imgError ? (
+            {displayPoster && !imgError ? (
               <Image
-                src={entry.posterUrl}
+                src={displayPoster}
                 alt={entry.title}
                 fill
                 className="object-cover"

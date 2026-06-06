@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { Search, Film, Tv, X } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
-import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
+import { getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
 
 interface GlobalSearchProps {
   entries: MediaEntry[]
@@ -82,9 +82,9 @@ export function GlobalSearch({ entries }: GlobalSearchProps) {
                   className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 transition-colors text-left"
                 >
                   <div className="w-8 h-11 rounded overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
-                    {entry.posterUrl ? (
+                    {getDisplayPosterUrl(entry) ? (
                       <Image
-                        src={entry.posterUrl}
+                        src={getDisplayPosterUrl(entry)!}
                         alt={entry.title}
                         width={32}
                         height={44}
