@@ -183,8 +183,6 @@ export function AddEntryForm({ onSuccess, onCancel }: AddEntryFormProps) {
         backdropUrl: tmdbData?.backdropUrl ?? null,
         manualPosterUrl: null,
         legacyId: null,
-        mdlId: null,
-        metadataSource: tmdbData ? 'tmdb' : null,
       })
       toast.success(`"${data.title}" added to your list!`)
       reset({ status: 'completed' })

@@ -38,7 +38,7 @@ export function ImportSummary({
       <div className="space-y-2">
         <SummaryRow
           icon={<CheckCircle className="w-4 h-4 text-emerald-400" />}
-          label="Auto Matched"
+          label="TMDB Matched"
           count={matchedCount}
           countColor="text-emerald-400"
         />

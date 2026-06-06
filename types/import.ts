@@ -138,10 +138,7 @@ export interface ImportReportRow {
 
 export interface ImportReport {
   importedCount: number
-  /** Entries auto-matched and imported via TMDB. */
   matchedImportedCount: number
-  /** Entries auto-matched and imported via MDL (subset of total matched). */
-  mdlMatchedCount: number
   similarFlaggedCount: number
   duplicatesImported: number
   duplicateCount: number

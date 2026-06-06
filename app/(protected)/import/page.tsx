@@ -96,27 +96,16 @@ export default function ImportPage() {
     }
 
     const effectiveTmdbMatch = tmdbLink ?? row.tmdbMatch.result
-    const isMDLMatch = effectiveTmdbMatch?.source === 'mdl'
-
-    // For MDL matches we already have all metadata in the result — no extra fetch needed.
-    // For TMDB matches we resolve the tmdbId and fetch full details.
     let resolvedTmdbId: number | null = mapped.tmdbId ?? null
-    let resolvedMdlId: number | null = null
-    let metadataSource: 'tmdb' | 'mdl' | 'excel' = 'excel'
-
-    if (isMDLMatch && effectiveTmdbMatch) {
-      resolvedMdlId = effectiveTmdbMatch.mdlId ?? null
-      metadataSource = 'mdl'
-    } else if (effectiveTmdbMatch) {
-      if (!resolvedTmdbId) resolvedTmdbId = effectiveTmdbMatch.tmdbId || null
+    if (!resolvedTmdbId && effectiveTmdbMatch) {
+      resolvedTmdbId = effectiveTmdbMatch.tmdbId
     }
-    if (resolvedTmdbId) metadataSource = 'tmdb'
 
-    let tmdbData: NormalizedTMDBResult | null = isMDLMatch ? effectiveTmdbMatch : null
+    let tmdbData: NormalizedTMDBResult | null = null
     let seasonMeta: SeasonMetadata | null = null
-    let tmdbTitle: string | null = isMDLMatch ? (effectiveTmdbMatch?.title ?? null) : null
+    let tmdbTitle: string | null = null
 
-    if (!isMDLMatch && resolvedTmdbId) {
+    if (resolvedTmdbId) {
       try {
         const matchType = effectiveTmdbMatch?.type
         const type =
@@ -139,7 +128,7 @@ export default function ImportPage() {
       (mapped.totalEpisodes != null && mapped.totalEpisodes > 1) ? 'series' : null
     const resolvedType: MediaType = (explicitType ?? episodeBasedType ?? 'movie') as MediaType
 
-    if (!isMDLMatch && resolvedTmdbId && resolvedType === 'series' && mapped.seasonNumber) {
+    if (resolvedTmdbId && resolvedType === 'series' && mapped.seasonNumber) {
       try {
         seasonMeta = await fetchSeasonMetadata(resolvedTmdbId, mapped.seasonNumber)
       } catch {
@@ -182,8 +171,6 @@ export default function ImportPage() {
 
     const tmdbFields = {
       tmdbId: resolvedTmdbId,
-      mdlId: resolvedMdlId,
-      metadataSource,
       seasonNumber: mapped.seasonNumber ?? null,
       posterUrl: seasonMeta?.posterUrl ?? tmdbData?.posterUrl ?? mapped.posterUrl ?? null,
       backdropUrl: tmdbData?.backdropUrl ?? mapped.backdropUrl ?? null,
@@ -515,14 +502,10 @@ export default function ImportPage() {
 
     const duplicatesImportedCount = duplicateRows.filter((r) => importedIndexes.has(r.rowIndex)).length
     const matchedImportedCount = matchedRows.filter((r) => importedIndexes.has(r.rowIndex)).length
-    const mdlMatchedCount = matchedRows.filter(
-      (r) => importedIndexes.has(r.rowIndex) && r.tmdbMatch.result?.source === 'mdl'
-    ).length
 
     setImportReport({
       importedCount,
       matchedImportedCount,
-      mdlMatchedCount,
       similarFlaggedCount: reviewRows.filter((r) => importedIndexes.has(r.rowIndex)).length,
       duplicatesImported: duplicatesImportedCount,
       duplicateCount: duplicateRows.length,
@@ -575,8 +558,8 @@ export default function ImportPage() {
                   <div className="w-6 h-6 border-2 border-white/20 border-t-blue-500 rounded-full animate-spin" />
                 </div>
                 <div>
-                  <p className="text-white font-medium">Reading file &amp; searching for matches…</p>
-                  <p className="text-sm text-white/40 mt-1">Checking TMDB &amp; MDL for metadata enrichment</p>
+                  <p className="text-white font-medium">Reading file &amp; searching TMDB…</p>
+                  <p className="text-sm text-white/40 mt-1">Matching titles for metadata enrichment</p>
                 </div>
                 <div className="max-w-xs mx-auto space-y-1.5">
                   <Progress value={parseProgress} className="h-1.5" />

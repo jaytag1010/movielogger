@@ -111,14 +111,4 @@ export interface NormalizedTMDBResult {
   totalEpisodes: number | null
   ageRating: string | null
   overview: string
-  /** Which provider produced this result. Defaults to 'tmdb' when absent. */
-  source?: 'tmdb' | 'mdl'
-  /** MDL show ID — only present when source === 'mdl'. */
-  mdlId?: number | null
-  /**
-   * MDL slug (e.g. "35729-emergency-lands-of-love") — used to fetch full details.
-   * Only present on MDL results from the scraper proxy.
-   * @internal Not persisted to Firestore — used only during an active import/edit session.
-   */
-  _mdlSlug?: string
 }

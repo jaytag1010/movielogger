@@ -5,7 +5,6 @@ import { Film, Tv, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ImportPreviewRow } from '@/types/import'
-import { cn } from '@/utils/cn'
 
 export interface MatchedTitlesViewProps {
   rows: ImportPreviewRow[]
@@ -20,7 +19,7 @@ export function MatchedTitlesView({ rows, onBack, onAddAll, loading, progress }:
     <div className="space-y-4">
       <div>
         <h2 className="text-base font-semibold text-white">
-          Auto Matched ({rows.length})
+          TMDB Matched ({rows.length})
         </h2>
         <p className="text-sm text-white/40 mt-0.5">
           These titles were confidently matched. Review below, then add all.
@@ -34,7 +33,6 @@ export function MatchedTitlesView({ rows, onBack, onAddAll, loading, progress }:
           const year = result?.year
           const type = result?.type ?? row.mapped.type
           const posterUrl = result?.posterUrl ?? null
-          const isMDL = result?.source === 'mdl'
 
           return (
             <div
@@ -49,7 +47,7 @@ export function MatchedTitlesView({ rows, onBack, onAddAll, loading, progress }:
                     width={32}
                     height={48}
                     className="object-cover w-full h-full"
-                    unoptimized={isMDL}
+                    unoptimized
                   />
                 ) : type === 'series' ? (
                   <Tv className="w-4 h-4 text-white/30" />
@@ -65,26 +63,16 @@ export function MatchedTitlesView({ rows, onBack, onAddAll, loading, progress }:
                 )}
               </div>
 
-              <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                <Badge
-                  variant="outline"
-                  className={
-                    type === 'series'
-                      ? 'text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0'
-                      : 'text-purple-400 border-purple-500/30 text-[10px] px-1.5 py-0'
-                  }
-                >
-                  {type === 'series' ? 'Series' : 'Movie'}
-                </Badge>
-                <span className={cn(
-                  'text-[9px] font-semibold px-1.5 py-0.5 rounded-full border',
-                  isMDL
-                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/25'
-                    : 'bg-blue-500/15 text-blue-300 border-blue-500/25'
-                )}>
-                  {isMDL ? 'MDL' : 'TMDB'}
-                </span>
-              </div>
+              <Badge
+                variant="outline"
+                className={
+                  type === 'series'
+                    ? 'text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0 flex-shrink-0'
+                    : 'text-purple-400 border-purple-500/30 text-[10px] px-1.5 py-0 flex-shrink-0'
+                }
+              >
+                {type === 'series' ? 'Series' : 'Movie'}
+              </Badge>
             </div>
           )
         })}

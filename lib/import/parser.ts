@@ -10,7 +10,9 @@ import {
 } from '@/types/import'
 import { detectColumnMapping, mapRow } from './columnMapper'
 import { MediaEntry } from '@/types/media'
-import { findMetadataMatch } from '@/lib/providers/metadata'
+import { NormalizedTMDBResult } from '@/types/tmdb'
+import { searchMultiNormalized } from '@/lib/tmdb/api'
+import { normalizeCountry } from '@/utils/countries'
 
 export interface ParsedImportData {
   headers: string[]
@@ -268,11 +270,88 @@ function detectDuplicate(
 }
 
 // ---------------------------------------------------------------------------
-// Metadata enrichment (TMDB → MDL → Excel authority chain)
+// TMDB metadata matching
 // ---------------------------------------------------------------------------
-// findMetadataMatch is imported from lib/providers/metadata.ts.
-// It tries TMDB first; if confidence < 0.55, falls back to MDL; if both fail,
-// returns no_match so the row goes to the Manual Review queue.
+
+function scoreTMDBResult(
+  r: NormalizedTMDBResult,
+  mapped: MappedRow,
+  rowCountryNorm: string | null
+): number {
+  let score = 0
+  const rTitleNorm = r.title.toLowerCase().trim()
+  const titleNorm  = (mapped.title ?? '').toLowerCase().trim()
+  const rTitleStripped = rTitleNorm.replace(/[^a-z0-9]/g, '')
+  const titleStripped  = titleNorm.replace(/[^a-z0-9]/g, '')
+
+  if (rTitleNorm === titleNorm || (titleStripped.length > 0 && rTitleStripped === titleStripped))
+    score += 0.60
+  else if (rTitleNorm.includes(titleNorm) || titleNorm.includes(rTitleNorm))
+    score += 0.30
+
+  if (mapped.yearMade && r.year && mapped.yearMade === r.year) score += 0.20
+
+  const rowHasEpisodes = (mapped.totalEpisodes ?? 0) > 1
+  const rowHasSeason   = mapped.seasonNumber != null && mapped.seasonNumber >= 1
+  if (r.type === 'series') {
+    if (rowHasEpisodes) score += 0.15
+    if (rowHasSeason)   score += 0.15
+  } else {
+    if (rowHasEpisodes) score -= 0.15
+    if (rowHasSeason)   score -= 0.15
+  }
+
+  if (mapped.type && r.type === mapped.type) score += 0.05
+
+  if (rowCountryNorm && r.country) {
+    const rCountryNorm = normalizeCountry(r.country)?.toLowerCase() ?? r.country.toLowerCase()
+    if (rowCountryNorm === rCountryNorm) score += 0.10
+  }
+
+  return score
+}
+
+async function findTMDBMatch(mapped: MappedRow): Promise<TMDBMatchResult> {
+  if (!mapped.title) return { status: 'no_match', result: null, confidence: 0 }
+
+  // Row already has an explicit tmdbId — treat as a 100 % confident match.
+  if (mapped.tmdbId) {
+    const synthetic: NormalizedTMDBResult = {
+      tmdbId:        mapped.tmdbId,
+      title:         mapped.title,
+      type:          (mapped.type === 'series' ? 'series' : 'movie') as 'movie' | 'series',
+      year:          mapped.yearMade          ?? null,
+      posterUrl:     mapped.posterUrl         ?? null,
+      backdropUrl:   mapped.backdropUrl       ?? null,
+      genres:        mapped.genres            ?? [],
+      country:       mapped.country           ?? null,
+      runtime:       mapped.episodeDurationMinutes ?? null,
+      totalEpisodes: mapped.totalEpisodes     ?? null,
+      ageRating:     mapped.ageRating         ?? null,
+      overview:      '',
+    }
+    return { status: 'matched', result: synthetic, confidence: 1.0 }
+  }
+
+  const rowCountryNorm = normalizeCountry(mapped.country)?.toLowerCase() ?? null
+
+  try {
+    const results = await searchMultiNormalized(mapped.title)
+    if (results.length === 0) return { status: 'no_match', result: null, confidence: 0 }
+
+    const scored = results
+      .map((r) => ({ result: r, score: scoreTMDBResult(r, mapped, rowCountryNorm) }))
+      .sort((a, b) => b.score - a.score)
+
+    const best = scored[0]
+    if (best.score >= 0.55) {
+      return { status: 'matched', result: best.result, confidence: Math.min(best.score, 1) }
+    }
+    return { status: 'no_match', result: null, confidence: best.score }
+  } catch {
+    return { status: 'no_match', result: null, confidence: 0 }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Main preview builder
@@ -381,7 +460,7 @@ export async function buildImportPreview(
 
     let tmdbMatch: TMDBMatchResult = { status: 'no_match', result: null, confidence: 0 }
     if (errors.length === 0 && !dupResult.isDuplicate) {
-      tmdbMatch = await findMetadataMatch(mapped)
+      tmdbMatch = await findTMDBMatch(mapped)
     }
 
     onProgress?.(index + 1, data.rows.length)
