@@ -44,7 +44,11 @@ const schema = z.object({
   title: z.string().min(1, 'Title is required'),
   type: z.enum(['movie', 'series']),
   status: z.enum(['completed', 'watching', 'planned', 'dropped', 'on_hold']),
-  seasonNumber: z.coerce.number().int().min(1).nullable().optional(),
+  // Blank or empty → null (treated as Season 1 on save). Non-blank must be ≥ 1.
+  seasonNumber: z.preprocess(
+    (v) => (v === '' || v == null ? null : v),
+    z.coerce.number().int().min(1).nullable().optional()
+  ),
   nextEpisodeToWatch: z.coerce.number().int().min(0).nullable().optional(),
   yearMade: z.coerce.number().nullable().optional(),
   totalEpisodes: z.coerce.number().nullable().optional(),

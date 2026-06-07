@@ -55,7 +55,7 @@ export function FilterBar({ entries, viewMode, onViewModeChange }: FilterBarProp
     filters.country !== 'all' ||
     filters.year !== 'all' ||
     filters.ageRating !== 'all' ||
-    filters.sortBy !== 'createdAt' ||
+    filters.sortBy !== 'dateFinished' ||
     filters.sortOrder !== 'desc'
 
   return (
@@ -181,14 +181,16 @@ export function FilterBar({ entries, viewMode, onViewModeChange }: FilterBarProp
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="createdAt_desc">Newest First</SelectItem>
-            <SelectItem value="createdAt_asc">Oldest First</SelectItem>
+            <SelectItem value="dateFinished_desc">Newest First</SelectItem>
+            <SelectItem value="dateFinished_asc">Oldest First</SelectItem>
             <SelectItem value="title_asc">Title A–Z</SelectItem>
             <SelectItem value="title_desc">Title Z–A</SelectItem>
             <SelectItem value="rating_desc">Highest Rated</SelectItem>
             <SelectItem value="rating_asc">Lowest Rated</SelectItem>
             <SelectItem value="year_desc">Newest Release</SelectItem>
             <SelectItem value="year_asc">Oldest Release</SelectItem>
+            <SelectItem value="createdAt_desc">Date Added ↓</SelectItem>
+            <SelectItem value="createdAt_asc">Date Added ↑</SelectItem>
           </SelectContent>
         </Select>
 

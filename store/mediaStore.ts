@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { Timestamp } from 'firebase/firestore'
 import { MediaEntry, MediaFilters, DEFAULT_FILTERS } from '@/types/media'
 
 interface MediaState {
@@ -33,7 +34,9 @@ export const useMediaStore = create<MediaState>((set) => ({
       // most-recently-touched title at the top. Other views sort independently.
       const updated = state.entries.find((e) => e.id === id)
       if (!updated) return {}
-      const merged = { ...updated, ...updates }
+      // Inject a client-side updatedAt so the progress page's updatedAt-based
+      // sort moves the card immediately without waiting for a Firestore round-trip.
+      const merged = { ...updated, ...updates, updatedAt: Timestamp.now() }
       return {
         entries: [merged, ...state.entries.filter((e) => e.id !== id)],
       }
