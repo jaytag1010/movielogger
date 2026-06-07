@@ -210,7 +210,8 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
     try {
       // Try season-specific data first
       const seasonData = await fetchSeason(tmdbId, seasonNum)
-      if (seasonData && (seasonData.episodeCount || seasonData.avgRuntime)) {
+      if (seasonData && (seasonData.episodeCount || seasonData.avgRuntime || seasonData.year)) {
+        if (seasonData.year)         setValue('yearMade',               seasonData.year)
         if (seasonData.episodeCount) setValue('totalEpisodes',          seasonData.episodeCount)
         if (seasonData.avgRuntime)   setValue('episodeDurationMinutes', seasonData.avgRuntime)
         toast.success(`Season ${seasonNum} data loaded`)
