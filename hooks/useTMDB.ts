@@ -35,6 +35,30 @@ export function useTMDBSearch(mediaType: MediaType | 'all' = 'all') {
         setLoading(true)
         setError(null)
         try {
+          // ── TMDB ID direct lookup ─────────────────────────────────────────
+          // If the entire query is a positive integer, treat it as a TMDB ID
+          // and perform a direct fetch rather than a text search.
+          const trimmed = rawQuery.trim()
+          if (/^\d+$/.test(trimmed)) {
+            const id = parseInt(trimmed, 10)
+            let found: NormalizedTMDBResult | null = null
+
+            // Try movie first, then TV series
+            try { found = await fetchMovieMetadata(id) } catch { /* not a movie */ }
+            if (!found) {
+              try { found = await fetchTVMetadata(id) } catch { /* not a TV series */ }
+            }
+
+            if (found) {
+              setResults([found])
+            } else {
+              setError(`No TMDB title found for ID ${id}`)
+              setResults([])
+            }
+            return
+          }
+
+          // ── Advanced text search with optional country/year filters ────────
           // Parse the raw query for advanced filters (country, year)
           const { title, country, year } = parseSearchQuery(rawQuery)
           // If the parser stripped the title entirely (e.g. query was just a year),

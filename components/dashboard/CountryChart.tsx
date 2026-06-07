@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   PieChart,
   Pie,
@@ -49,8 +50,8 @@ const COLORS = [
   '#94A3B8', // slate — used for "Others"
 ]
 
-/** Maximum individual countries before the rest collapse into "Others". */
-const MAX_COUNTRIES = 6
+/** Maximum individual countries shown before the rest collapse into "Others". */
+const MAX_COUNTRIES = 7
 
 // ── Tooltip ──────────────────────────────────────────────────────────────────
 
@@ -81,6 +82,16 @@ function makeTooltip(mode: CountryMode) {
 export function CountryChart({ entries }: CountryChartProps) {
   const [mode, setMode] = useState<CountryMode>('titles')
   const [showOthers, setShowOthers] = useState(false)
+  const router = useRouter()
+
+  /**
+   * Navigate to My List filtered by the clicked country.
+   * "Others" is a virtual aggregation category — no navigation for it.
+   */
+  function handleCountryClick(countryName: string) {
+    if (!countryName || countryName === 'Others') return
+    router.push(`/my-list?country=${encodeURIComponent(countryName)}`)
+  }
 
   const { data, othersBreakdown } = useMemo<{ data: ChartData[]; othersBreakdown: ChartData[] }>(() => {
     // Authority: only completed titles count toward country analytics
@@ -181,12 +192,15 @@ export function CountryChart({ entries }: CountryChartProps) {
                     outerRadius={75}
                     paddingAngle={3}
                     dataKey="value"
+                    onClick={(d: ChartData) => handleCountryClick(d.name)}
+                    style={{ cursor: 'pointer' }}
                   >
-                    {data.map((_, index) => (
+                    {data.map((entry, index) => (
                       <Cell
                         key={`cell-${index}`}
                         fill={COLORS[index % COLORS.length]}
                         stroke="transparent"
+                        style={{ cursor: entry.name === 'Others' ? 'default' : 'pointer' }}
                       />
                     ))}
                   </Pie>
@@ -209,11 +223,17 @@ export function CountryChart({ entries }: CountryChartProps) {
                     axisLine={false}
                   />
                   <Tooltip content={<TooltipContent />} />
-                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                    {data.map((_, index) => (
+                  <Bar
+                    dataKey="value"
+                    radius={[0, 4, 4, 0]}
+                    onClick={(d: ChartData) => handleCountryClick(d.name)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {data.map((entry, index) => (
                       <Cell
                         key={`bar-cell-${index}`}
                         fill={COLORS[index % COLORS.length]}
+                        style={{ cursor: entry.name === 'Others' ? 'default' : 'pointer' }}
                       />
                     ))}
                   </Bar>
@@ -222,16 +242,29 @@ export function CountryChart({ entries }: CountryChartProps) {
             </div>
           </div>
 
-          {/* Legend */}
+          {/* Legend — clickable for non-Others entries */}
           <div className="flex flex-wrap gap-2 mt-2">
             {data.map((item, index) => (
-              <div key={item.name} className="flex items-center gap-1.5">
+              <button
+                key={item.name}
+                type="button"
+                onClick={() => handleCountryClick(item.name)}
+                disabled={item.name === 'Others'}
+                className="flex items-center gap-1.5 disabled:cursor-default group"
+                title={item.name !== 'Others' ? `View ${item.name} titles` : undefined}
+              >
                 <div
                   className="w-2 h-2 rounded-full flex-shrink-0"
                   style={{ backgroundColor: COLORS[index % COLORS.length] }}
                 />
-                <span className="text-xs text-white/50">{item.name}</span>
-              </div>
+                <span className={`text-xs transition-colors ${
+                  item.name === 'Others'
+                    ? 'text-white/50'
+                    : 'text-white/50 group-hover:text-white/80 underline-offset-2 group-hover:underline'
+                }`}>
+                  {item.name}
+                </span>
+              </button>
             ))}
           </div>
 
@@ -259,8 +292,19 @@ export function CountryChart({ entries }: CountryChartProps) {
               {showOthers && (
                 <div className="mt-2 pt-2 border-t border-white/10 grid grid-cols-2 gap-x-3 gap-y-1">
                   {othersBreakdown.map((c) => (
-                    <div key={c.name} className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-white/50 truncate">{c.name}</span>
+                    <div key={c.name} className="flex items-center justify-between gap-2 group">
+                      {/* Clicking the country name navigates to My List filtered by country */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation() // don't toggle the outer accordion
+                          handleCountryClick(c.name)
+                        }}
+                        className="text-xs text-white/50 truncate text-left hover:text-white/80 hover:underline underline-offset-2 transition-colors"
+                        title={`View ${c.name} titles`}
+                      >
+                        {c.name}
+                      </button>
                       <span className="text-[10px] text-white/40 tabular-nums flex-shrink-0">
                         {mode === 'titles'
                           ? `${c.value} title${c.value !== 1 ? 's' : ''}`

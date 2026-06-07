@@ -21,10 +21,11 @@ export function TMDBSearch({ mediaType = 'all', onSelect, placeholder, defaultQu
   const [query, setQuery] = useState(defaultQuery ?? '')
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
-  const { results, loading, search, clearResults } = useTMDBSearch(mediaType)
+  const { results, loading, error, search, clearResults } = useTMDBSearch(mediaType)
 
   useEffect(() => {
     search(query)
+    // Keep dropdown open for results OR for ID-lookup errors (to show the message)
     setOpen(query.length >= 2)
   }, [query, search])
 
@@ -75,7 +76,7 @@ export function TMDBSearch({ mediaType = 'all', onSelect, placeholder, defaultQu
       </div>
 
       <AnimatePresence>
-        {open && results.length > 0 && (
+        {open && (results.length > 0 || (error && !loading)) && (
           <motion.div
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
@@ -83,6 +84,12 @@ export function TMDBSearch({ mediaType = 'all', onSelect, placeholder, defaultQu
             transition={{ duration: 0.15 }}
             className="absolute top-full left-0 right-0 mt-1 z-50 bg-[#0D0D1A] border border-white/10 rounded-xl shadow-2xl overflow-hidden max-h-80 overflow-y-auto"
           >
+            {/* ID lookup / search error */}
+            {error && results.length === 0 && (
+              <div className="px-4 py-3 flex items-center gap-2">
+                <span className="text-xs text-red-400">{error}</span>
+              </div>
+            )}
             {results.map((result) => {
               const Icon = result.type === 'movie' ? Film : Tv
               return (

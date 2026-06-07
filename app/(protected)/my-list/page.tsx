@@ -32,6 +32,7 @@ export default function MyListPage() {
 
   // Apply navigation intent from URL params (e.g. dashboard stat cards / See All).
   // ?tab=all|movie|series  ·  ?sort=title_asc|rating_desc|year_desc|createdAt_desc
+  // ?country=South+Korea   ·  (from Country Chart drill-down)
   useEffect(() => {
     const tab = searchParams.get('tab')
     if (tab === 'all' || tab === 'movie' || tab === 'series') {
@@ -44,6 +45,12 @@ export default function MyListPage() {
       if (validBy.includes(by as SortByValue) && (order === 'asc' || order === 'desc')) {
         useMediaStore.getState().setFilters({ sortBy: by as SortByValue, sortOrder: order })
       }
+    }
+    // Country drill-down from dashboard chart: ?country=South+Korea
+    // Resets status to 'all' so the user sees every title from that country.
+    const country = searchParams.get('country')
+    if (country) {
+      useMediaStore.getState().setFilters({ country, status: 'all' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
