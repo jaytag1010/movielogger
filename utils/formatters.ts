@@ -143,12 +143,15 @@ export function getEffectiveMediaType(
 
 /**
  * Returns the best available poster URL for an entry using the priority:
- *   1. TMDB poster  (official artwork, highest quality)
- *   2. Manual poster (user-uploaded fallback)
- *   3. null         (caller shows placeholder)
+ *   1. Manual poster (explicit user choice — always wins)
+ *   2. TMDB poster   (official artwork, used when no manual upload exists)
+ *   3. null          (caller shows placeholder)
+ *
+ * Manual upload takes priority so users can intentionally override the TMDB
+ * artwork. TMDB poster remains the default when no custom upload is present.
  */
 export function getDisplayPosterUrl(
   entry: Pick<MediaEntry, 'posterUrl' | 'manualPosterUrl'>
 ): string | null {
-  return entry.posterUrl || entry.manualPosterUrl || null
+  return entry.manualPosterUrl || entry.posterUrl || null
 }

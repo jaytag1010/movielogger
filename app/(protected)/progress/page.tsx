@@ -275,7 +275,7 @@ export default function ProgressPage() {
 
       if (entry.type === 'movie') {
         const data = await fetchMovieMetadata(entry.tmdbId)
-        if (!entry.posterUrl && data.posterUrl) updates.posterUrl = data.posterUrl
+        if (data.posterUrl) updates.posterUrl = data.posterUrl
         if (!entry.backdropUrl && data.backdropUrl) updates.backdropUrl = data.backdropUrl
         if (!entry.yearMade && data.year) updates.yearMade = data.year
         if (!entry.ageRating && data.ageRating) updates.ageRating = data.ageRating
@@ -288,7 +288,7 @@ export default function ProgressPage() {
         if (entry.seasonNumber) {
           try {
             const sd = await fetchSeasonMetadata(entry.tmdbId, entry.seasonNumber)
-            if (!entry.posterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
+            if (sd.posterUrl) updates.posterUrl = sd.posterUrl
             if (!entry.yearMade && sd.year) updates.yearMade = sd.year
             if (!entry.episodeDurationMinutes && sd.avgRuntime) updates.episodeDurationMinutes = sd.avgRuntime
             if (sd.episodeCount > (entry.totalEpisodes ?? 0)) updates.totalEpisodes = sd.episodeCount
@@ -304,7 +304,7 @@ export default function ProgressPage() {
         if (!entry.ageRating && sd.ageRating) updates.ageRating = sd.ageRating
         if (!entry.genres?.length && sd.genres.length) updates.genres = sd.genres
         if (!entry.country && sd.country) updates.country = sd.country
-        if (!entry.posterUrl && !updates.posterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
+        if (!updates.posterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
         if (!entry.seasonNumber && sd.totalEpisodes && sd.totalEpisodes > (entry.totalEpisodes ?? 0)) {
           updates.totalEpisodes = sd.totalEpisodes
         }
@@ -342,7 +342,7 @@ export default function ProgressPage() {
 
         if (entry.type === 'movie') {
           const data = await fetchMovieMetadata(entry.tmdbId!)
-          if (!entry.posterUrl && data.posterUrl) updates.posterUrl = data.posterUrl
+          if (data.posterUrl) updates.posterUrl = data.posterUrl
           if (!entry.backdropUrl && data.backdropUrl) updates.backdropUrl = data.backdropUrl
           if (!entry.yearMade && data.year) updates.yearMade = data.year
           if (!entry.ageRating && data.ageRating) updates.ageRating = data.ageRating
@@ -354,7 +354,7 @@ export default function ProgressPage() {
           if (entry.seasonNumber) {
             try {
               const sd = await fetchSeasonMetadata(entry.tmdbId!, entry.seasonNumber)
-              if (!entry.posterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
+              if (sd.posterUrl) updates.posterUrl = sd.posterUrl
               if (!entry.yearMade && sd.year) updates.yearMade = sd.year
               if (!entry.episodeDurationMinutes && sd.avgRuntime) updates.episodeDurationMinutes = sd.avgRuntime
               if (sd.episodeCount > (entry.totalEpisodes ?? 0)) updates.totalEpisodes = sd.episodeCount
@@ -370,7 +370,7 @@ export default function ProgressPage() {
           if (!entry.ageRating && sd.ageRating) updates.ageRating = sd.ageRating
           if (!entry.genres?.length && sd.genres.length) updates.genres = sd.genres
           if (!entry.country && sd.country) updates.country = sd.country
-          if (!entry.posterUrl && !updates.posterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
+          if (!updates.posterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
           if (!entry.seasonNumber && sd.totalEpisodes && sd.totalEpisodes > (entry.totalEpisodes ?? 0)) {
             updates.totalEpisodes = sd.totalEpisodes
           }

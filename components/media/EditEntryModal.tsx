@@ -28,6 +28,8 @@ import {
 import { MediaEntry, MEDIA_STATUS_LABELS } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
 import { useMedia } from '@/hooks/useMedia'
+import { useTMDBDetails, useTMDBSeasonDetails } from '@/hooks/useTMDB'
+import { fetchTVMetadata } from '@/lib/tmdb/api'
 import { CountrySelect } from './CountrySelect'
 import { TMDBSearch } from './TMDBSearch'
 import { uploadPoster, deletePoster, validatePosterFile } from '@/lib/imgbb'
@@ -80,6 +82,10 @@ interface EditEntryModalProps {
 export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProps) {
   const { editEntry, entries } = useMedia()
 
+  // ── TMDB hooks ───────────────────────────────────────────────────────────
+  const { fetchDetails, loading: tmdbLinking }           = useTMDBDetails()
+  const { fetchSeason, loading: seasonConfirmLoading }   = useTMDBSeasonDetails()
+
   // ── Form ────────────────────────────────────────────────────────────────
   const { register, handleSubmit, setValue, control, reset, watch, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema) })
@@ -118,14 +124,15 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
   // already disables the button for the entire onSubmit duration.
 
   // What to show in the poster thumbnail inside the modal:
-  //   pending local preview > (remove → null) > active metadata poster > existing manual poster
+  //   pending local preview > existing manual poster > TMDB poster
+  //   (if removing manual: TMDB poster becomes visible)
   const activeTmdbPoster   = tmdbChanges !== null ? tmdbChanges.posterUrl : (entry?.posterUrl ?? null)
   const activeManualPoster = removingPoster ? null : (posterPreviewUrl ?? (entry?.manualPosterUrl ?? null))
   const modalPosterDisplay = posterPreviewUrl
-    ? posterPreviewUrl               // local preview always wins thumbnail
+    ? posterPreviewUrl                            // local preview always wins
     : removingPoster
-      ? (activeTmdbPoster ?? null)   // if removing manual, still show metadata poster if any
-      : (activeTmdbPoster ?? activeManualPoster)
+      ? (activeTmdbPoster ?? null)               // removing manual → show TMDB if any
+      : (activeManualPoster ?? activeTmdbPoster) // manual > TMDB default
 
   // ── Populate form on entry change ────────────────────────────────────────
   useEffect(() => {
@@ -163,21 +170,64 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
     setGenreInput('')
   }
 
-  // ── TMDB link — safe merge ───────────────────────────────────────────────
-  function handleTmdbSelect(r: NormalizedTMDBResult) {
-    // Refresh only fields where TMDB supplies a valid (non-null) value.
-    // User-authored fields are NEVER touched here.
-    setValue('type', r.type)
-    if (r.year          != null) setValue('yearMade',               r.year)
-    if (r.totalEpisodes != null) setValue('totalEpisodes',          r.totalEpisodes)
-    if (r.runtime       != null) setValue('episodeDurationMinutes', r.runtime)
-    if (r.country)               setValue('country',                r.country)
-    if (r.ageRating)             setValue('ageRating',              r.ageRating)
-    if (r.genres.length > 0)     setGenres(r.genres)
+  // ── TMDB link — fetch full metadata and overwrite authoritative fields ───
+  async function handleTmdbSelect(r: NormalizedTMDBResult) {
+    // Fetch full TMDB data so Country, Age Rating, and other sparse fields
+    // that search results return as null are properly populated.
+    const fullData = await fetchDetails(r.tmdbId, r.type as 'movie' | 'series')
+    const d = fullData ?? r   // fall back to sparse search result if fetch fails
 
-    setTmdbChanges({ tmdbId: r.tmdbId, posterUrl: r.posterUrl, backdropUrl: r.backdropUrl, releaseDate: r.releaseDate ?? null })
+    // Overwrite TMDB-authoritative fields unconditionally (no null guards).
+    // These always reflect TMDB's data so the entry stays in sync after relinking.
+    setValue('type', d.type)
+    if (d.year          != null) setValue('yearMade',               d.year)
+    if (d.totalEpisodes != null) setValue('totalEpisodes',          d.totalEpisodes)
+    if (d.runtime       != null) setValue('episodeDurationMinutes', d.runtime)
+    // Country and ageRating: always overwrite when TMDB provides a value
+    // (search results have null here; full fetch always has the real value)
+    if (d.country  !== null && d.country  !== undefined) setValue('country',  d.country  ?? '')
+    if (d.ageRating !== null && d.ageRating !== undefined) setValue('ageRating', d.ageRating ?? '')
+    if (d.genres.length > 0) setGenres(d.genres)
+
+    setTmdbChanges({ tmdbId: d.tmdbId, posterUrl: d.posterUrl, backdropUrl: d.backdropUrl, releaseDate: d.releaseDate ?? null })
+
+    // Clear any pending manual poster upload — TMDB poster becomes the active default.
+    // (Existing saved manualPosterUrl is untouched; user can remove it explicitly.)
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    setPosterFile(null)
+    setPosterPreviewUrl(null)
+
     setShowTmdbSearch(false)
-    toast.success(`Linked to "${r.title}" on TMDB`)
+    toast.success(`Linked to "${d.title}" on TMDB`)
+  }
+
+  // ── Season Confirm — fetch season-specific episodes & duration ────────────
+  async function handleSeasonConfirm() {
+    const tmdbId    = currentTmdbId
+    const seasonNum = watch('seasonNumber')
+    if (!tmdbId || !seasonNum) return
+
+    try {
+      // Try season-specific data first
+      const seasonData = await fetchSeason(tmdbId, seasonNum)
+      if (seasonData && (seasonData.episodeCount || seasonData.avgRuntime)) {
+        if (seasonData.episodeCount) setValue('totalEpisodes',          seasonData.episodeCount)
+        if (seasonData.avgRuntime)   setValue('episodeDurationMinutes', seasonData.avgRuntime)
+        toast.success(`Season ${seasonNum} data loaded`)
+      } else {
+        // Fallback: series-level episode data from TMDB
+        try {
+          const seriesData = await fetchTVMetadata(tmdbId)
+          if (seriesData.totalEpisodes) setValue('totalEpisodes', seriesData.totalEpisodes)
+          if (seriesData.runtime)       setValue('episodeDurationMinutes', seriesData.runtime)
+          toast.info('Season-specific data unavailable — using series-level data')
+        } catch {
+          toast.error('Could not load episode data from TMDB')
+        }
+      }
+    } catch {
+      toast.error('Could not load season data from TMDB')
+    }
   }
 
   // ── Remove TMDB link ──────────────────────────────────────────────────────
@@ -336,9 +386,12 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                   variant="outline"
                   className="h-7 text-xs px-2"
                   onClick={() => setShowTmdbSearch((v) => !v)}
+                  disabled={tmdbLinking}
                 >
-                  <Search className="w-3 h-3 mr-1" />
-                  {showTmdbSearch ? 'Cancel' : 'Search TMDB'}
+                  {tmdbLinking
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <Search className="w-3 h-3 mr-1" />}
+                  {tmdbLinking ? 'Linking…' : showTmdbSearch ? 'Cancel' : 'Search TMDB'}
                 </Button>
                 {currentTmdbId != null && tmdbChanges?.tmdbId !== null && (
                   <Button
@@ -438,8 +491,29 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                     className="w-24"
                     {...register('seasonNumber')}
                   />
-                  <span className="text-xs text-white/30">Leave blank for full series</span>
+                  {currentTmdbId ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs px-2.5"
+                      onClick={handleSeasonConfirm}
+                      disabled={seasonConfirmLoading || !watch('seasonNumber')}
+                      title="Fetch episode count and duration from TMDB for this season"
+                    >
+                      {seasonConfirmLoading
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : 'Confirm'}
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-white/30">Leave blank for full series</span>
+                  )}
                 </div>
+                {currentTmdbId && (
+                  <p className="text-[10px] text-white/30">
+                    Press Confirm to auto-fill Episodes &amp; Duration from TMDB
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -565,10 +639,12 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
               <div className="flex-1 min-w-0 space-y-1.5">
                 <p className="text-sm font-medium text-white">Poster</p>
                 <p className="text-xs text-white/40">
-                  {activeTmdbPoster
-                    ? 'TMDB poster'
-                    : hasManualPoster
-                      ? 'Manual upload'
+                  {hasManualPoster
+                    ? activeTmdbPoster
+                      ? 'Manual upload (overrides TMDB)'
+                      : 'Manual upload'
+                    : activeTmdbPoster
+                      ? 'TMDB poster'
                       : 'No poster — upload one below'}
                 </p>
                 <div className="flex flex-wrap gap-1.5 mt-1">
@@ -580,7 +656,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <Upload className="w-3 h-3 mr-1" />
-                    {hasManualPoster && !activeTmdbPoster ? 'Replace Poster' : 'Upload Poster'}
+                    {hasManualPoster ? 'Replace Poster' : 'Upload Poster'}
                   </Button>
                   {hasManualPoster && (
                     <Button
