@@ -80,17 +80,44 @@ export const ISO_TO_COUNTRY: Record<string, string> = {
 }
 
 /**
+ * Well-known aliases that can't be caught by the ISO-code regex alone.
+ * Keyed by lower-cased alias; value is the canonical full name.
+ */
+const COUNTRY_NAME_ALIASES: Record<string, string> = {
+  // United States variants
+  'usa':                       'United States',
+  'u.s.a.':                    'United States',
+  'u.s.a':                     'United States',
+  'united states of america':  'United States',
+  'america':                   'United States',
+  // United Kingdom variants
+  'uk':                        'United Kingdom',
+  'great britain':             'United Kingdom',
+  'england':                   'United Kingdom',
+  'britain':                   'United Kingdom',
+  // South Korea variants
+  'korea':                     'South Korea',
+  // Common shorthand kept consistent
+  'holland':                   'Netherlands',
+}
+
+/**
  * Normalise a country value to a consistent full-name string.
  *
  * Handles:
  *   - 2-letter ISO codes returned by TMDB for TV series ("TH" → "Thailand")
  *   - Already-expanded names returned by TMDB for movies ("Thailand" → "Thailand")
+ *   - Common aliases ("USA" → "United States", "UK" → "United Kingdom", …)
  *   - Null / undefined → null
  */
 export function normalizeCountry(value: string | null | undefined): string | null {
   if (!value) return null
   const trimmed = value.trim()
   if (!trimmed) return null
+
+  // Check well-known multi-form aliases first (before the ISO regex)
+  const alias = COUNTRY_NAME_ALIASES[trimmed.toLowerCase()]
+  if (alias) return alias
 
   // If it's a 2-letter ISO code (case-insensitive), expand it
   if (/^[A-Za-z]{2}$/.test(trimmed)) {

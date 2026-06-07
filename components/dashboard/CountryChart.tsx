@@ -112,11 +112,24 @@ export function CountryChart({ entries }: CountryChartProps) {
 
     if (sorted.length <= MAX_COUNTRIES) return { data: sorted, othersBreakdown: [] }
 
-    // Top 6 + collapse the rest into "Others"
-    const top = sorted.slice(0, MAX_COUNTRIES)
-    const rest = sorted.slice(MAX_COUNTRIES)
-    const othersValue = rest.reduce((sum, d) => sum + d.value, 0)
+    // United States must always appear as its own category — never merged into "Others".
+    // Pull it out before the top-N slice so the slot count is correct.
+    const usEntry   = sorted.find((e) => e.name === 'United States') ?? null
+    const remaining = sorted.filter((e) => e.name !== 'United States')
 
+    // Allocate one slot for US (if present), the rest go to other countries
+    const otherSlots = usEntry ? MAX_COUNTRIES - 1 : MAX_COUNTRIES
+    const top  = remaining.slice(0, otherSlots)
+    const rest = remaining.slice(otherSlots)
+
+    // Re-insert United States into the top list at its natural rank position
+    if (usEntry) {
+      const insertIdx = top.findIndex((e) => e.value < usEntry.value)
+      if (insertIdx === -1) top.push(usEntry)
+      else top.splice(insertIdx, 0, usEntry)
+    }
+
+    const othersValue = rest.reduce((sum, d) => sum + d.value, 0)
     if (othersValue > 0) {
       top.push({ name: 'Others', value: Math.round(othersValue * 10) / 10 })
     }
