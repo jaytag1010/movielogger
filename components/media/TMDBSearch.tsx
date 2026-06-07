@@ -67,6 +67,7 @@ export function TMDBSearch({ mediaType = 'all', onSelect, placeholder, defaultQu
           <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 animate-spin" />
         ) : query ? (
           <button
+            type="button"
             onClick={handleClear}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
           >
@@ -95,6 +96,7 @@ export function TMDBSearch({ mediaType = 'all', onSelect, placeholder, defaultQu
               return (
                 <button
                   key={`${result.type}-${result.tmdbId}`}
+                  type="button"
                   onClick={() => handleSelect(result)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors text-left"
                 >
