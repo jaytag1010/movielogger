@@ -321,6 +321,7 @@ async function findTMDBMatch(mapped: MappedRow): Promise<TMDBMatchResult> {
       title:         mapped.title,
       type:          (mapped.type === 'series' ? 'series' : 'movie') as 'movie' | 'series',
       year:          mapped.yearMade          ?? null,
+      releaseDate:   null,
       posterUrl:     mapped.posterUrl         ?? null,
       backdropUrl:   mapped.backdropUrl       ?? null,
       genres:        mapped.genres            ?? [],

@@ -29,6 +29,17 @@ export interface MediaEntry {
   nextEpisodeToWatch: number | null
   tmdbId: number | null
   title: string
+  /**
+   * Original non-Latin title from the import source (e.g. Japanese, Korean).
+   * Stored as metadata; the primary `title` field always holds the English title.
+   * null when the entry has no known native-language alternative.
+   */
+  nativeTitle: string | null
+  /**
+   * Full TMDB release/air date (e.g. "2023-05-12").
+   * Used as a precise sort key for Newest/Oldest sorting when dateFinished is absent.
+   */
+  tmdbReleaseDate: string | null
   type: MediaType
   yearMade: number | null
   totalEpisodes: number | null

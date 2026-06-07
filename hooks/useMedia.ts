@@ -105,10 +105,17 @@ function getFilteredEntries(entries: MediaEntry[], filters: MediaFilters): Media
     result = result.filter(
       (e) =>
         e.title.toLowerCase().includes(search) ||
+        (e.nativeTitle?.toLowerCase().includes(search) ?? false) ||
         e.genres?.some((g) => g.toLowerCase().includes(search)) ||
         e.country?.toLowerCase().includes(search) ||
         e.internalId.toLowerCase().includes(search)
     )
+  }
+
+  // When sorting by rating, only show completed entries (non-completed lack a
+  // meaningful personal rating context and dilute the ranking view).
+  if (filters.sortBy === 'rating') {
+    result = result.filter((e) => e.status === 'completed')
   }
 
   result.sort((a, b) => {
@@ -121,9 +128,15 @@ function getFilteredEntries(entries: MediaEntry[], filters: MediaFilters): Media
       case 'year':
         return order * ((a.yearMade ?? 0) - (b.yearMade ?? 0))
       case 'dateFinished': {
-        const aDate = a.dateFinished?.toMillis() ?? 0
-        const bDate = b.dateFinished?.toMillis() ?? 0
-        return order * (aDate - bDate)
+        // Priority: (1) dateFinished timestamp, (2) TMDB full release date,
+        // (3) yearMade as approximate fallback.
+        const toSortKey = (e: MediaEntry): number => {
+          if (e.dateFinished) return e.dateFinished.toMillis()
+          if (e.tmdbReleaseDate) return new Date(e.tmdbReleaseDate).getTime()
+          if (e.yearMade) return new Date(`${e.yearMade}-01-01`).getTime()
+          return 0
+        }
+        return order * (toSortKey(a) - toSortKey(b))
       }
       case 'createdAt': {
         const aDate = a.createdAt?.toMillis() ?? 0

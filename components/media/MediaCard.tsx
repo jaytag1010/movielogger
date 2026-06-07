@@ -73,6 +73,11 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
                 <h3 className="text-sm font-semibold text-white leading-tight truncate">
                   {getDisplayTitle(entry)}
                 </h3>
+                {entry.nativeTitle && (
+                  <p className="text-xs text-white/40 leading-tight truncate mt-0.5">
+                    {entry.nativeTitle}
+                  </p>
+                )}
                 <div className="flex items-center gap-2 mt-0.5">
                   {entry.yearMade && (
                     <span className="text-xs text-white/40">{entry.yearMade}</span>

@@ -198,9 +198,17 @@ export default function ImportPage() {
       throw new Error(`Row ${row.rowIndex}: title is required but missing`)
     }
 
+    // If TMDB supplied an English title that differs from the original title,
+    // promote the TMDB title as the primary and preserve the original as nativeTitle.
+    const primaryTitle = tmdbData?.title ?? mergedTitle
+    const nativeTitle =
+      tmdbData?.title && tmdbData.title !== mergedTitle ? mergedTitle : null
+
     return {
       input: {
-        title: mergedTitle,
+        title: primaryTitle,
+        nativeTitle,
+        tmdbReleaseDate: tmdbData?.releaseDate ?? null,
         legacyId: mapped.legacyId ?? null,
         manualPosterUrl: null,
         ...tmdbFields,

@@ -162,9 +162,12 @@ export function AddEntryForm({ onSuccess, onCancel }: AddEntryFormProps) {
 
       await addEntry({
         title: data.title,
+        nativeTitle: null,
+        tmdbReleaseDate: tmdbData?.releaseDate ?? null,
         type: data.type,
         status: data.status,
-        seasonNumber: data.type === 'series' ? (data.seasonNumber ?? null) : null,
+        // Default season to 1 for series when left blank (Improvement 05).
+        seasonNumber: data.type === 'series' ? (data.seasonNumber ?? 1) : null,
         nextEpisodeToWatch: episodesWatched,
         tmdbId: tmdbData?.tmdbId ?? null,
         yearMade: data.yearMade ?? null,

@@ -64,6 +64,7 @@ type TmdbChanges = {
   tmdbId: number | null
   posterUrl: string | null
   backdropUrl: string | null
+  releaseDate: string | null
 } | null
 
 interface EditEntryModalProps {
@@ -170,14 +171,14 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
     if (r.ageRating)             setValue('ageRating',              r.ageRating)
     if (r.genres.length > 0)     setGenres(r.genres)
 
-    setTmdbChanges({ tmdbId: r.tmdbId, posterUrl: r.posterUrl, backdropUrl: r.backdropUrl })
+    setTmdbChanges({ tmdbId: r.tmdbId, posterUrl: r.posterUrl, backdropUrl: r.backdropUrl, releaseDate: r.releaseDate ?? null })
     setShowTmdbSearch(false)
     toast.success(`Linked to "${r.title}" on TMDB`)
   }
 
   // ── Remove TMDB link ──────────────────────────────────────────────────────
   function handleTmdbRemove() {
-    setTmdbChanges({ tmdbId: null, posterUrl: null, backdropUrl: null })
+    setTmdbChanges({ tmdbId: null, posterUrl: null, backdropUrl: null, releaseDate: null })
     setShowTmdbSearch(false)
     toast.info('TMDB link will be removed when you save')
   }
@@ -239,9 +240,9 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
       const wasTmdbLinked = entry.tmdbId != null
       const tmdbFields: Record<string, unknown> =
         tmdbChanges !== null
-          ? { tmdbId: tmdbChanges.tmdbId, posterUrl: tmdbChanges.posterUrl, backdropUrl: tmdbChanges.backdropUrl }
+          ? { tmdbId: tmdbChanges.tmdbId, posterUrl: tmdbChanges.posterUrl, backdropUrl: tmdbChanges.backdropUrl, tmdbReleaseDate: tmdbChanges.releaseDate }
           : typeChanged && wasTmdbLinked
-            ? { tmdbId: null, posterUrl: null, backdropUrl: null }
+            ? { tmdbId: null, posterUrl: null, backdropUrl: null, tmdbReleaseDate: null }
             : {}
 
       // Resolve manual poster.
@@ -258,7 +259,8 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
         title:                  data.title,
         type:                   data.type,
         status:                 data.status,
-        seasonNumber:           data.type === 'series' ? (data.seasonNumber ?? null) : null,
+        // Default season to 1 for series when left blank (Improvement 05).
+        seasonNumber:           data.type === 'series' ? (data.seasonNumber ?? 1) : null,
         nextEpisodeToWatch:     episodesWatched,
         yearMade:               data.yearMade               ?? null,
         totalEpisodes:          correctedTotal,

@@ -103,6 +103,8 @@ export interface NormalizedTMDBResult {
   title: string
   type: 'movie' | 'series'
   year: number | null
+  /** Full TMDB release/air date string (e.g. "2023-05-12"). Used as a precise sort key. */
+  releaseDate: string | null
   posterUrl: string | null
   backdropUrl: string | null
   genres: string[]

@@ -90,7 +90,7 @@ export function getDisplayTitle(entry: {
   title: string
   seasonNumber?: number | null
 }): string {
-  if (entry.seasonNumber != null) {
+  if (entry.seasonNumber != null && entry.seasonNumber > 1) {
     return `${entry.title} — Season ${entry.seasonNumber}`
   }
   return entry.title

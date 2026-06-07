@@ -17,7 +17,7 @@ interface TopRankingListProps {
 
 export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProps) {
   const filtered = entries
-    .filter((e) => getEffectiveMediaType(e) === type && e.personalRating !== null)
+    .filter((e) => getEffectiveMediaType(e) === type && e.personalRating !== null && e.status === 'completed')
     .sort((a, b) => (b.personalRating ?? 0) - (a.personalRating ?? 0))
     .slice(0, limit)
 

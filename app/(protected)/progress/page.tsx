@@ -75,7 +75,12 @@ export default function ProgressPage() {
   // ── Derived lists ─────────────────────────────────────────────────────────
 
   const progressEntries = useMemo(
-    () => entries.filter((e) => PROGRESS_STATUSES.includes(e.status as MediaStatus)),
+    () =>
+      entries
+        .filter((e) => PROGRESS_STATUSES.includes(e.status as MediaStatus))
+        // Sort by most-recently updated first so the order persists across restarts.
+        // updatedAt is written by Firestore on every edit (including episode increments).
+        .sort((a, b) => (b.updatedAt?.toMillis() ?? 0) - (a.updatedAt?.toMillis() ?? 0)),
     [entries]
   )
 
@@ -212,6 +217,7 @@ export default function ProgressPage() {
         ageRating: fullData.ageRating,
         genres: fullData.genres,
         yearMade: fullData.year ?? linkTarget.yearMade,
+        tmdbReleaseDate: fullData.releaseDate ?? null,
       }
 
       if (fullData.type === 'series') {
@@ -276,6 +282,7 @@ export default function ProgressPage() {
         if (!entry.genres?.length && data.genres.length) updates.genres = data.genres
         if (!entry.country && data.country) updates.country = data.country
         if (!entry.episodeDurationMinutes && data.runtime) updates.episodeDurationMinutes = data.runtime
+        if (!entry.tmdbReleaseDate && data.releaseDate) updates.tmdbReleaseDate = data.releaseDate
       } else {
         // Series: try season-level first, then fall back to series-level
         if (entry.seasonNumber) {
@@ -301,6 +308,7 @@ export default function ProgressPage() {
         if (!entry.seasonNumber && sd.totalEpisodes && sd.totalEpisodes > (entry.totalEpisodes ?? 0)) {
           updates.totalEpisodes = sd.totalEpisodes
         }
+        if (!entry.tmdbReleaseDate && sd.releaseDate) updates.tmdbReleaseDate = sd.releaseDate
       }
 
       if (Object.keys(updates).length > 0) {
@@ -341,6 +349,7 @@ export default function ProgressPage() {
           if (!entry.genres?.length && data.genres.length) updates.genres = data.genres
           if (!entry.country && data.country) updates.country = data.country
           if (!entry.episodeDurationMinutes && data.runtime) updates.episodeDurationMinutes = data.runtime
+          if (!entry.tmdbReleaseDate && data.releaseDate) updates.tmdbReleaseDate = data.releaseDate
         } else {
           if (entry.seasonNumber) {
             try {
@@ -365,6 +374,7 @@ export default function ProgressPage() {
           if (!entry.seasonNumber && sd.totalEpisodes && sd.totalEpisodes > (entry.totalEpisodes ?? 0)) {
             updates.totalEpisodes = sd.totalEpisodes
           }
+          if (!entry.tmdbReleaseDate && sd.releaseDate) updates.tmdbReleaseDate = sd.releaseDate
         }
 
         if (Object.keys(updates).length > 0) {
