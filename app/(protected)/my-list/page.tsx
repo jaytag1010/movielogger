@@ -52,6 +52,11 @@ export default function MyListPage() {
     if (country) {
       useMediaStore.getState().setFilters({ country, status: 'all' })
     }
+    // Genre drill-down from dashboard Genre chart: ?genre=Drama
+    const genre = searchParams.get('genre')
+    if (genre) {
+      useMediaStore.getState().setFilters({ genre, status: 'all' })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 

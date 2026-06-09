@@ -88,18 +88,30 @@ export function computeDataQuality(
     }
   }
 
-  // 2. Extremely similar titles (not already captured by a TMDB-id group)
+  // 2. Title-based duplicates (not already captured by a TMDB-id group).
+  //
+  //    A genuine duplicate requires the same title AND the same country AND
+  //    the same year. For TV series, season number must also match — different
+  //    seasons of the same show are intentionally tracked as separate entries.
+  //
+  //    Key structure:
+  //      title:<normTitle>|<country>|<year>|<season>
+  //    where country/year/season use '' when absent so sparse data still groups.
   const byTitle = new Map<string, MediaEntry[]>()
   for (const e of entries) {
     if (e.id && seenInTmdbGroup.has(e.id)) continue
     const norm = normaliseTitle(e.title)
     if (norm.length < 2) continue
-    const arr = byTitle.get(norm) ?? []
+    const country = (e.country ?? '').toLowerCase().trim()
+    const year    = e.yearMade != null ? String(e.yearMade) : ''
+    // Series: include season so Season 1 ≠ Season 2; movies get no season token
+    const season  = e.type === 'series' ? String(e.seasonNumber ?? 1) : ''
+    const key = `title:${norm}|${country}|${year}|${season}`
+    const arr = byTitle.get(key) ?? []
     arr.push(e)
-    byTitle.set(norm, arr)
+    byTitle.set(key, arr)
   }
-  for (const [norm, group] of Array.from(byTitle.entries())) {
-    const key = `title:${norm}`
+  for (const [key, group] of Array.from(byTitle.entries())) {
     if (group.length > 1 && !ignoredDuplicateKeys.has(key)) {
       duplicates.push({ key, reason: 'title', entries: group })
     }

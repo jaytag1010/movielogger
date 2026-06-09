@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   RadarChart,
   Radar,
@@ -44,6 +45,12 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 }
 
 export function GenreChart({ entries }: GenreChartProps) {
+  const router = useRouter()
+
+  function handleGenreClick(genre: string) {
+    router.push(`/my-list?genre=${encodeURIComponent(genre)}`)
+  }
+
   const data = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const entry of entries) {
@@ -79,7 +86,12 @@ export function GenreChart({ entries }: GenreChartProps) {
       </div>
 
       <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={data} barSize={16}>
+        <BarChart
+          data={data}
+          barSize={16}
+          onClick={(d) => { if (d?.activePayload?.[0]?.payload?.name) handleGenreClick(d.activePayload[0].payload.name) }}
+          style={{ cursor: 'pointer' }}
+        >
           <XAxis
             dataKey="name"
             tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 9 }}
@@ -96,14 +108,35 @@ export function GenreChart({ entries }: GenreChartProps) {
             axisLine={false}
             width={20}
           />
-          <Tooltip content={<CustomTooltip />} />
-          <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+          <Bar dataKey="count" radius={[4, 4, 0, 0]} style={{ cursor: 'pointer' }}>
             {data.map((_, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
             ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+
+      {/* Clickable legend */}
+      <div className="flex flex-wrap gap-2 mt-1">
+        {data.map((item, index) => (
+          <button
+            key={item.name}
+            type="button"
+            onClick={() => handleGenreClick(item.name)}
+            className="flex items-center gap-1.5 group"
+            title={`View ${item.name} titles`}
+          >
+            <div
+              className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+            />
+            <span className="text-xs text-white/50 group-hover:text-white/80 underline-offset-2 group-hover:underline transition-colors">
+              {item.name}
+            </span>
+          </button>
+        ))}
+      </div>
     </GlassCard>
   )
 }
