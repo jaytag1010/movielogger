@@ -40,7 +40,7 @@ const FILTER_PILLS: { label: string; value: ProgressFilter }[] = [
 const PROGRESS_STATUSES: MediaStatus[] = ['watching', 'planned', 'on_hold', 'dropped']
 
 export default function ProgressPage() {
-  const { entries, editEntry } = useMedia()
+  const { entries, editEntry, refreshEntry } = useMedia()
 
   // ── Filter state ──────────────────────────────────────────────────────────
   const [filter, setFilter] = useState<ProgressFilter>('watching')
@@ -378,7 +378,7 @@ export default function ProgressPage() {
         }
 
         if (Object.keys(updates).length > 0) {
-          await editEntry(entry.id!, updates)
+          await refreshEntry(entry.id!, updates)
           updated++
         }
       } catch {

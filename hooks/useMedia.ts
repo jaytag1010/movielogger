@@ -52,6 +52,21 @@ export function useMedia() {
     useMediaStore.getState().updateEntry(id, updates as Partial<MediaEntry>)
   }, [])
 
+  /**
+   * Refresh metadata without disturbing the In Progress ordering.
+   * Unlike editEntry, this does NOT update `updatedAt` in Firestore and does NOT
+   * move the entry to the front of the in-memory list — so the user's established
+   * card order is fully preserved after a Refresh All operation.
+   */
+  const refreshEntry = useCallback(async (id: string, updates: MediaEntryUpdate) => {
+    await updateMediaEntry(id, updates, { preserveOrder: true })
+    // Update in-place: map over the existing array without reordering
+    const current = useMediaStore.getState().entries
+    useMediaStore.getState().setEntries(
+      current.map((e) => e.id === id ? { ...e, ...updates } : e)
+    )
+  }, [])
+
   const removeEntry = useCallback(async (id: string) => {
     await deleteMediaEntry(id)
     useMediaStore.getState().removeEntry(id)
@@ -68,6 +83,7 @@ export function useMedia() {
     loadEntries,
     addEntry,
     editEntry,
+    refreshEntry,
     removeEntry,
   }
 }

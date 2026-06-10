@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { useForm, Controller } from 'react-hook-form'
@@ -66,9 +66,14 @@ interface AddEntryFormProps {
   onSuccess?: () => void
   /** Called when the user chooses to cancel adding an entry. */
   onCancel?: () => void
+  /**
+   * When set (e.g. arriving from GlobalSearch "Add to Library"),
+   * the form auto-fetches and prefills TMDB metadata on mount.
+   */
+  tmdbPreload?: { tmdbId: number; tmdbType: 'movie' | 'series' }
 }
 
-export function AddEntryForm({ onSuccess, onCancel }: AddEntryFormProps) {
+export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormProps) {
   const [tmdbData, setTmdbData] = useState<NormalizedTMDBResult | null>(null)
   const [genres, setGenres] = useState<string[]>([])
   const [genreInput, setGenreInput] = useState('')
@@ -96,6 +101,27 @@ export function AddEntryForm({ onSuccess, onCancel }: AddEntryFormProps) {
   const watchRating = watch('personalRating')
   const watchSeasonNumber = watch('seasonNumber')
   const watchStatus = watch('status')
+
+  // Auto-prefill TMDB data when arriving via "Add to Library" from GlobalSearch.
+  useEffect(() => {
+    if (!tmdbPreload) return
+    let cancelled = false
+    fetchDetails(tmdbPreload.tmdbId, tmdbPreload.tmdbType).then((data) => {
+      if (cancelled || !data) return
+      setTmdbData(data)
+      setValue('title', data.title)
+      setValue('type', data.type === 'movie' ? 'movie' : 'series')
+      if (data.year)           setValue('yearMade',               data.year)
+      if (data.country)        setValue('country',                data.country)
+      if (data.runtime)        setValue('episodeDurationMinutes', data.runtime)
+      if (data.totalEpisodes)  setValue('totalEpisodes',          data.totalEpisodes)
+      if (data.ageRating)      setValue('ageRating',              data.ageRating)
+      if (data.genres.length > 0) setGenres(data.genres)
+      toast.success('TMDB metadata loaded')
+    })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // intentionally runs only on initial mount
 
   async function handleTMDBSelect(result: NormalizedTMDBResult) {
     const details = await fetchDetails(result.tmdbId, result.type as 'movie' | 'series')

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { StatsCards } from '@/components/dashboard/StatsCards'
@@ -14,6 +14,7 @@ import { DataQualityCenter } from '@/components/dashboard/DataQualityCenter'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { useMedia } from '@/hooks/useMedia'
 import { useAuthStore } from '@/store/authStore'
+import { getUserProfile } from '@/lib/firebase/firestore'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -32,7 +33,22 @@ export default function DashboardPage() {
   const { user } = useAuthStore()
   const { entries, loading, loadEntries } = useMedia()
 
-  const displayName = user?.displayName?.split(' ')[0] || 'Cinephile'
+  // Load the app's Display Name (set on Profile page) — takes priority over
+  // the Google account name so users see their chosen name in the greeting.
+  const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null)
+  useEffect(() => {
+    if (!user) return
+    getUserProfile(user.uid)
+      .then((p) => setProfileDisplayName(p.displayName))
+      .catch(() => { /* non-fatal — fallback to Google name */ })
+  }, [user])
+
+  // Priority: app Display Name → Google account first name → generic fallback
+  const displayName =
+    profileDisplayName ||
+    user?.displayName?.split(' ')[0] ||
+    'Cinephile'
+
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
@@ -46,7 +62,7 @@ export default function DashboardPage() {
       >
         <div>
           <p className="text-sm text-white/40 mb-1">{greeting},</p>
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold text-white break-words">
             {displayName}{' '}
             <span className="text-gradient">Dashboard</span>
           </h1>

@@ -48,13 +48,22 @@ export async function createMediaEntry(
 
 export async function updateMediaEntry(
   entryId: string,
-  updates: MediaEntryUpdate
+  updates: MediaEntryUpdate,
+  options?: {
+    /**
+     * When true, skip updating `updatedAt`.
+     * Use this for background metadata refreshes that should not disturb the
+     * user-established ordering of the In Progress list (which sorts by updatedAt).
+     */
+    preserveOrder?: boolean
+  }
 ): Promise<void> {
   const docRef = doc(db(), COLLECTION, entryId)
-  await updateDoc(docRef, {
-    ...updates,
-    updatedAt: serverTimestamp(),
-  })
+  const payload: Record<string, unknown> = { ...updates }
+  if (!options?.preserveOrder) {
+    payload.updatedAt = serverTimestamp()
+  }
+  await updateDoc(docRef, payload)
 }
 
 export async function deleteMediaEntry(entryId: string): Promise<void> {
