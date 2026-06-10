@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { StatsCards } from '@/components/dashboard/StatsCards'
@@ -14,7 +14,6 @@ import { DataQualityCenter } from '@/components/dashboard/DataQualityCenter'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { useMedia } from '@/hooks/useMedia'
 import { useAuthStore } from '@/store/authStore'
-import { getUserProfile } from '@/lib/firebase/firestore'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -30,19 +29,12 @@ const itemVariants = {
 }
 
 export default function DashboardPage() {
-  const { user } = useAuthStore()
+  const { user, profileDisplayName } = useAuthStore()
   const { entries, loading, loadEntries } = useMedia()
 
-  // Load the app's Display Name (set on Profile page) — takes priority over
-  // the Google account name so users see their chosen name in the greeting.
-  const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null)
-  useEffect(() => {
-    if (!user) return
-    getUserProfile(user.uid)
-      .then((p) => setProfileDisplayName(p.displayName))
-      .catch(() => { /* non-fatal — fallback to Google name */ })
-  }, [user])
-
+  // profileDisplayName is loaded once at auth-init (useAuthInit in hooks/useAuth.ts)
+  // and stored in the auth store — always available before the first render,
+  // so there is no Google-name flash.
   // Priority: app Display Name → Google account first name → generic fallback
   const displayName =
     profileDisplayName ||

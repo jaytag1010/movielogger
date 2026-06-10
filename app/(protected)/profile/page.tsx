@@ -219,6 +219,8 @@ export default function ProfilePage() {
       const trimmed = nameInput.trim() || null
       await updateUserProfile(user.uid, { displayName: trimmed })
       setProfile((prev) => ({ ...prev, displayName: trimmed }))
+      // Keep the auth store in sync so Dashboard reflects the change instantly
+      useAuthStore.getState().setProfileDisplayName(trimmed)
       setEditingName(false)
       toast.success('Display name updated')
     } catch {

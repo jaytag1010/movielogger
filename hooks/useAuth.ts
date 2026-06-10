@@ -11,6 +11,7 @@ import {
   logOut,
   resetPassword,
 } from '@/lib/firebase/auth'
+import { getUserProfile } from '@/lib/firebase/firestore'
 
 export function useAuth() {
   const { user, loading, initialized } = useAuthStore()
@@ -29,16 +30,25 @@ export function useAuthActions() {
 }
 
 export function useAuthInit() {
-  const { setUser, setLoading, setInitialized } = useAuthStore()
+  const { setUser, setLoading, setInitialized, setProfileDisplayName } = useAuthStore()
 
   useEffect(() => {
     const unsubscribe = onAuthChange((user) => {
       setUser(user)
       setLoading(false)
       setInitialized(true)
+      // Load the app Display Name immediately on auth so every page has it
+      // before its first render — eliminates the Google-name flash on Dashboard.
+      if (user) {
+        getUserProfile(user.uid)
+          .then((p) => setProfileDisplayName(p.displayName))
+          .catch(() => setProfileDisplayName(null))
+      } else {
+        setProfileDisplayName(null)
+      }
     })
     return unsubscribe
-  }, [setUser, setLoading, setInitialized])
+  }, [setUser, setLoading, setInitialized, setProfileDisplayName])
 }
 
 export function useRequireAuth() {
