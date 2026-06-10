@@ -29,17 +29,13 @@ const itemVariants = {
 }
 
 export default function DashboardPage() {
-  const { user, profileDisplayName } = useAuthStore()
+  const { profileDisplayName } = useAuthStore()
   const { entries, loading, loadEntries } = useMedia()
 
-  // profileDisplayName is loaded once at auth-init (useAuthInit in hooks/useAuth.ts)
-  // and stored in the auth store — always available before the first render,
-  // so there is no Google-name flash.
-  // Priority: app Display Name → Google account first name → generic fallback
-  const displayName =
-    profileDisplayName ||
-    user?.displayName?.split(' ')[0] ||
-    'Cinephile'
+  // profileDisplayName is pre-seeded from localStorage synchronously, so it is
+  // already correct on the very first render — no Google-name flash.
+  // We deliberately skip user?.displayName to prevent any flash of the Google name.
+  const displayName = profileDisplayName || 'Cinephile'
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
