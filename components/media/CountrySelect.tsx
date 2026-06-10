@@ -32,7 +32,7 @@ export function CountrySelect({
   placeholder = 'Select country…',
   className,
 }: CountrySelectProps) {
-  // Build a "from your library" section: normalise stored values, count, sort by frequency
+  // Top 8 countries by title count from the user's library
   const libraryCountries = useMemo(() => {
     if (libraryEntries.length === 0) return []
     const counts: Record<string, number> = {}
@@ -46,8 +46,9 @@ export function CountrySelect({
       .map(([name]) => name)
   }, [libraryEntries])
 
-  // Countries to show in "Featured" section when there's no library data
-  const featuredSection = libraryCountries.length > 0 ? libraryCountries : FEATURED_COUNTRIES
+  // Use library-based top 8 when available; fall back to defaults for new/empty libraries
+  const hasLibraryData = libraryCountries.length > 0
+  const featuredSection = hasLibraryData ? libraryCountries : FEATURED_COUNTRIES
 
   // Remaining countries: all sorted, minus featured
   const featuredSet = new Set(featuredSection)
@@ -84,7 +85,7 @@ export function CountrySelect({
         {/* Most-used from library (or featured defaults) */}
         <SelectGroup>
           <SelectLabel className="text-[10px] text-white/30 uppercase tracking-wider px-2 py-1">
-            {libraryCountries.length > 0 ? 'From Your Library' : 'Common Countries'}
+            {hasLibraryData ? 'Most in Your Library' : 'Common Countries'}
           </SelectLabel>
           {featuredSection.map((country) => (
             <SelectItem key={country} value={country}>

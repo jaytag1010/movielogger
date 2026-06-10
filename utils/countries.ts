@@ -32,6 +32,19 @@ export const ISO_TO_COUNTRY: Record<string, string> = {
   IN: 'India',
   AU: 'Australia',
   NZ: 'New Zealand',
+  BT: 'Bhutan',
+  MV: 'Maldives',
+  FJ: 'Fiji',
+  PG: 'Papua New Guinea',
+  BN: 'Brunei',
+  TL: 'Timor-Leste',
+  // ── Central & South Asia ─────────────────────────────────────────────────
+  KZ: 'Kazakhstan',
+  UZ: 'Uzbekistan',
+  KG: 'Kyrgyzstan',
+  TJ: 'Tajikistan',
+  TM: 'Turkmenistan',
+  AF: 'Afghanistan',
   // ── Americas ─────────────────────────────────────────────────────────────
   US: 'United States',
   CA: 'Canada',
@@ -42,8 +55,26 @@ export const ISO_TO_COUNTRY: Record<string, string> = {
   CL: 'Chile',
   PE: 'Peru',
   VE: 'Venezuela',
-  // ── Europe ───────────────────────────────────────────────────────────────
+  UY: 'Uruguay',
+  PY: 'Paraguay',
+  BO: 'Bolivia',
+  EC: 'Ecuador',
+  GT: 'Guatemala',
+  HN: 'Honduras',
+  SV: 'El Salvador',
+  NI: 'Nicaragua',
+  CR: 'Costa Rica',
+  PA: 'Panama',
+  CU: 'Cuba',
+  DO: 'Dominican Republic',
+  HT: 'Haiti',
+  JM: 'Jamaica',
+  TT: 'Trinidad and Tobago',
+  BB: 'Barbados',
+  PR: 'Puerto Rico',
+  // ── Western Europe ───────────────────────────────────────────────────────
   GB: 'United Kingdom',
+  IE: 'Ireland',
   FR: 'France',
   DE: 'Germany',
   IT: 'Italy',
@@ -57,26 +88,86 @@ export const ISO_TO_COUNTRY: Record<string, string> = {
   NO: 'Norway',
   DK: 'Denmark',
   FI: 'Finland',
+  IS: 'Iceland',
+  LU: 'Luxembourg',
+  MT: 'Malta',
+  CY: 'Cyprus',
+  // ── Central & Eastern Europe ─────────────────────────────────────────────
   PL: 'Poland',
   CZ: 'Czech Republic',
+  SK: 'Slovakia',
   HU: 'Hungary',
   RO: 'Romania',
+  BG: 'Bulgaria',
+  HR: 'Croatia',
+  SI: 'Slovenia',
+  RS: 'Serbia',
+  BA: 'Bosnia and Herzegovina',
+  ME: 'Montenegro',
+  MK: 'North Macedonia',
+  AL: 'Albania',
   GR: 'Greece',
   TR: 'Turkey',
   RU: 'Russia',
   UA: 'Ukraine',
-  // ── Middle East & Africa ─────────────────────────────────────────────────
+  BY: 'Belarus',
+  MD: 'Moldova',
+  LT: 'Lithuania',
+  LV: 'Latvia',
+  EE: 'Estonia',
+  // ── Caucasus ─────────────────────────────────────────────────────────────
+  GE: 'Georgia',
+  AM: 'Armenia',
+  AZ: 'Azerbaijan',
+  // ── Middle East ──────────────────────────────────────────────────────────
   IL: 'Israel',
   SA: 'Saudi Arabia',
   AE: 'United Arab Emirates',
   IR: 'Iran',
+  IQ: 'Iraq',
+  JO: 'Jordan',
+  LB: 'Lebanon',
+  SY: 'Syria',
+  KW: 'Kuwait',
+  QA: 'Qatar',
+  BH: 'Bahrain',
+  OM: 'Oman',
+  YE: 'Yemen',
+  PS: 'Palestine',
+  // ── Africa ───────────────────────────────────────────────────────────────
   ZA: 'South Africa',
   EG: 'Egypt',
   NG: 'Nigeria',
   KE: 'Kenya',
+  MA: 'Morocco',
+  TN: 'Tunisia',
+  LY: 'Libya',
+  DZ: 'Algeria',
+  GH: 'Ghana',
+  ET: 'Ethiopia',
+  TZ: 'Tanzania',
+  UG: 'Uganda',
+  CI: 'Ivory Coast',
+  SN: 'Senegal',
+  CM: 'Cameroon',
+  ZM: 'Zambia',
+  ZW: 'Zimbabwe',
+  MZ: 'Mozambique',
+  RW: 'Rwanda',
+  MG: 'Madagascar',
+  AO: 'Angola',
+  CD: 'DR Congo',
+  CG: 'Republic of Congo',
+  SD: 'Sudan',
+  SO: 'Somalia',
+  ML: 'Mali',
+  BF: 'Burkina Faso',
+  NE: 'Niger',
+  TD: 'Chad',
   // ── Other ────────────────────────────────────────────────────────────────
   XC: 'Czechoslovakia',   // historical
   SU: 'Soviet Union',     // historical
+  YU: 'Yugoslavia',       // historical
 }
 
 /**
@@ -99,6 +190,12 @@ const COUNTRY_NAME_ALIASES: Record<string, string> = {
   'korea':                     'South Korea',
   // Common shorthand kept consistent
   'holland':                   'Netherlands',
+  // Ireland
+  'eire':                      'Ireland',
+  'éire':                      'Ireland',
+  // Others
+  'uae':                       'United Arab Emirates',
+  'drc':                       'DR Congo',
 }
 
 /**
@@ -129,25 +226,19 @@ export function normalizeCountry(value: string | null | undefined): string | nul
 }
 
 /**
- * The ordered list of countries to feature at the top of country dropdowns.
- * Derived from common viewing markets; can be extended as the library grows.
+ * Fallback top-8 countries shown when the library is empty.
+ * Once the user has entries, CountrySelect replaces this with their
+ * actual top-8 countries by title count.
  */
 export const FEATURED_COUNTRIES = [
   'Philippines',
   'Thailand',
   'Japan',
   'South Korea',
-  'China',
-  'Taiwan',
-  'Hong Kong',
   'United States',
   'United Kingdom',
-  'Singapore',
-  'Indonesia',
-  'Malaysia',
+  'China',
   'India',
-  'Vietnam',
-  'Australia',
 ]
 
 /**
