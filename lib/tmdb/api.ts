@@ -249,6 +249,35 @@ export async function fetchSeasonMetadata(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Episode availability — used by the notification center
+// ---------------------------------------------------------------------------
+
+export interface TVAvailabilityInfo {
+  tmdbId: number
+  /** Current total episode count on TMDB */
+  totalEpisodes: number
+  /** True when no future episodes are scheduled (Ended, Canceled, or no next_episode_to_air) */
+  isEnded: boolean
+}
+
+export async function fetchTVAvailabilityInfo(tmdbId: number): Promise<TVAvailabilityInfo> {
+  const series = await getTVDetails(tmdbId)
+  const isEnded =
+    series.status === 'Ended' ||
+    series.status === 'Canceled' ||
+    series.next_episode_to_air == null
+  return {
+    tmdbId: series.id,
+    totalEpisodes: series.number_of_episodes ?? 0,
+    isEnded,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Normalised search results
+// ---------------------------------------------------------------------------
+
 export async function normalizeMovieResult(movie: TMDBMovie): Promise<NormalizedTMDBResult> {
   return {
     tmdbId: movie.id,

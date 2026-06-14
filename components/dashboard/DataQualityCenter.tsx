@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   Bell, AlertTriangle, Copy, Clock, Globe, Image as ImageIcon, Star,
-  ChevronRight, Check, EyeOff,
+  ChevronRight, Check, EyeOff, Calendar, Tags, Tv, Loader2,
+  PackageOpen,
 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -17,19 +18,29 @@ import { DuplicateGroup } from '@/lib/dataQuality'
 import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
 import { useMedia } from '@/hooks/useMedia'
 import { useDataQuality } from '@/hooks/useDataQuality'
+import { useEpisodeAvailability, NewEpisodeInfo } from '@/hooks/useEpisodeAvailability'
 
-// DataQualityCenter is self-sufficient: it subscribes to the media store
-// directly so the bell badge and dialog content always reflect the current
-// data state without waiting for a parent re-render.
 export function DataQualityCenter() {
   const [open, setOpen] = useState(false)
   const router = useRouter()
 
   const { entries, editEntry } = useMedia()
   const { result, ignoreDuplicate } = useDataQuality(entries)
+  const episodeAvail = useEpisodeAvailability(entries)
   const [fixingId, setFixingId] = useState<string | null>(null)
 
-  const count = result.totalCount
+  // Trigger async TMDB episode checks when the dialog opens
+  useEffect(() => {
+    if (open) {
+      episodeAvail.fetchAvailability()
+    }
+  // fetchAvailability is stable (useCallback), safe to omit from deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const dqCount = result.totalCount
+  const episodeCount = episodeAvail.newEpisodes.length + episodeAvail.readyToBinge.length
+  const totalBellCount = dqCount + episodeCount
 
   function goToEntry(entry: MediaEntry) {
     setOpen(false)
@@ -57,12 +68,12 @@ export function DataQualityCenter() {
         type="button"
         onClick={() => setOpen(true)}
         className="relative flex-shrink-0 w-10 h-10 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
-        aria-label="Data Quality Center"
+        aria-label="Notification Center"
       >
         <Bell className="w-5 h-5 text-white/70" />
-        {count > 0 && (
+        {totalBellCount > 0 && (
           <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-            {count > 99 ? '99+' : count}
+            {totalBellCount > 99 ? '99+' : totalBellCount}
           </span>
         )}
       </button>
@@ -72,23 +83,62 @@ export function DataQualityCenter() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Bell className="w-4 h-4 text-blue-400" />
-              Data Quality Center
-              {count > 0 && (
-                <Badge variant="secondary" className="ml-1">{count} issue{count !== 1 ? 's' : ''}</Badge>
+              Notification Center
+              {totalBellCount > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {totalBellCount} issue{totalBellCount !== 1 ? 's' : ''}
+                </Badge>
               )}
             </DialogTitle>
           </DialogHeader>
 
-          {count === 0 ? (
+          {totalBellCount === 0 && !episodeAvail.loading ? (
             <div className="py-10 text-center">
               <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 flex items-center justify-center mx-auto mb-3">
                 <Check className="w-7 h-7 text-emerald-400" />
               </div>
               <p className="text-white font-medium">All clear</p>
-              <p className="text-sm text-white/40 mt-1">No data quality issues found.</p>
+              <p className="text-sm text-white/40 mt-1">No issues found.</p>
             </div>
           ) : (
             <div className="space-y-3 mt-1">
+
+              {/* ── Episode Availability (async) ─────────────────────────── */}
+              {episodeAvail.loading && (
+                <div className="flex items-center gap-2 px-3 py-2 text-xs text-white/40">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Checking episode availability…
+                </div>
+              )}
+
+              {/* New Episodes Available */}
+              <Section
+                icon={<Bell className="w-4 h-4 text-sky-400" />}
+                title="New Episodes Available"
+                count={episodeAvail.newEpisodes.length}
+              >
+                {episodeAvail.newEpisodes.map(({ entry, delta }: NewEpisodeInfo) => (
+                  <Row key={entry.id} entry={entry} onView={() => goToEntry(entry)}>
+                    <span className="text-[10px] text-sky-400 font-semibold">+{delta} new</span>
+                  </Row>
+                ))}
+              </Section>
+
+              {/* Ready to Binge */}
+              <Section
+                icon={<PackageOpen className="w-4 h-4 text-violet-400" />}
+                title="Ready to Binge"
+                count={episodeAvail.readyToBinge.length}
+              >
+                {episodeAvail.readyToBinge.map((e) => (
+                  <Row key={e.id} entry={e} onView={() => goToEntry(e)}>
+                    <span className="text-[10px] text-white/40">All episodes available</span>
+                  </Row>
+                ))}
+              </Section>
+
+              {/* ── Data Quality (synchronous) ───────────────────────────── */}
+
               {/* Classification Issues */}
               <Section
                 icon={<AlertTriangle className="w-4 h-4 text-amber-400" />}
@@ -132,6 +182,45 @@ export function DataQualityCenter() {
                 ))}
               </Section>
 
+              {/* Missing Rating */}
+              <Section
+                icon={<Star className="w-4 h-4 text-yellow-400" />}
+                title="Missing Rating"
+                count={result.missingRating.length}
+              >
+                {result.missingRating.map((e) => (
+                  <Row key={e.id} entry={e} onView={() => goToEntry(e)}>
+                    <span className="text-[10px] text-white/40">Completed · no rating</span>
+                  </Row>
+                ))}
+              </Section>
+
+              {/* Missing Date Finished */}
+              <Section
+                icon={<Calendar className="w-4 h-4 text-orange-400" />}
+                title="Missing Finish Date"
+                count={result.missingDateFinished.length}
+              >
+                {result.missingDateFinished.map((e) => (
+                  <Row key={e.id} entry={e} onView={() => goToEntry(e)}>
+                    <span className="text-[10px] text-white/40">Completed · no finish date</span>
+                  </Row>
+                ))}
+              </Section>
+
+              {/* Missing Episode Progress */}
+              <Section
+                icon={<Tv className="w-4 h-4 text-teal-400" />}
+                title="Missing Episode Progress"
+                count={result.missingEpisodeProgress.length}
+              >
+                {result.missingEpisodeProgress.map((e) => (
+                  <Row key={e.id} entry={e} onView={() => goToEntry(e)}>
+                    <span className="text-[10px] text-white/40">Watching · no episode recorded</span>
+                  </Row>
+                ))}
+              </Section>
+
               {/* Missing Runtime */}
               <Section
                 icon={<Clock className="w-4 h-4 text-blue-400" />}
@@ -154,6 +243,17 @@ export function DataQualityCenter() {
                 ))}
               </Section>
 
+              {/* Missing Genres */}
+              <Section
+                icon={<Tags className="w-4 h-4 text-lime-400" />}
+                title="Missing Genres"
+                count={result.missingGenres.length}
+              >
+                {result.missingGenres.map((e) => (
+                  <Row key={e.id} entry={e} onView={() => goToEntry(e)} />
+                ))}
+              </Section>
+
               {/* Missing Poster */}
               <Section
                 icon={<ImageIcon className="w-4 h-4 text-pink-400" />}
@@ -165,16 +265,6 @@ export function DataQualityCenter() {
                 ))}
               </Section>
 
-              {/* Missing Personal Rating — completed titles only */}
-              <Section
-                icon={<Star className="w-4 h-4 text-yellow-400" />}
-                title="Missing Personal Rating"
-                count={result.missingRating.length}
-              >
-                {result.missingRating.map((e) => (
-                  <Row key={e.id} entry={e} onView={() => goToEntry(e)} />
-                ))}
-              </Section>
             </div>
           )}
         </DialogContent>
@@ -219,7 +309,7 @@ function Row({
     <div className="flex items-center gap-2 px-3 py-2">
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-white truncate">{getDisplayTitle(entry)}</p>
-        <div className="flex items-center gap-2 mt-0.5">{children}</div>
+        {children && <div className="flex items-center gap-2 mt-0.5">{children}</div>}
       </div>
       <button
         type="button"

@@ -31,6 +31,7 @@ export interface TMDBSeries {
   episode_run_time?: number[]
   origin_country?: string[]
   status?: string
+  next_episode_to_air?: { air_date: string } | null
 }
 
 export interface TMDBGenre {

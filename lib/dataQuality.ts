@@ -16,6 +16,9 @@ export interface DataQualityResult {
   missingCountry: MediaEntry[]
   missingPoster: MediaEntry[]
   missingRating: MediaEntry[]
+  missingDateFinished: MediaEntry[]
+  missingGenres: MediaEntry[]
+  missingEpisodeProgress: MediaEntry[]
   /** Total unresolved issue count shown on the bell badge. */
   totalCount: number
 }
@@ -49,9 +52,24 @@ export function hasMissingPoster(entry: MediaEntry): boolean {
   return !hasTmdb && !hasManual
 }
 
-/** Only completed titles with no personal rating. */
+/** Completed titles with no personal rating or a rating of 0 (likely unfilled). */
 export function hasMissingRating(entry: MediaEntry): boolean {
-  return entry.status === 'completed' && entry.personalRating == null
+  return entry.status === 'completed' && (entry.personalRating == null || entry.personalRating === 0)
+}
+
+/** Completed titles missing a finish date. */
+export function hasMissingDateFinished(entry: MediaEntry): boolean {
+  return entry.status === 'completed' && entry.dateFinished == null
+}
+
+/** Titles with no genres recorded. */
+export function hasMissingGenres(entry: MediaEntry): boolean {
+  return !entry.genres || entry.genres.length === 0
+}
+
+/** In-progress (watching) series with no episode progress recorded. */
+export function hasMissingEpisodeProgress(entry: MediaEntry): boolean {
+  return entry.status === 'watching' && entry.type === 'series' && entry.nextEpisodeToWatch == null
 }
 
 // ── Engine ─────────────────────────────────────────────────────────────────
@@ -65,6 +83,9 @@ export function computeDataQuality(
   const missingCountry = entries.filter(hasMissingCountry)
   const missingPoster = entries.filter(hasMissingPoster)
   const missingRating = entries.filter(hasMissingRating)
+  const missingDateFinished = entries.filter(hasMissingDateFinished)
+  const missingGenres = entries.filter(hasMissingGenres)
+  const missingEpisodeProgress = entries.filter(hasMissingEpisodeProgress)
 
   // ── Duplicate detection ──
   const duplicates: DuplicateGroup[] = []
@@ -123,7 +144,10 @@ export function computeDataQuality(
     missingRuntime.length +
     missingCountry.length +
     missingPoster.length +
-    missingRating.length
+    missingRating.length +
+    missingDateFinished.length +
+    missingGenres.length +
+    missingEpisodeProgress.length
 
   return {
     classification,
@@ -132,6 +156,9 @@ export function computeDataQuality(
     missingCountry,
     missingPoster,
     missingRating,
+    missingDateFinished,
+    missingGenres,
+    missingEpisodeProgress,
     totalCount,
   }
 }

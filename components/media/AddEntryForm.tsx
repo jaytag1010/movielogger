@@ -427,13 +427,21 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
                   },
                 })}
               />
-              {seasonLoading && (
-                <span className="text-xs text-blue-400 flex items-center gap-1">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Loading season data…
-                </span>
+              {tmdbData?.tmdbId ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs px-2.5"
+                  onClick={() => handleSeasonChange(watchSeasonNumber ?? null)}
+                  disabled={seasonLoading || !watchSeasonNumber}
+                  title="Fetch episode count and duration from TMDB for this season"
+                >
+                  {seasonLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirm'}
+                </Button>
+              ) : (
+                <span className="text-xs text-white/30">Leave blank for full series</span>
               )}
-              <span className="text-xs text-white/30">Leave blank for full series</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

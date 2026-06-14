@@ -161,6 +161,13 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
                 <span>{entry.totalEpisodes} eps</span>
               )}
             </div>
+
+            {/* Notes preview — shown only when a note exists */}
+            {entry.specialNotes && entry.specialNotes.trim() && (
+              <p className="text-[11px] text-white/30 mt-1 line-clamp-1 italic leading-tight">
+                {entry.specialNotes}
+              </p>
+            )}
           </div>
         </div>
 
