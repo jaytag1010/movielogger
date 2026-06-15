@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   Bell, AlertTriangle, Copy, Clock, Globe, Image as ImageIcon, Star,
-  ChevronRight, Check, EyeOff, Calendar, Tags, Tv, Loader2,
+  ChevronRight, Check, EyeOff, Tv, Loader2,
   PackageOpen, Link as LinkIcon,
 } from 'lucide-react'
 import {
@@ -38,7 +38,15 @@ export function DataQualityCenter() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  const dqCount = result.totalCount
+  const dqCount =
+    result.classification.length +
+    result.duplicates.length +
+    result.missingRating.length +
+    result.missingRuntime.length +
+    result.missingCountry.length +
+    result.missingTmdbLink.length +
+    result.missingEpisodeProgress.length +
+    result.missingPoster.length
   const episodeCount = episodeAvail.newEpisodes.length + episodeAvail.readyToBinge.length
   const totalBellCount = dqCount + episodeCount
 
@@ -55,6 +63,17 @@ export function DataQualityCenter() {
     params.set('ids', ids.join(','))
     params.set('label', label)
     router.push(`/my-list?${params.toString()}`)
+  }
+
+  function openProgressList(items: MediaEntry[], label: string, filter: 'watching' | 'planned') {
+    const ids = Array.from(new Set(items.map((e) => e.id).filter(Boolean))) as string[]
+    if (ids.length === 0) return
+    setOpen(false)
+    const params = new URLSearchParams()
+    params.set('filter', filter)
+    params.set('ids', ids.join(','))
+    params.set('label', label)
+    router.push(`/progress?${params.toString()}`)
   }
 
   async function fixClassification(entry: MediaEntry) {
@@ -89,7 +108,7 @@ export function DataQualityCenter() {
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-2xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Bell className="w-4 h-4 text-blue-400" />
@@ -126,13 +145,18 @@ export function DataQualityCenter() {
                 icon={<Bell className="w-4 h-4 text-sky-400" />}
                 title="Episodes Waiting For You"
                 count={episodeAvail.newEpisodes.length}
-                onOpenList={() => openFilteredList(
+                onOpenList={() => openProgressList(
                   episodeAvail.newEpisodes.map((n) => n.entry),
-                  'Episodes Waiting For You'
+                  'Episodes Waiting For You',
+                  'watching'
                 )}
               >
                 {episodeAvail.newEpisodes.map(({ entry, delta }: NewEpisodeInfo) => (
-                  <Row key={entry.id} entry={entry} onView={() => goToEntry(entry)}>
+                  <Row
+                    key={entry.id}
+                    entry={entry}
+                    onView={() => openProgressList([entry], 'Episodes Waiting For You', 'watching')}
+                  >
                     <span className="text-[10px] text-sky-400 font-semibold">{delta} waiting</span>
                   </Row>
                 ))}
@@ -143,10 +167,14 @@ export function DataQualityCenter() {
                 icon={<PackageOpen className="w-4 h-4 text-violet-400" />}
                 title="Ready to Binge"
                 count={episodeAvail.readyToBinge.length}
-                onOpenList={() => openFilteredList(episodeAvail.readyToBinge, 'Ready to Binge')}
+                onOpenList={() => openProgressList(episodeAvail.readyToBinge, 'Ready to Binge', 'planned')}
               >
                 {episodeAvail.readyToBinge.map((e) => (
-                  <Row key={e.id} entry={e} onView={() => goToEntry(e)}>
+                  <Row
+                    key={e.id}
+                    entry={e}
+                    onView={() => openProgressList([e], 'Ready to Binge', 'planned')}
+                  >
                     <span className="text-[10px] text-white/40">All episodes available</span>
                   </Row>
                 ))}
@@ -216,20 +244,6 @@ export function DataQualityCenter() {
                 ))}
               </Section>
 
-              {/* Missing Date Finished */}
-              <Section
-                icon={<Calendar className="w-4 h-4 text-orange-400" />}
-                title="Missing Finish Date"
-                count={result.missingDateFinished.length}
-                onOpenList={() => openFilteredList(result.missingDateFinished, 'Missing Finish Date')}
-              >
-                {result.missingDateFinished.map((e) => (
-                  <Row key={e.id} entry={e} onView={() => goToEntry(e)}>
-                    <span className="text-[10px] text-white/40">Completed · no finish date</span>
-                  </Row>
-                ))}
-              </Section>
-
               {/* Missing Episode Progress */}
               <Section
                 icon={<Tv className="w-4 h-4 text-teal-400" />}
@@ -264,18 +278,6 @@ export function DataQualityCenter() {
                 onOpenList={() => openFilteredList(result.missingCountry, 'Missing Country')}
               >
                 {result.missingCountry.map((e) => (
-                  <Row key={e.id} entry={e} onView={() => goToEntry(e)} />
-                ))}
-              </Section>
-
-              {/* Missing Genres */}
-              <Section
-                icon={<Tags className="w-4 h-4 text-lime-400" />}
-                title="Missing Genres"
-                count={result.missingGenres.length}
-                onOpenList={() => openFilteredList(result.missingGenres, 'Missing Genres')}
-              >
-                {result.missingGenres.map((e) => (
                   <Row key={e.id} entry={e} onView={() => goToEntry(e)} />
                 ))}
               </Section>
@@ -351,10 +353,10 @@ function Row({
   children?: React.ReactNode
 }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2">
+    <div className="flex items-center gap-2 px-3 py-2 min-w-0">
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-white truncate">{getDisplayTitle(entry)}</p>
-        {children && <div className="flex items-center gap-2 mt-0.5">{children}</div>}
+        {children && <div className="flex items-center gap-2 mt-0.5 min-w-0 flex-wrap">{children}</div>}
       </div>
       <button
         type="button"

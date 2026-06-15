@@ -2,7 +2,8 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { RefreshCw, TrendingUp, X } from 'lucide-react'
@@ -41,9 +42,26 @@ const PROGRESS_STATUSES: MediaStatus[] = ['watching', 'planned', 'on_hold', 'dro
 
 export default function ProgressPage() {
   const { entries, editEntry, refreshEntry } = useMedia()
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
   // ── Filter state ──────────────────────────────────────────────────────────
   const [filter, setFilter] = useState<ProgressFilter>('watching')
+  const filteredIdsParam = searchParams.get('ids')
+  const filteredLabel = searchParams.get('label')
+
+  useEffect(() => {
+    const requestedFilter = searchParams.get('filter')
+    if (
+      requestedFilter === 'all' ||
+      requestedFilter === 'watching' ||
+      requestedFilter === 'planned' ||
+      requestedFilter === 'on_hold' ||
+      requestedFilter === 'dropped'
+    ) {
+      setFilter(requestedFilter)
+    }
+  }, [searchParams])
 
   // ── Finish flow (two-step) ────────────────────────────────────────────────
   // Step 1: FinishConfirmDialog — user confirms they want to mark as finished
@@ -84,10 +102,22 @@ export default function ProgressPage() {
     [entries]
   )
 
+  const filteredIdSet = useMemo(() => {
+    if (!filteredIdsParam) return null
+    const ids = filteredIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
+    return ids.length > 0 ? new Set(ids) : null
+  }, [filteredIdsParam])
+
+  const notificationEntries = useMemo(() => {
+    if (!filteredIdSet) return null
+    return progressEntries.filter((e) => e.id && filteredIdSet.has(e.id))
+  }, [filteredIdSet, progressEntries])
+
   const filteredEntries = useMemo(() => {
+    if (notificationEntries) return notificationEntries
     if (filter === 'all') return progressEntries
     return progressEntries.filter((e) => e.status === filter)
-  }, [progressEntries, filter])
+  }, [notificationEntries, progressEntries, filter])
 
   const counts: Record<ProgressFilter, number> = useMemo(() => ({
     all: progressEntries.length,
@@ -482,6 +512,27 @@ export default function ProgressPage() {
             {refreshing ? 'Refreshing…' : 'Refresh All'}
           </Button>
         </div>
+
+        {notificationEntries && (
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-blue-300 truncate">
+                {filteredLabel || 'Filtered Progress List'}
+              </p>
+              <p className="text-[11px] text-white/40">
+                Showing {notificationEntries.length} affected title{notificationEntries.length === 1 ? '' : 's'}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs flex-shrink-0"
+              onClick={() => router.replace('/progress')}
+            >
+              Clear
+            </Button>
+          </div>
+        )}
 
         {/* ── Entry list ── */}
         <GlassCard padding="sm">
