@@ -2,8 +2,8 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, useRef } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { AppLayout } from '@/components/layout/AppLayout'
@@ -29,6 +29,7 @@ export default function MyListPage() {
   const { entries, filteredEntries, loading, removeEntry } = useMedia()
   const { activeTab, setActiveTab } = useMediaStore()
   const searchParams = useSearchParams()
+  const router = useRouter()
 
   // Apply navigation intent from URL params (e.g. dashboard stat cards / See All).
   // ?tab=all|movie|series  ·  ?sort=title_asc|rating_desc|year_desc|createdAt_desc
@@ -56,6 +57,10 @@ export default function MyListPage() {
     const genre = searchParams.get('genre')
     if (genre) {
       useMediaStore.getState().setFilters({ genre, status: 'all' })
+    }
+    if (searchParams.get('ids')) {
+      setActiveTab('all')
+      setPage(1)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
@@ -102,12 +107,24 @@ export default function MyListPage() {
 
   const movieCount = entries.filter((e) => getEffectiveMediaType(e) === 'movie').length
   const seriesCount = entries.filter((e) => getEffectiveMediaType(e) === 'series').length
+  const filteredIdsParam = searchParams.get('ids')
+  const filteredLabel = searchParams.get('label')
+  const filteredIdSet = useMemo(() => {
+    if (!filteredIdsParam) return null
+    const ids = filteredIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
+    return ids.length > 0 ? new Set(ids) : null
+  }, [filteredIdsParam])
+  const issueFilteredEntries = useMemo(() => {
+    if (!filteredIdSet) return null
+    return entries.filter((e) => e.id && filteredIdSet.has(e.id))
+  }, [entries, filteredIdSet])
 
   // For "All" tab, show all filteredEntries; otherwise filter by effective type
+  const baseEntries = issueFilteredEntries ?? filteredEntries
   const tabEntries =
     activeTab === 'all'
-      ? filteredEntries
-      : filteredEntries.filter((e) => getEffectiveMediaType(e) === activeTab)
+      ? baseEntries
+      : baseEntries.filter((e) => getEffectiveMediaType(e) === activeTab)
 
   const paginatedEntries = tabEntries.slice(0, page * ITEMS_PER_PAGE)
   const hasMore = tabEntries.length > page * ITEMS_PER_PAGE
@@ -159,6 +176,29 @@ export default function MyListPage() {
 
         {/* Filters — shared across all tabs */}
         <div className="mb-4">
+          {issueFilteredEntries && (
+            <div className="mb-3 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-blue-300 truncate">
+                  {filteredLabel || 'Filtered Notification List'}
+                </p>
+                <p className="text-[11px] text-white/40">
+                  Showing {issueFilteredEntries.length} affected title{issueFilteredEntries.length === 1 ? '' : 's'}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs flex-shrink-0"
+                onClick={() => {
+                  setPage(1)
+                  router.replace('/my-list')
+                }}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
           <FilterBar
             entries={entries}
             viewMode={viewMode}
@@ -188,7 +228,7 @@ export default function MyListPage() {
                 entries={paginatedEntries}
                 emptyLabel="titles"
                 totalCount={tabEntries.length}
-                allCount={filteredEntries.length}
+                allCount={baseEntries.length}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />
@@ -198,7 +238,7 @@ export default function MyListPage() {
                 entries={paginatedEntries.filter((e) => getEffectiveMediaType(e) === 'movie')}
                 emptyLabel="movies"
                 totalCount={tabEntries.filter((e) => getEffectiveMediaType(e) === 'movie').length}
-                allCount={filteredEntries.filter((e) => getEffectiveMediaType(e) === 'movie').length}
+                allCount={baseEntries.filter((e) => getEffectiveMediaType(e) === 'movie').length}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />
@@ -208,7 +248,7 @@ export default function MyListPage() {
                 entries={paginatedEntries.filter((e) => getEffectiveMediaType(e) === 'series')}
                 emptyLabel="series"
                 totalCount={tabEntries.filter((e) => getEffectiveMediaType(e) === 'series').length}
-                allCount={filteredEntries.filter((e) => getEffectiveMediaType(e) === 'series').length}
+                allCount={baseEntries.filter((e) => getEffectiveMediaType(e) === 'series').length}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />

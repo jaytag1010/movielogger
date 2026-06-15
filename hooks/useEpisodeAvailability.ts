@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { MediaEntry } from '@/types/media'
 import { fetchTVAvailabilityInfo } from '@/lib/tmdb/api'
+import { getEpisodesWatched } from '@/utils/formatters'
 
 export interface NewEpisodeInfo {
   entry: MediaEntry
@@ -78,17 +79,19 @@ export function useEpisodeAvailability(entries: MediaEntry[]): EpisodeAvailabili
         }
       }
 
-      // New episodes: TMDB has more episodes than the entry's stored totalEpisodes
+      // Episodes waiting: TMDB has more available episodes than the user's
+      // current watched progress. This is intentionally not limited to newly
+      // released episodes; 7/8, 749/750, and 1100/1125 should all notify.
       const newEps: NewEpisodeInfo[] = []
       for (const entry of watchingCandidates) {
         const info = cacheRef.current.get(entry.tmdbId!)
         if (!info) continue
-        const storedEps = entry.totalEpisodes ?? 0
-        if (info.totalEpisodes > storedEps) {
+        const watchedEpisodes = getEpisodesWatched(entry)
+        if (info.totalEpisodes > watchedEpisodes) {
           newEps.push({
             entry,
             tmdbEpisodeCount: info.totalEpisodes,
-            delta: info.totalEpisodes - storedEps,
+            delta: info.totalEpisodes - watchedEpisodes,
           })
         }
       }

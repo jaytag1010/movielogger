@@ -1,5 +1,4 @@
 import { MediaEntry } from '@/types/media'
-import { calculateEntryWatchHours } from '@/utils/watchTime'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -19,6 +18,7 @@ export interface DataQualityResult {
   missingDateFinished: MediaEntry[]
   missingGenres: MediaEntry[]
   missingEpisodeProgress: MediaEntry[]
+  missingTmdbLink: MediaEntry[]
   /** Total unresolved issue count shown on the bell badge. */
   totalCount: number
 }
@@ -37,13 +37,17 @@ export function hasClassificationConflict(entry: MediaEntry): boolean {
   return false
 }
 
-/** True when runtime is unavailable AND watch hours cannot be derived. */
+/** True when runtime/episode duration is unavailable. */
 export function hasMissingRuntime(entry: MediaEntry): boolean {
-  return entry.episodeDurationMinutes == null && calculateEntryWatchHours(entry) === 0
+  return entry.episodeDurationMinutes == null
 }
 
 export function hasMissingCountry(entry: MediaEntry): boolean {
   return !entry.country || entry.country.trim() === ''
+}
+
+export function hasMissingTmdbLink(entry: MediaEntry): boolean {
+  return entry.tmdbId == null
 }
 
 export function hasMissingPoster(entry: MediaEntry): boolean {
@@ -86,6 +90,7 @@ export function computeDataQuality(
   const missingDateFinished = entries.filter(hasMissingDateFinished)
   const missingGenres = entries.filter(hasMissingGenres)
   const missingEpisodeProgress = entries.filter(hasMissingEpisodeProgress)
+  const missingTmdbLink = entries.filter(hasMissingTmdbLink)
 
   // ── Duplicate detection ──
   const duplicates: DuplicateGroup[] = []
@@ -147,7 +152,8 @@ export function computeDataQuality(
     missingRating.length +
     missingDateFinished.length +
     missingGenres.length +
-    missingEpisodeProgress.length
+    missingEpisodeProgress.length +
+    missingTmdbLink.length
 
   return {
     classification,
@@ -159,6 +165,7 @@ export function computeDataQuality(
     missingDateFinished,
     missingGenres,
     missingEpisodeProgress,
+    missingTmdbLink,
     totalCount,
   }
 }

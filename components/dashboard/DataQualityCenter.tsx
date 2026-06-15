@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import {
   Bell, AlertTriangle, Copy, Clock, Globe, Image as ImageIcon, Star,
   ChevronRight, Check, EyeOff, Calendar, Tags, Tv, Loader2,
-  PackageOpen,
+  PackageOpen, Link as LinkIcon,
 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -45,6 +45,16 @@ export function DataQualityCenter() {
   function goToEntry(entry: MediaEntry) {
     setOpen(false)
     router.push(`/my-list?entry=${entry.id}`)
+  }
+
+  function openFilteredList(items: MediaEntry[], label: string) {
+    const ids = Array.from(new Set(items.map((e) => e.id).filter(Boolean))) as string[]
+    if (ids.length === 0) return
+    setOpen(false)
+    const params = new URLSearchParams()
+    params.set('ids', ids.join(','))
+    params.set('label', label)
+    router.push(`/my-list?${params.toString()}`)
   }
 
   async function fixClassification(entry: MediaEntry) {
@@ -111,15 +121,19 @@ export function DataQualityCenter() {
                 </div>
               )}
 
-              {/* New Episodes Available */}
+              {/* Episodes Waiting For You */}
               <Section
                 icon={<Bell className="w-4 h-4 text-sky-400" />}
-                title="New Episodes Available"
+                title="Episodes Waiting For You"
                 count={episodeAvail.newEpisodes.length}
+                onOpenList={() => openFilteredList(
+                  episodeAvail.newEpisodes.map((n) => n.entry),
+                  'Episodes Waiting For You'
+                )}
               >
                 {episodeAvail.newEpisodes.map(({ entry, delta }: NewEpisodeInfo) => (
                   <Row key={entry.id} entry={entry} onView={() => goToEntry(entry)}>
-                    <span className="text-[10px] text-sky-400 font-semibold">+{delta} new</span>
+                    <span className="text-[10px] text-sky-400 font-semibold">{delta} waiting</span>
                   </Row>
                 ))}
               </Section>
@@ -129,6 +143,7 @@ export function DataQualityCenter() {
                 icon={<PackageOpen className="w-4 h-4 text-violet-400" />}
                 title="Ready to Binge"
                 count={episodeAvail.readyToBinge.length}
+                onOpenList={() => openFilteredList(episodeAvail.readyToBinge, 'Ready to Binge')}
               >
                 {episodeAvail.readyToBinge.map((e) => (
                   <Row key={e.id} entry={e} onView={() => goToEntry(e)}>
@@ -144,6 +159,7 @@ export function DataQualityCenter() {
                 icon={<AlertTriangle className="w-4 h-4 text-amber-400" />}
                 title="Classification Issues"
                 count={result.classification.length}
+                onOpenList={() => openFilteredList(result.classification, 'Classification Issues')}
               >
                 {result.classification.map((e) => {
                   const implied = e.totalEpisodes != null && e.totalEpisodes > 1 ? 'series' : 'movie'
@@ -171,6 +187,10 @@ export function DataQualityCenter() {
                 icon={<Copy className="w-4 h-4 text-purple-400" />}
                 title="Potential Duplicates"
                 count={result.duplicates.length}
+                onOpenList={() => openFilteredList(
+                  result.duplicates.flatMap((group) => group.entries),
+                  'Potential Duplicates'
+                )}
               >
                 {result.duplicates.map((group) => (
                   <DuplicateRow
@@ -187,6 +207,7 @@ export function DataQualityCenter() {
                 icon={<Star className="w-4 h-4 text-yellow-400" />}
                 title="Missing Rating"
                 count={result.missingRating.length}
+                onOpenList={() => openFilteredList(result.missingRating, 'Missing Rating')}
               >
                 {result.missingRating.map((e) => (
                   <Row key={e.id} entry={e} onView={() => goToEntry(e)}>
@@ -200,6 +221,7 @@ export function DataQualityCenter() {
                 icon={<Calendar className="w-4 h-4 text-orange-400" />}
                 title="Missing Finish Date"
                 count={result.missingDateFinished.length}
+                onOpenList={() => openFilteredList(result.missingDateFinished, 'Missing Finish Date')}
               >
                 {result.missingDateFinished.map((e) => (
                   <Row key={e.id} entry={e} onView={() => goToEntry(e)}>
@@ -213,6 +235,7 @@ export function DataQualityCenter() {
                 icon={<Tv className="w-4 h-4 text-teal-400" />}
                 title="Missing Episode Progress"
                 count={result.missingEpisodeProgress.length}
+                onOpenList={() => openFilteredList(result.missingEpisodeProgress, 'Missing Episode Progress')}
               >
                 {result.missingEpisodeProgress.map((e) => (
                   <Row key={e.id} entry={e} onView={() => goToEntry(e)}>
@@ -226,6 +249,7 @@ export function DataQualityCenter() {
                 icon={<Clock className="w-4 h-4 text-blue-400" />}
                 title="Missing Runtime"
                 count={result.missingRuntime.length}
+                onOpenList={() => openFilteredList(result.missingRuntime, 'Missing Runtime')}
               >
                 {result.missingRuntime.map((e) => (
                   <Row key={e.id} entry={e} onView={() => goToEntry(e)} />
@@ -237,6 +261,7 @@ export function DataQualityCenter() {
                 icon={<Globe className="w-4 h-4 text-cyan-400" />}
                 title="Missing Country"
                 count={result.missingCountry.length}
+                onOpenList={() => openFilteredList(result.missingCountry, 'Missing Country')}
               >
                 {result.missingCountry.map((e) => (
                   <Row key={e.id} entry={e} onView={() => goToEntry(e)} />
@@ -248,8 +273,21 @@ export function DataQualityCenter() {
                 icon={<Tags className="w-4 h-4 text-lime-400" />}
                 title="Missing Genres"
                 count={result.missingGenres.length}
+                onOpenList={() => openFilteredList(result.missingGenres, 'Missing Genres')}
               >
                 {result.missingGenres.map((e) => (
+                  <Row key={e.id} entry={e} onView={() => goToEntry(e)} />
+                ))}
+              </Section>
+
+              {/* Missing TMDB Link */}
+              <Section
+                icon={<LinkIcon className="w-4 h-4 text-indigo-400" />}
+                title="Missing TMDB Link"
+                count={result.missingTmdbLink.length}
+                onOpenList={() => openFilteredList(result.missingTmdbLink, 'Missing TMDB Link')}
+              >
+                {result.missingTmdbLink.map((e) => (
                   <Row key={e.id} entry={e} onView={() => goToEntry(e)} />
                 ))}
               </Section>
@@ -259,6 +297,7 @@ export function DataQualityCenter() {
                 icon={<ImageIcon className="w-4 h-4 text-pink-400" />}
                 title="Missing Poster"
                 count={result.missingPoster.length}
+                onOpenList={() => openFilteredList(result.missingPoster, 'Missing Poster')}
               >
                 {result.missingPoster.map((e) => (
                   <Row key={e.id} entry={e} onView={() => goToEntry(e)} />
@@ -276,21 +315,27 @@ export function DataQualityCenter() {
 // ── Sub-components ───────────────────────────────────────────────────────────
 
 function Section({
-  icon, title, count, children,
+  icon, title, count, children, onOpenList,
 }: {
   icon: React.ReactNode
   title: string
   count: number
   children: React.ReactNode
+  onOpenList?: () => void
 }) {
   if (count === 0) return null
   return (
     <div className="rounded-xl border border-white/10 overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 bg-white/5">
+      <button
+        type="button"
+        onClick={onOpenList}
+        className="w-full flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 text-left transition-colors"
+      >
         {icon}
         <span className="text-sm font-medium text-white flex-1">{title}</span>
         <Badge variant="secondary" className="text-[10px]">{count}</Badge>
-      </div>
+        <ChevronRight className="w-3.5 h-3.5 text-white/35" />
+      </button>
       <div className="divide-y divide-white/5 max-h-56 overflow-y-auto">
         {children}
       </div>
