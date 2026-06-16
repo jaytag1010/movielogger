@@ -57,6 +57,11 @@ export interface MediaEntry {
    * Optional for backward compatibility with existing Firestore documents.
    */
   priority?: number | null
+  /**
+   * Timestamp of the most recent priority change. Used as a tie-breaker when
+   * sorting titles with the same priority.
+   */
+  priorityUpdatedAt?: Timestamp | null
   ageRating: string | null
   genres: string[]
   country: string | null

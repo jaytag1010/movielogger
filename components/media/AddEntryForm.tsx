@@ -7,7 +7,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Loader2, X, Plus, Film, Tv, Star } from 'lucide-react'
+import { Loader2, X, Plus, Film, Tv, Star, ChevronUp, ChevronDown } from 'lucide-react'
 import { Timestamp } from 'firebase/firestore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -103,6 +103,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
   const watchRating = watch('personalRating')
   const watchSeasonNumber = watch('seasonNumber')
   const watchStatus = watch('status')
+  const watchRewatchCount = watch('rewatchCount')
 
   // Auto-prefill TMDB data when arriving via "Add to Library" from GlobalSearch.
   useEffect(() => {
@@ -183,6 +184,11 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
     setGenres(genres.filter((g) => g !== genre))
   }
 
+  function adjustRewatchCount(delta: number) {
+    const current = Number(watchRewatchCount ?? 0)
+    setValue('rewatchCount', Math.max(0, current + delta), { shouldDirty: true })
+  }
+
   async function onSubmit(data: FormData) {
     try {
       // Episodes Watched: hidden (null) for completed; otherwise the entered count (default 0).
@@ -194,6 +200,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
       const priority = data.status === 'planned' || data.status === 'on_hold'
         ? (data.priority ?? 3)
         : null
+      const priorityUpdatedAt = priority != null ? Timestamp.now() : null
 
       await addEntry({
         title: data.title,
@@ -212,6 +219,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         rewatchCount: data.status === 'completed' ? (data.rewatchCount ?? 0) : 0,
         personalRating: data.personalRating ?? null,
         priority,
+        priorityUpdatedAt,
         ageRating: data.ageRating ?? null,
         genres,
         country: data.country ?? null,
@@ -446,37 +454,61 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
       {/* Series-specific fields */}
       {watchType === 'series' && (
         <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>Season Number</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={1}
-                placeholder="1"
-                className="w-24"
-                {...register('seasonNumber', {
-                  onChange: (e) => {
-                    const n = parseInt(e.target.value, 10)
-                    if (!isNaN(n) && n >= 1) handleSeasonChange(n)
-                  },
-                })}
-              />
-              {tmdbData?.tmdbId ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs px-2.5"
-                  onClick={() => handleSeasonChange(watchSeasonNumber ?? null)}
-                  disabled={seasonLoading || !watchSeasonNumber}
-                  title="Fetch episode count and duration from TMDB for this season"
-                >
-                  {seasonLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirm'}
-                </Button>
-              ) : (
-                <span className="text-xs text-white/30">Leave blank for full series</span>
-              )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Season Number</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="1"
+                  className="w-24"
+                  {...register('seasonNumber', {
+                    onChange: (e) => {
+                      const n = parseInt(e.target.value, 10)
+                      if (!isNaN(n) && n >= 1) handleSeasonChange(n)
+                    },
+                  })}
+                />
+                {tmdbData?.tmdbId ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs px-2.5"
+                    onClick={() => handleSeasonChange(watchSeasonNumber ?? null)}
+                    disabled={seasonLoading || !watchSeasonNumber}
+                    title="Fetch episode count and duration from TMDB for this season"
+                  >
+                    {seasonLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirm'}
+                  </Button>
+                ) : (
+                  <span className="text-xs text-white/30">Leave blank for full series</span>
+                )}
+              </div>
             </div>
+            {watchStatus === 'completed' && (
+              <div className="space-y-1.5">
+                <Label>Rewatch Counter</Label>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    className="w-24"
+                    {...register('rewatchCount')}
+                  />
+                  <div className="flex flex-col">
+                    <button type="button" onClick={() => adjustRewatchCount(1)} className="h-4 w-6 rounded-t border border-white/10 text-white/50 hover:text-white hover:bg-white/10">
+                      <ChevronUp className="w-3 h-3 mx-auto" />
+                    </button>
+                    <button type="button" onClick={() => adjustRewatchCount(-1)} className="h-4 w-6 rounded-b border-x border-b border-white/10 text-white/50 hover:text-white hover:bg-white/10">
+                      <ChevronDown className="w-3 h-3 mx-auto" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -508,16 +540,26 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         </div>
       )}
 
-      {watchStatus === 'completed' && (
+      {watchStatus === 'completed' && watchType !== 'series' && (
         <div className="space-y-1.5">
           <Label>Rewatch Counter</Label>
-          <Input
-            type="number"
-            min={0}
-            placeholder="0"
-            className="w-32"
-            {...register('rewatchCount')}
-          />
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="number"
+              min={0}
+              placeholder="0"
+              className="w-32"
+              {...register('rewatchCount')}
+            />
+            <div className="flex flex-col">
+              <button type="button" onClick={() => adjustRewatchCount(1)} className="h-4 w-6 rounded-t border border-white/10 text-white/50 hover:text-white hover:bg-white/10">
+                <ChevronUp className="w-3 h-3 mx-auto" />
+              </button>
+              <button type="button" onClick={() => adjustRewatchCount(-1)} className="h-4 w-6 rounded-b border-x border-b border-white/10 text-white/50 hover:text-white hover:bg-white/10">
+                <ChevronDown className="w-3 h-3 mx-auto" />
+              </button>
+            </div>
+          </div>
           <p className="text-xs text-white/30">
             0 means watched once. Total watch count is 1 plus this value.
           </p>

@@ -100,6 +100,7 @@ export default function ImportPage() {
     const priority = userFields.status === 'planned' || userFields.status === 'on_hold'
       ? Math.min(5, Math.max(1, Math.floor(edits?.priority ?? mapped.priority ?? 3)))
       : null
+    const priorityUpdatedAt = priority != null ? Timestamp.now() : null
 
     const effectiveTmdbMatch = tmdbLink ?? row.tmdbMatch.result
     let resolvedTmdbId: number | null = mapped.tmdbId ?? null
@@ -222,6 +223,7 @@ export default function ImportPage() {
         watchHours,
         rewatchCount,
         priority,
+        priorityUpdatedAt,
         nextEpisodeToWatch,
       },
       tmdbTitle,

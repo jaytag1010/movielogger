@@ -32,7 +32,7 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
   const effectiveType = getEffectiveMediaType(entry)
   const Icon = effectiveType === 'movie' ? Film : Tv
   const showPriority = entry.status === 'planned' || entry.status === 'on_hold'
-  const priority = entry.priority ?? 3
+  const priority = Math.min(5, Math.max(1, entry.priority ?? 3))
   const rewatchCount = Math.max(0, entry.rewatchCount ?? 0)
 
   return (
@@ -139,7 +139,7 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
               )}
               {showPriority && (
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-purple-300 border-purple-400/20">
-                  Priority: {priority}/5
+                  Priority {'★'.repeat(priority)}{'☆'.repeat(5 - priority)}
                 </Badge>
               )}
             </div>

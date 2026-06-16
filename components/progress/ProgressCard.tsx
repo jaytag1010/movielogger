@@ -59,6 +59,8 @@ export function ProgressCard({
     effectiveType === 'series' ? true : currentProgress < (effectiveTotal ?? 1)
 
   const statusColor = MEDIA_STATUS_COLORS[entry.status]
+  const showPriority = entry.status === 'planned' || entry.status === 'on_hold'
+  const priority = Math.min(5, Math.max(1, entry.priority ?? 3))
 
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 bg-white/[0.03] border border-white/8 rounded-xl hover:bg-white/[0.05] transition-colors">
@@ -96,6 +98,12 @@ export function ProgressCard({
           )}>
             {entry.status === 'on_hold' ? 'On Hold' : entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
           </span>
+
+          {showPriority && (
+            <span className="inline-flex items-center text-[10px] font-semibold text-purple-300 border border-purple-400/20 rounded-full px-2 py-0.5">
+              Priority {'★'.repeat(priority)}{'☆'.repeat(5 - priority)}
+            </span>
+          )}
 
           {/* Progress tracker — all types */}
           <div className="flex items-center gap-1">

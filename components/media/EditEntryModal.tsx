@@ -6,7 +6,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Loader2, X, Plus, Search, Upload, ImageIcon } from 'lucide-react'
+import { Loader2, X, Plus, Search, Upload, ImageIcon, ChevronUp, ChevronDown } from 'lucide-react'
 import { Timestamp } from 'firebase/firestore'
 import {
   Dialog,
@@ -96,6 +96,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
   const watchStatus        = watch('status')
   const watchTotalEpisodes = watch('totalEpisodes')
   const watchEpDuration    = watch('episodeDurationMinutes')
+  const watchRewatchCount  = watch('rewatchCount')
 
   const isSeriesType = watchType === 'series'
   const calculatedSeriesWatchHours: number | null = (() => {
@@ -173,6 +174,11 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
     const trimmed = g.trim()
     if (trimmed && !genres.includes(trimmed)) setGenres([...genres, trimmed])
     setGenreInput('')
+  }
+
+  function adjustRewatchCount(delta: number) {
+    const current = Number(watchRewatchCount ?? 0)
+    setValue('rewatchCount', Math.max(0, current + delta), { shouldDirty: true })
   }
 
   // ── TMDB link — fetch full metadata and overwrite authoritative fields ───
@@ -294,6 +300,13 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
       const priority = data.status === 'planned' || data.status === 'on_hold'
         ? (data.priority ?? 3)
         : null
+      const previousPriority = entry.priority ?? null
+      const priorityChanged = previousPriority !== priority
+      const priorityUpdatedAt = priority == null
+        ? null
+        : priorityChanged || !entry.priorityUpdatedAt
+          ? Timestamp.now()
+          : (entry.priorityUpdatedAt ?? null)
 
       // Resolve metadata link fields.
       //   • metadataChanges set        → honour explicit user action (rematch or removal)
@@ -332,6 +345,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
         rewatchCount:           data.status === 'completed' ? (data.rewatchCount ?? 0) : 0,
         personalRating:         data.personalRating         ?? null,
         priority,
+        priorityUpdatedAt,
         ageRating:              data.ageRating              || null,
         genres,
         country:                data.country                || null,
@@ -513,6 +527,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
           {/* ── Series-only fields ── */}
           {watchType === 'series' && (
             <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Season Number</Label>
                 <div className="flex items-center gap-2">
@@ -546,6 +561,29 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                     Press Confirm to auto-fill Episodes &amp; Duration from TMDB
                   </p>
                 )}
+              </div>
+              {watchStatus === 'completed' && (
+                <div className="space-y-1.5">
+                  <Label>Rewatch Counter</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      className="w-24"
+                      {...register('rewatchCount')}
+                    />
+                    <div className="flex flex-col">
+                      <button type="button" onClick={() => adjustRewatchCount(1)} className="h-4 w-6 rounded-t border border-white/10 text-white/50 hover:text-white hover:bg-white/10">
+                        <ChevronUp className="w-3 h-3 mx-auto" />
+                      </button>
+                      <button type="button" onClick={() => adjustRewatchCount(-1)} className="h-4 w-6 rounded-b border-x border-b border-white/10 text-white/50 hover:text-white hover:bg-white/10">
+                        <ChevronDown className="w-3 h-3 mx-auto" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -583,16 +621,26 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
             </div>
           )}
 
-          {watchStatus === 'completed' && (
+          {watchStatus === 'completed' && watchType !== 'series' && (
             <div className="space-y-1.5">
               <Label>Rewatch Counter</Label>
-              <Input
-                type="number"
-                min={0}
-                placeholder="0"
-                className="w-32"
-                {...register('rewatchCount')}
-              />
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="0"
+                  className="w-32"
+                  {...register('rewatchCount')}
+                />
+                <div className="flex flex-col">
+                  <button type="button" onClick={() => adjustRewatchCount(1)} className="h-4 w-6 rounded-t border border-white/10 text-white/50 hover:text-white hover:bg-white/10">
+                    <ChevronUp className="w-3 h-3 mx-auto" />
+                  </button>
+                  <button type="button" onClick={() => adjustRewatchCount(-1)} className="h-4 w-6 rounded-b border-x border-b border-white/10 text-white/50 hover:text-white hover:bg-white/10">
+                    <ChevronDown className="w-3 h-3 mx-auto" />
+                  </button>
+                </div>
+              </div>
               <p className="text-xs text-white/30">
                 0 means watched once. Total watch count is 1 plus this value.
               </p>
