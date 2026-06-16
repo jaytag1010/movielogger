@@ -21,6 +21,7 @@ import { useMedia } from '@/hooks/useMedia'
 import { MediaEntry, MediaStatus } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
 import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
+import { comparePriorityDescThenUpdatedDesc } from '@/utils/priority'
 import {
   fetchMovieMetadata,
   fetchTVMetadata,
@@ -39,6 +40,18 @@ const FILTER_PILLS: { label: string; value: ProgressFilter }[] = [
 ]
 
 const PROGRESS_STATUSES: MediaStatus[] = ['watching', 'planned', 'on_hold', 'dropped']
+
+function sortProgressEntries(a: MediaEntry, b: MediaEntry): number {
+  const aUsesPriority = a.status === 'planned' || a.status === 'on_hold'
+  const bUsesPriority = b.status === 'planned' || b.status === 'on_hold'
+
+  if (aUsesPriority && bUsesPriority && a.status === b.status) {
+    const priorityOrder = comparePriorityDescThenUpdatedDesc(a, b)
+    if (priorityOrder !== 0) return priorityOrder
+  }
+
+  return (b.updatedAt?.toMillis() ?? 0) - (a.updatedAt?.toMillis() ?? 0)
+}
 
 export default function ProgressPage() {
   const { entries, editEntry, refreshEntry } = useMedia()
@@ -96,9 +109,7 @@ export default function ProgressPage() {
     () =>
       entries
         .filter((e) => PROGRESS_STATUSES.includes(e.status as MediaStatus))
-        // Sort by most-recently updated first so the order persists across restarts.
-        // updatedAt is written by Firestore on every edit (including episode increments).
-        .sort((a, b) => (b.updatedAt?.toMillis() ?? 0) - (a.updatedAt?.toMillis() ?? 0)),
+        .sort(sortProgressEntries),
     [entries]
   )
 

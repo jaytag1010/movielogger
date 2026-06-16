@@ -12,7 +12,7 @@ import {
 } from '@/lib/firebase/firestore'
 import { MediaEntry, MediaEntryInput, MediaEntryUpdate, MediaFilters } from '@/types/media'
 import { getEffectiveMediaType } from '@/utils/formatters'
-import { Timestamp } from 'firebase/firestore'
+import { comparePriorityAscThenUpdatedDesc, comparePriorityDescThenUpdatedDesc } from '@/utils/priority'
 
 export function useMedia() {
   const { entries, loading, filters, activeTab } = useMediaStore()
@@ -148,13 +148,9 @@ function getFilteredEntries(entries: MediaEntry[], filters: MediaFilters): Media
       case 'year':
         return order * ((a.yearMade ?? 0) - (b.yearMade ?? 0))
       case 'priority':
-        {
-          const priorityDiff = (a.priority ?? 3) - (b.priority ?? 3)
-          if (priorityDiff !== 0) return order * priorityDiff
-          const aUpdated = a.priorityUpdatedAt?.toMillis() ?? 0
-          const bUpdated = b.priorityUpdatedAt?.toMillis() ?? 0
-          return bUpdated - aUpdated
-        }
+        return filters.sortOrder === 'asc'
+          ? comparePriorityAscThenUpdatedDesc(a, b)
+          : comparePriorityDescThenUpdatedDesc(a, b)
       case 'dateFinished': {
         // Priority: (1) dateFinished timestamp, (2) TMDB full release date,
         // (3) yearMade as approximate fallback.

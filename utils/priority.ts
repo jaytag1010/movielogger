@@ -2,7 +2,8 @@ const FILLED_STAR = '\u2605'
 const EMPTY_STAR = '\u2606'
 
 export function normalizePriority(priority: number | null | undefined): number {
-  return Math.min(5, Math.max(1, priority ?? 3))
+  const numeric = Number(priority ?? 3)
+  return Math.min(5, Math.max(1, Number.isFinite(numeric) ? numeric : 3))
 }
 
 export function getPriorityDisplay(priority: number | null | undefined) {
@@ -24,4 +25,25 @@ export function getPriorityDisplay(priority: number | null | undefined) {
     empty: EMPTY_STAR.repeat(5 - value),
     tone,
   }
+}
+
+interface PrioritySortable {
+  priority?: number | null
+  priorityUpdatedAt?: { toMillis?: () => number } | null
+}
+
+function priorityUpdatedMillis(entry: PrioritySortable): number {
+  return entry.priorityUpdatedAt?.toMillis?.() ?? 0
+}
+
+export function comparePriorityDescThenUpdatedDesc(a: PrioritySortable, b: PrioritySortable): number {
+  const priorityDiff = normalizePriority(b.priority) - normalizePriority(a.priority)
+  if (priorityDiff !== 0) return priorityDiff
+  return priorityUpdatedMillis(b) - priorityUpdatedMillis(a)
+}
+
+export function comparePriorityAscThenUpdatedDesc(a: PrioritySortable, b: PrioritySortable): number {
+  const priorityDiff = normalizePriority(a.priority) - normalizePriority(b.priority)
+  if (priorityDiff !== 0) return priorityDiff
+  return priorityUpdatedMillis(b) - priorityUpdatedMillis(a)
 }
