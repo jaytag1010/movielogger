@@ -25,7 +25,8 @@ const MAX_CANDIDATES = 30
 
 interface CachedInfo {
   totalEpisodes: number
-  isEnded: boolean
+  airedEpisodes: number
+  isFullyAired: boolean
 }
 
 export function useEpisodeAvailability(entries: MediaEntry[]): EpisodeAvailabilityResult {
@@ -33,7 +34,7 @@ export function useEpisodeAvailability(entries: MediaEntry[]): EpisodeAvailabili
   const [newEpisodes, setNewEpisodes] = useState<NewEpisodeInfo[]>([])
   const [readyToBinge, setReadyToBinge] = useState<MediaEntry[]>([])
   // Session-level cache so re-opening the dialog avoids redundant TMDB calls
-  const cacheRef = useRef<Map<number, CachedInfo>>(new Map())
+  const cacheRef = useRef<Map<string, CachedInfo>>(new Map())
   const fetchedRef = useRef(false)
 
   const fetchAvailability = useCallback(async () => {
@@ -58,40 +59,52 @@ export function useEpisodeAvailability(entries: MediaEntry[]): EpisodeAvailabili
 
     // Unique TMDB IDs not yet in the cache
     const allIdSet = new Set([
-      ...watchingCandidates.map((e) => e.tmdbId!),
-      ...bingeCandidates.map((e) => e.tmdbId!),
+      ...watchingCandidates.map((e) => `${e.tmdbId}:${e.seasonNumber ?? 'all'}`),
+      ...bingeCandidates.map((e) => `${e.tmdbId}:${e.seasonNumber ?? 'all'}`),
     ])
-    const allIds = Array.from(allIdSet).filter((id) => !cacheRef.current.has(id))
+    const allKeys = Array.from(allIdSet).filter((key) => !cacheRef.current.has(key))
 
-    if (allIds.length === 0 && watchingCandidates.length === 0 && bingeCandidates.length === 0) {
+    if (allKeys.length === 0 && watchingCandidates.length === 0 && bingeCandidates.length === 0) {
       return
     }
 
     setLoading(true)
     try {
-      const results = await Promise.allSettled(allIds.map((id) => fetchTVAvailabilityInfo(id)))
-      for (const r of results) {
+      const requests = allKeys.map((key) => {
+        const [tmdbId, season] = key.split(':')
+        return {
+          key,
+          promise: fetchTVAvailabilityInfo(
+            Number(tmdbId),
+            season === 'all' ? null : Number(season)
+          ),
+        }
+      })
+      const results = await Promise.allSettled(requests.map((r) => r.promise))
+      results.forEach((r, index) => {
         if (r.status === 'fulfilled') {
-          cacheRef.current.set(r.value.tmdbId, {
+          cacheRef.current.set(requests[index].key, {
             totalEpisodes: r.value.totalEpisodes,
-            isEnded: r.value.isEnded,
+            airedEpisodes: r.value.airedEpisodes,
+            isFullyAired: r.value.isFullyAired,
           })
         }
-      }
+      })
 
       // Episodes waiting: TMDB has more available episodes than the user's
       // current watched progress. This is intentionally not limited to newly
       // released episodes; 7/8, 749/750, and 1100/1125 should all notify.
       const newEps: NewEpisodeInfo[] = []
       for (const entry of watchingCandidates) {
-        const info = cacheRef.current.get(entry.tmdbId!)
+        const cacheKey = `${entry.tmdbId}:${entry.seasonNumber ?? 'all'}`
+        const info = cacheRef.current.get(cacheKey)
         if (!info) continue
         const watchedEpisodes = getEpisodesWatched(entry)
-        if (info.totalEpisodes > watchedEpisodes) {
+        if (info.airedEpisodes > watchedEpisodes) {
           newEps.push({
             entry,
-            tmdbEpisodeCount: info.totalEpisodes,
-            delta: info.totalEpisodes - watchedEpisodes,
+            tmdbEpisodeCount: info.airedEpisodes,
+            delta: info.airedEpisodes - watchedEpisodes,
           })
         }
       }
@@ -99,8 +112,9 @@ export function useEpisodeAvailability(entries: MediaEntry[]): EpisodeAvailabili
       // Ready to binge: all episodes are out (series ended / no future air dates)
       const binge: MediaEntry[] = []
       for (const entry of bingeCandidates) {
-        const info = cacheRef.current.get(entry.tmdbId!)
-        if (info?.isEnded) {
+        const cacheKey = `${entry.tmdbId}:${entry.seasonNumber ?? 'all'}`
+        const info = cacheRef.current.get(cacheKey)
+        if (info?.isFullyAired) {
           binge.push(entry)
         }
       }

@@ -255,22 +255,67 @@ export async function fetchSeasonMetadata(
 
 export interface TVAvailabilityInfo {
   tmdbId: number
-  /** Current total episode count on TMDB */
+  /** Total episodes listed by TMDB for the checked season/series. */
   totalEpisodes: number
-  /** True when no future episodes are scheduled (Ended, Canceled, or no next_episode_to_air) */
-  isEnded: boolean
+  /** Episodes whose air_date exists and is today or earlier. Future/undated episodes are excluded. */
+  airedEpisodes: number
+  /** True only when every listed episode has an air_date and has already aired. */
+  isFullyAired: boolean
 }
 
-export async function fetchTVAvailabilityInfo(tmdbId: number): Promise<TVAvailabilityInfo> {
+function todayIsoLocal(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function countAiredEpisodes(episodes: TMDBSeasonDetails['episodes'], today = todayIsoLocal()): number {
+  return episodes.filter((episode) => episode.air_date != null && episode.air_date <= today).length
+}
+
+export async function fetchTVAvailabilityInfo(
+  tmdbId: number,
+  seasonNumber?: number | null
+): Promise<TVAvailabilityInfo> {
+  const today = todayIsoLocal()
   const series = await getTVDetails(tmdbId)
-  const isEnded =
-    series.status === 'Ended' ||
-    series.status === 'Canceled' ||
-    series.next_episode_to_air == null
+
+  if (seasonNumber != null) {
+    const season = await getSeasonDetails(tmdbId, seasonNumber)
+    const totalEpisodes = season.episodes.length
+    const airedEpisodes = countAiredEpisodes(season.episodes, today)
+    return {
+      tmdbId: series.id,
+      totalEpisodes,
+      airedEpisodes,
+      isFullyAired: totalEpisodes > 0 && airedEpisodes === totalEpisodes,
+    }
+  }
+
+  const seasonNumbers = (series.seasons ?? [])
+    .map((season) => season.season_number)
+    .filter((n) => n > 0)
+
+  const seasonDetails = await Promise.allSettled(
+    seasonNumbers.map((n) => getSeasonDetails(tmdbId, n))
+  )
+
+  let totalEpisodes = 0
+  let airedEpisodes = 0
+
+  for (const result of seasonDetails) {
+    if (result.status !== 'fulfilled') continue
+    totalEpisodes += result.value.episodes.length
+    airedEpisodes += countAiredEpisodes(result.value.episodes, today)
+  }
+
   return {
     tmdbId: series.id,
-    totalEpisodes: series.number_of_episodes ?? 0,
-    isEnded,
+    totalEpisodes,
+    airedEpisodes,
+    isFullyAired: totalEpisodes > 0 && airedEpisodes === totalEpisodes,
   }
 }
 
