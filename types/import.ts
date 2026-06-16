@@ -15,7 +15,9 @@ export interface MappedRow {
   /** Numeric average duration from a dedicated spreadsheet column. Higher priority than range parsing. */
   episodeAverageDuration?: number | null
   watchHours?: number | null
+  rewatchCount?: number | null
   personalRating?: number | null
+  priority?: number | null
   ageRating?: string | null
   genres?: string[]
   country?: string | null
@@ -119,7 +121,9 @@ export interface ReviewCardEdits {
   totalEpisodes?: number | null
   episodeDurationMinutes?: number | null
   watchHours?: number | null
+  rewatchCount?: number | null
   personalRating?: number | null
+  priority?: number | null
   specialNotes?: string | null
 }
 
@@ -247,6 +251,13 @@ export const COLUMN_ALIASES: Record<string, string[]> = {
     'watch time',
     'total watch time',
   ],
+  rewatchCount: [
+    'rewatch count',
+    'rewatch counter',
+    'rewatches',
+    'rewatched',
+    'times rewatched',
+  ],
   personalRating: [
     'rating',
     'personal rating',
@@ -254,6 +265,12 @@ export const COLUMN_ALIASES: Record<string, string[]> = {
     'score',
     'my score',
     'user rating',
+  ],
+  priority: [
+    'priority',
+    'watch priority',
+    'watching priority',
+    'queue priority',
   ],
   ageRating: [
     'age rating',

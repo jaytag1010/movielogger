@@ -94,6 +94,12 @@ export default function ImportPage() {
         : null,
       specialNotes: edits?.specialNotes ?? mapped.specialNotes ?? null,
     }
+    const rewatchCount = userFields.status === 'completed'
+      ? Math.max(0, Math.floor(edits?.rewatchCount ?? mapped.rewatchCount ?? 0))
+      : 0
+    const priority = userFields.status === 'planned' || userFields.status === 'on_hold'
+      ? Math.min(5, Math.max(1, Math.floor(edits?.priority ?? mapped.priority ?? 3)))
+      : null
 
     const effectiveTmdbMatch = tmdbLink ?? row.tmdbMatch.result
     let resolvedTmdbId: number | null = mapped.tmdbId ?? null
@@ -214,6 +220,8 @@ export default function ImportPage() {
         ...tmdbFields,
         ...userFields,
         watchHours,
+        rewatchCount,
+        priority,
         nextEpisodeToWatch,
       },
       tmdbTitle,

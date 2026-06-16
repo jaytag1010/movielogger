@@ -25,7 +25,9 @@ function entryToRow(entry: MediaEntry) {
     'Episode Duration': entry.episodeDurationMinutes ?? '',
     'Episode Average Duration': entry.episodeDurationMinutes ?? '',
     'Watch Hours': entry.watchHours ?? '',
+    'Rewatch Count': entry.rewatchCount ?? 0,
     'Personal Rating': entry.personalRating ?? '',
+    Priority: entry.priority ?? '',
     'Date Finished': formatTimestamp(entry.dateFinished),
     'Special Notes': entry.specialNotes ?? '',
     'Age Rating': entry.ageRating ?? '',
@@ -54,7 +56,9 @@ const MAIN_HEADERS: (keyof ExportRow)[] = [
   'Episode Duration',
   'Episode Average Duration',
   'Watch Hours',
+  'Rewatch Count',
   'Personal Rating',
+  'Priority',
   'Date Finished',
   'Special Notes',
   'Age Rating',
@@ -69,8 +73,8 @@ const MAIN_WIDTHS = [
   { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 32 }, { wch: 10 },
   { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 14 },
   { wch: 16 }, { wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 14 },
-  { wch: 42 }, { wch: 12 }, { wch: 28 }, { wch: 20 }, { wch: 48 },
-  { wch: 48 }, { wch: 20 },
+  { wch: 10 }, { wch: 14 }, { wch: 42 }, { wch: 12 }, { wch: 28 },
+  { wch: 20 }, { wch: 48 }, { wch: 48 }, { wch: 20 },
 ]
 
 const STATUS_ORDER: MediaStatus[] = ['completed', 'watching', 'planned', 'on_hold', 'dropped']

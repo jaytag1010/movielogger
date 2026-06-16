@@ -16,9 +16,10 @@ interface WatchTimeProjectionProps {
 
 export function WatchTimeProjection({ entries }: WatchTimeProjectionProps) {
   const [hoursPerDay, setHoursPerDay] = useState<number>(2)
+  const [includeRewatchHours, setIncludeRewatchHours] = useState(false)
 
   const completed = entries.filter((e) => e.status === 'completed')
-  const projection = calculateWatchTimeProjection(completed, hoursPerDay)
+  const projection = calculateWatchTimeProjection(completed, hoursPerDay, { includeRewatchHours })
 
   const timeUnits = [
     {
@@ -75,6 +76,15 @@ export function WatchTimeProjection({ entries }: WatchTimeProjectionProps) {
             className="flex-1 accent-blue-500 h-2 rounded-full"
           />
         </div>
+        <label className="mt-3 flex items-center gap-2 text-xs text-white/60 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={includeRewatchHours}
+            onChange={(e) => setIncludeRewatchHours(e.target.checked)}
+            className="h-4 w-4 rounded border-white/20 bg-white/5 accent-blue-500"
+          />
+          Include Rewatch Hours
+        </label>
       </div>
 
       {/* Total hours */}

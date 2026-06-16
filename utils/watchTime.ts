@@ -1,21 +1,30 @@
 import { MediaEntry } from '@/types/media'
 
-export function calculateEntryWatchHours(entry: MediaEntry): number {
+interface WatchHourOptions {
+  includeRewatchHours?: boolean
+}
+
+export function calculateEntryWatchHours(entry: MediaEntry, options: WatchHourOptions = {}): number {
+  const applyRewatchMultiplier = (hours: number) => {
+    if (!options.includeRewatchHours || entry.status !== 'completed') return hours
+    return hours * (1 + Math.max(0, entry.rewatchCount ?? 0))
+  }
+
   if (entry.watchHours && entry.watchHours > 0) {
-    return entry.watchHours
+    return applyRewatchMultiplier(entry.watchHours)
   }
   if (entry.totalEpisodes && entry.episodeDurationMinutes) {
-    return (entry.totalEpisodes * entry.episodeDurationMinutes) / 60
+    return applyRewatchMultiplier((entry.totalEpisodes * entry.episodeDurationMinutes) / 60)
   }
   if (entry.episodeDurationMinutes) {
-    return entry.episodeDurationMinutes / 60
+    return applyRewatchMultiplier(entry.episodeDurationMinutes / 60)
   }
   return 0
 }
 
-export function calculateTotalWatchHours(entries: MediaEntry[]): number {
+export function calculateTotalWatchHours(entries: MediaEntry[], options: WatchHourOptions = {}): number {
   return entries.reduce((total, entry) => {
-    return total + calculateEntryWatchHours(entry)
+    return total + calculateEntryWatchHours(entry, options)
   }, 0)
 }
 
@@ -30,9 +39,10 @@ export interface WatchTimeProjection {
 
 export function calculateWatchTimeProjection(
   entries: MediaEntry[],
-  hoursPerDay: number
+  hoursPerDay: number,
+  options: WatchHourOptions = {}
 ): WatchTimeProjection {
-  const totalHours = calculateTotalWatchHours(entries)
+  const totalHours = calculateTotalWatchHours(entries, options)
 
   if (hoursPerDay <= 0) {
     return {

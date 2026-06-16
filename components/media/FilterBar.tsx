@@ -187,6 +187,8 @@ export function FilterBar({ entries, viewMode, onViewModeChange }: FilterBarProp
             <SelectItem value="title_desc">Title Z–A</SelectItem>
             <SelectItem value="rating_desc">Highest Rated</SelectItem>
             <SelectItem value="rating_asc">Lowest Rated</SelectItem>
+            <SelectItem value="priority_desc">Highest Priority</SelectItem>
+            <SelectItem value="priority_asc">Lowest Priority</SelectItem>
             <SelectItem value="year_desc">Newest Release</SelectItem>
             <SelectItem value="year_asc">Oldest Release</SelectItem>
             <SelectItem value="createdAt_desc">Date Added ↓</SelectItem>

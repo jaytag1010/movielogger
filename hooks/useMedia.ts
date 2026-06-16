@@ -134,6 +134,10 @@ function getFilteredEntries(entries: MediaEntry[], filters: MediaFilters): Media
     result = result.filter((e) => e.status === 'completed')
   }
 
+  if (filters.sortBy === 'priority') {
+    result = result.filter((e) => e.status === 'planned' || e.status === 'on_hold')
+  }
+
   result.sort((a, b) => {
     const order = filters.sortOrder === 'asc' ? 1 : -1
     switch (filters.sortBy) {
@@ -143,6 +147,8 @@ function getFilteredEntries(entries: MediaEntry[], filters: MediaFilters): Media
         return order * ((a.personalRating ?? 0) - (b.personalRating ?? 0))
       case 'year':
         return order * ((a.yearMade ?? 0) - (b.yearMade ?? 0))
+      case 'priority':
+        return order * ((a.priority ?? 3) - (b.priority ?? 3))
       case 'dateFinished': {
         // Priority: (1) dateFinished timestamp, (2) TMDB full release date,
         // (3) yearMade as approximate fallback.

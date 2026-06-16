@@ -53,7 +53,9 @@ const schema = z.object({
   totalEpisodes: z.coerce.number().min(1).nullable().optional(),
   episodeDurationMinutes: z.coerce.number().min(0.01).nullable().optional(),
   watchHours: z.coerce.number().min(0).nullable().optional(),
+  rewatchCount: z.coerce.number().int().min(0).nullable().optional(),
   personalRating: z.coerce.number().min(0).max(10).nullable().optional(),
+  priority: z.coerce.number().int().min(1).max(5).nullable().optional(),
   ageRating: z.string().nullable().optional(),
   country: z.string().nullable().optional(),
   dateFinished: z.string().nullable().optional(),
@@ -94,7 +96,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
     resolver: zodResolver(schema),
     // No type pre-selection — user picks after TMDB selection auto-fills it,
     // or selects manually. Status defaults to completed as a sensible default.
-    defaultValues: { status: 'completed' },
+    defaultValues: { status: 'completed', rewatchCount: 0, priority: 3 },
   })
 
   const watchType = watch('type')
@@ -189,6 +191,9 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
       // Movies use Total Episodes = 1 so progress shows out of 1.
       const resolvedTotalEpisodes =
         data.type === 'movie' ? (data.totalEpisodes ?? 1) : (data.totalEpisodes ?? null)
+      const priority = data.status === 'planned' || data.status === 'on_hold'
+        ? (data.priority ?? 3)
+        : null
 
       await addEntry({
         title: data.title,
@@ -204,7 +209,9 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         totalEpisodes: resolvedTotalEpisodes,
         episodeDurationMinutes: data.episodeDurationMinutes ?? null,
         watchHours: data.watchHours ?? null,
+        rewatchCount: data.status === 'completed' ? (data.rewatchCount ?? 0) : 0,
         personalRating: data.personalRating ?? null,
+        priority,
         ageRating: data.ageRating ?? null,
         genres,
         country: data.country ?? null,
@@ -218,7 +225,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         legacyId: null,
       })
       toast.success(`"${data.title}" added to your list!`)
-      reset({ status: 'completed' })
+      reset({ status: 'completed', rewatchCount: 0, priority: 3 })
       setTmdbData(null)
       setGenres([])
       onSuccess?.()
@@ -360,6 +367,33 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         </div>
       </div>
 
+      {(watchStatus === 'planned' || watchStatus === 'on_hold') && (
+        <div className="space-y-1.5">
+          <Label>Priority</Label>
+          <Controller
+            name="priority"
+            control={control}
+            render={({ field }) => (
+              <Select
+                onValueChange={(value) => field.onChange(Number(value))}
+                value={String(field.value ?? 3)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 - Lowest</SelectItem>
+                  <SelectItem value="2">2 - Low</SelectItem>
+                  <SelectItem value="3">3 - Medium</SelectItem>
+                  <SelectItem value="4">4 - High</SelectItem>
+                  <SelectItem value="5">5 - Highest</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          />
+        </div>
+      )}
+
       {/* Year + Country */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
@@ -470,6 +504,22 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
           />
           <p className="text-xs text-white/30">
             How many episodes you&apos;ve watched so far. Defaults to 0. Movies count out of 1.
+          </p>
+        </div>
+      )}
+
+      {watchStatus === 'completed' && (
+        <div className="space-y-1.5">
+          <Label>Rewatch Counter</Label>
+          <Input
+            type="number"
+            min={0}
+            placeholder="0"
+            className="w-32"
+            {...register('rewatchCount')}
+          />
+          <p className="text-xs text-white/30">
+            0 means watched once. Total watch count is 1 plus this value.
           </p>
         </div>
       )}

@@ -23,7 +23,7 @@ import { Film, Tv, List } from 'lucide-react'
 
 const ITEMS_PER_PAGE = 20
 
-type SortByValue = 'title' | 'rating' | 'year' | 'dateFinished' | 'createdAt'
+type SortByValue = 'title' | 'rating' | 'year' | 'dateFinished' | 'createdAt' | 'priority'
 
 export default function MyListPage() {
   const { entries, filteredEntries, loading, removeEntry } = useMedia()
@@ -42,7 +42,7 @@ export default function MyListPage() {
     const sort = searchParams.get('sort')
     if (sort) {
       const [by, order] = sort.split('_')
-      const validBy: SortByValue[] = ['title', 'rating', 'year', 'dateFinished', 'createdAt']
+      const validBy: SortByValue[] = ['title', 'rating', 'year', 'dateFinished', 'createdAt', 'priority']
       if (validBy.includes(by as SortByValue) && (order === 'asc' || order === 'desc')) {
         useMediaStore.getState().setFilters({ sortBy: by as SortByValue, sortOrder: order })
       }

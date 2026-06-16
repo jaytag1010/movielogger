@@ -31,6 +31,9 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
   const watchHours = calculateEntryWatchHours(entry)
   const effectiveType = getEffectiveMediaType(entry)
   const Icon = effectiveType === 'movie' ? Film : Tv
+  const showPriority = entry.status === 'planned' || entry.status === 'on_hold'
+  const priority = entry.priority ?? 3
+  const rewatchCount = Math.max(0, entry.rewatchCount ?? 0)
 
   return (
     <motion.div
@@ -134,6 +137,11 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
                   {entry.ageRating}
                 </Badge>
               )}
+              {showPriority && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-purple-300 border-purple-400/20">
+                  Priority: {priority}/5
+                </Badge>
+              )}
             </div>
 
             {/* Genres */}
@@ -159,6 +167,9 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
               )}
               {entry.totalEpisodes && (
                 <span>{entry.totalEpisodes} eps</span>
+              )}
+              {entry.status === 'completed' && rewatchCount > 0 && (
+                <span>Rewatched: {rewatchCount}x</span>
               )}
             </div>
 

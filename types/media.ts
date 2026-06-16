@@ -45,7 +45,18 @@ export interface MediaEntry {
   totalEpisodes: number | null
   episodeDurationMinutes: number | null
   watchHours: number | null
+  /**
+   * Completed-only rewatch counter.
+   * 0 means watched once, 1 means watched twice total, etc.
+   * Optional for backward compatibility with existing Firestore documents.
+   */
+  rewatchCount?: number | null
   personalRating: number | null
+  /**
+   * Watch priority for Planned / On Hold titles. 1=Lowest, 5=Highest.
+   * Optional for backward compatibility with existing Firestore documents.
+   */
+  priority?: number | null
   ageRating: string | null
   genres: string[]
   country: string | null
@@ -90,7 +101,7 @@ export interface MediaFilters {
   country: string | 'all'
   year: string | 'all'
   ageRating: string | 'all'
-  sortBy: 'title' | 'rating' | 'year' | 'dateFinished' | 'createdAt'
+  sortBy: 'title' | 'rating' | 'year' | 'dateFinished' | 'createdAt' | 'priority'
   sortOrder: 'asc' | 'desc'
 }
 
