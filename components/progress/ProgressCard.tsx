@@ -5,6 +5,7 @@ import { Minus, Plus, CheckCircle, Film, MoreVertical, Pencil, Search, RefreshCw
 import { MediaEntry, MEDIA_STATUS_COLORS } from '@/types/media'
 import { getDisplayTitle, getEffectiveMediaType, getEpisodesWatched, getDisplayPosterUrl } from '@/utils/formatters'
 import { cn } from '@/utils/cn'
+import { getPriorityDisplay } from '@/utils/priority'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,7 +61,7 @@ export function ProgressCard({
 
   const statusColor = MEDIA_STATUS_COLORS[entry.status]
   const showPriority = entry.status === 'planned' || entry.status === 'on_hold'
-  const priority = Math.min(5, Math.max(1, entry.priority ?? 3))
+  const priorityDisplay = getPriorityDisplay(entry.priority)
 
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 bg-white/[0.03] border border-white/8 rounded-xl hover:bg-white/[0.05] transition-colors">
@@ -100,8 +101,12 @@ export function ProgressCard({
           </span>
 
           {showPriority && (
-            <span className="inline-flex items-center text-[10px] font-semibold text-purple-300 border border-purple-400/20 rounded-full px-2 py-0.5">
-              Priority {'★'.repeat(priority)}{'☆'.repeat(5 - priority)}
+            <span className={`inline-flex items-center text-[10px] font-semibold border rounded-full px-2 py-0.5 ${priorityDisplay.tone}`}>
+              <span className="mr-1 text-white/55">Priority</span>
+              <span className="text-sm leading-none tracking-[0.08em] font-bold">
+                {priorityDisplay.filled}
+                <span className="text-white/25">{priorityDisplay.empty}</span>
+              </span>
             </span>
           )}
 

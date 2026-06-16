@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { formatDate, formatWatchHours, formatGenres, truncateText, getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
 import { calculateEntryWatchHours } from '@/utils/watchTime'
+import { getPriorityDisplay } from '@/utils/priority'
 
 interface MediaCardProps {
   entry: MediaEntry
@@ -32,7 +33,7 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
   const effectiveType = getEffectiveMediaType(entry)
   const Icon = effectiveType === 'movie' ? Film : Tv
   const showPriority = entry.status === 'planned' || entry.status === 'on_hold'
-  const priority = Math.min(5, Math.max(1, entry.priority ?? 3))
+  const priorityDisplay = getPriorityDisplay(entry.priority)
   const rewatchCount = Math.max(0, entry.rewatchCount ?? 0)
 
   return (
@@ -138,8 +139,12 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
                 </Badge>
               )}
               {showPriority && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-purple-300 border-purple-400/20">
-                  Priority {'★'.repeat(priority)}{'☆'.repeat(5 - priority)}
+                <Badge variant="outline" className={`text-[10px] px-2 py-0.5 ${priorityDisplay.tone}`}>
+                  <span className="mr-1 text-white/55">Priority</span>
+                  <span className="text-sm leading-none tracking-[0.08em] font-bold">
+                    {priorityDisplay.filled}
+                    <span className="text-white/25">{priorityDisplay.empty}</span>
+                  </span>
                 </Badge>
               )}
             </div>
