@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import Image from 'next/image'
+import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import Link from 'next/link'
 import { Star, Film, Tv, ChevronRight } from 'lucide-react'
 import { MediaEntry, MediaType } from '@/types/media'
@@ -80,7 +80,7 @@ export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProp
               {/* Poster */}
               <div className="w-8 h-10 flex-shrink-0 rounded overflow-hidden bg-white/5 border border-white/10">
                 {getDisplayPosterUrl(entry) ? (
-                  <Image
+                  <TMDBPosterImage
                     src={getDisplayPosterUrl(entry)!}
                     alt={entry.title}
                     width={32}

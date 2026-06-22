@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import Image from 'next/image'
+import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import { Search, Film, Tv, Loader2, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Input } from '@/components/ui/input'
@@ -102,7 +102,7 @@ export function TMDBSearch({ mediaType = 'all', onSelect, placeholder, defaultQu
                 >
                   <div className="w-8 h-12 flex-shrink-0 rounded overflow-hidden bg-white/5 border border-white/10">
                     {result.posterUrl ? (
-                      <Image
+                      <TMDBPosterImage
                         src={result.posterUrl}
                         alt={result.title}
                         width={32}

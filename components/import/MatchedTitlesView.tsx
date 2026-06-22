@@ -1,6 +1,6 @@
 'use client'
 
-import Image from 'next/image'
+import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import { Film, Tv, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -41,7 +41,7 @@ export function MatchedTitlesView({ rows, onBack, onAddAll, loading, progress }:
             >
               <div className="w-8 h-12 rounded overflow-hidden flex-shrink-0 bg-white/10 flex items-center justify-center">
                 {posterUrl ? (
-                  <Image
+                  <TMDBPosterImage
                     src={posterUrl}
                     alt={title}
                     width={32}

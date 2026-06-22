@@ -1,6 +1,6 @@
 'use client'
 
-import Image from 'next/image'
+import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import { Pencil, Trash2, Film, Tv } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -56,7 +56,7 @@ export function MediaTable({ entries, onEdit, onDelete }: MediaTableProps) {
                 <td className="px-3 py-2">
                   <div className="w-7 h-10 rounded overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
                     {getDisplayPosterUrl(entry) ? (
-                      <Image
+                      <TMDBPosterImage
                         src={getDisplayPosterUrl(entry)!}
                         alt={entry.title}
                         width={28}

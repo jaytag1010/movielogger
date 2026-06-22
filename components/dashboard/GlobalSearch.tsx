@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
+import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import { Search, Film, Tv, X, Loader2, Plus, Check } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
@@ -132,7 +132,7 @@ export function GlobalSearch({ entries }: GlobalSearchProps) {
                   >
                     <div className="w-8 h-11 rounded overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
                       {getDisplayPosterUrl(entry) ? (
-                        <Image
+                        <TMDBPosterImage
                           src={getDisplayPosterUrl(entry)!}
                           alt={entry.title}
                           width={32}
@@ -189,7 +189,7 @@ export function GlobalSearch({ entries }: GlobalSearchProps) {
                   >
                     <div className="w-8 h-11 rounded overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
                       {result.posterUrl ? (
-                        <Image
+                        <TMDBPosterImage
                           src={result.posterUrl}
                           alt={result.title}
                           width={32}

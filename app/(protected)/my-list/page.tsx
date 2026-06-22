@@ -19,6 +19,7 @@ import { useMedia } from '@/hooks/useMedia'
 import { useMediaStore } from '@/store/mediaStore'
 import { MediaEntry } from '@/types/media'
 import { getEffectiveMediaType } from '@/utils/formatters'
+import { getWatchHistoryEntries } from '@/utils/watchHistory'
 import { Film, Tv, List } from 'lucide-react'
 
 const ITEMS_PER_PAGE = 20
@@ -27,9 +28,13 @@ type SortByValue = 'title' | 'rating' | 'year' | 'dateFinished' | 'createdAt' | 
 
 export default function MyListPage() {
   const { entries, filteredEntries, loading, removeEntry } = useMedia()
-  const { activeTab, setActiveTab } = useMediaStore()
+  const { activeTab, setActiveTab, resetFilters } = useMediaStore()
   const searchParams = useSearchParams()
   const router = useRouter()
+  const watchHistoryYearParam = searchParams.get('watchHistoryYear')
+  const watchHistoryYear = watchHistoryYearParam && /^\d{4}$/.test(watchHistoryYearParam)
+    ? Number(watchHistoryYearParam)
+    : null
 
   // Apply navigation intent from URL params (e.g. dashboard stat cards / See All).
   // ?tab=all|movie|series  ·  ?sort=title_asc|rating_desc|year_desc|createdAt_desc
@@ -46,6 +51,21 @@ export default function MyListPage() {
       if (validBy.includes(by as SortByValue) && (order === 'asc' || order === 'desc')) {
         useMediaStore.getState().setFilters({ sortBy: by as SortByValue, sortOrder: order })
       }
+    }
+    if (watchHistoryYear != null) {
+      setActiveTab('all')
+      setPage(1)
+      useMediaStore.getState().setFilters({
+        search: '',
+        type: 'all',
+        status: 'all',
+        genre: 'all',
+        country: 'all',
+        year: 'all',
+        ageRating: 'all',
+        sortBy: 'rating',
+        sortOrder: 'desc',
+      })
     }
     // Country drill-down from dashboard chart: ?country=South+Korea
     // Resets status to 'all' so the user sees every title from that country.
@@ -119,8 +139,15 @@ export default function MyListPage() {
     return entries.filter((e) => e.id && filteredIdSet.has(e.id))
   }, [entries, filteredIdSet])
 
+  const watchHistoryEntries = useMemo(() => {
+    if (watchHistoryYear == null) return null
+    return getWatchHistoryEntries(entries, watchHistoryYear).sort(
+      (a, b) => (b.personalRating ?? 0) - (a.personalRating ?? 0) || a.title.localeCompare(b.title)
+    )
+  }, [entries, watchHistoryYear])
+
   // For "All" tab, show all filteredEntries; otherwise filter by effective type
-  const baseEntries = issueFilteredEntries ?? filteredEntries
+  const baseEntries = watchHistoryEntries ?? issueFilteredEntries ?? filteredEntries
   const tabEntries =
     activeTab === 'all'
       ? baseEntries
@@ -176,6 +203,31 @@ export default function MyListPage() {
 
         {/* Filters — shared across all tabs */}
         <div className="mb-4">
+          {watchHistoryEntries && watchHistoryYear != null && (
+            <div className="mb-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-emerald-300">
+                  Watch History: {watchHistoryYear} ({watchHistoryEntries.length} title{watchHistoryEntries.length === 1 ? '' : 's'})
+                </p>
+                <p className="text-[11px] text-white/45 mt-0.5">
+                  Uses Date Finished when available and Year Made as fallback. Sorted by Highest Rated.
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs flex-shrink-0"
+                onClick={() => {
+                  resetFilters()
+                  setActiveTab('all')
+                  setPage(1)
+                  router.replace('/my-list')
+                }}
+              >
+                Clear Filter
+              </Button>
+            </div>
+          )}
           {issueFilteredEntries && (
             <div className="mb-3 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -199,11 +251,13 @@ export default function MyListPage() {
               </Button>
             </div>
           )}
-          <FilterBar
-            entries={entries}
-            viewMode={viewMode}
-            onViewModeChange={handleViewModeChange}
-          />
+          {!watchHistoryEntries && (
+            <FilterBar
+              entries={entries}
+              viewMode={viewMode}
+              onViewModeChange={handleViewModeChange}
+            />
+          )}
         </div>
 
         {loading ? (

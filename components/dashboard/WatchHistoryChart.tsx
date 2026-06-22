@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   BarChart,
   Bar,
@@ -14,6 +15,7 @@ import {
 import { Calendar } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { GlassCard } from '@/components/common/GlassCard'
+import { getWatchHistoryYear } from '@/utils/watchHistory'
 
 interface WatchHistoryChartProps {
   entries: MediaEntry[]
@@ -36,6 +38,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 }
 
 export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
+  const router = useRouter()
   const data = useMemo(() => {
     // Only count completed entries
     const completed = entries.filter((e) => e.status === 'completed')
@@ -46,15 +49,8 @@ export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
     const yearCounts: Record<number, number> = {}
 
     for (const entry of completed) {
-      let year: number | null = null
-
-      if (entry.dateFinished) {
-        year = entry.dateFinished.toDate().getFullYear()
-      } else if (entry.yearMade) {
-        year = entry.yearMade
-      }
-
-      if (year && year >= 1990 && year <= new Date().getFullYear()) {
+      const year = getWatchHistoryYear(entry)
+      if (year != null) {
         yearCounts[year] = (yearCounts[year] || 0) + 1
       }
     }
@@ -113,6 +109,10 @@ export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
                   key={`bar-${index}`}
                   fill={entry.count === maxCount ? '#8B5CF6' : '#3B82F6'}
                   fillOpacity={entry.isCurrent ? 0.6 : 1}
+                  cursor={entry.count > 0 ? 'pointer' : 'default'}
+                  onClick={entry.count > 0
+                    ? () => router.push(`/my-list?watchHistoryYear=${entry.year}&sort=rating_desc&tab=all`)
+                    : undefined}
                 />
               ))}
             </Bar>

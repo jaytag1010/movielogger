@@ -1,11 +1,11 @@
 'use client'
 
-import Image from 'next/image'
 import { Minus, Plus, CheckCircle, Film, MoreVertical, Pencil, Search, RefreshCw } from 'lucide-react'
 import { MediaEntry, MEDIA_STATUS_COLORS } from '@/types/media'
 import { getDisplayTitle, getEffectiveMediaType, getEpisodesWatched, getDisplayPosterUrl } from '@/utils/formatters'
 import { cn } from '@/utils/cn'
 import { getPriorityDisplay } from '@/utils/priority'
+import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,7 +69,7 @@ export function ProgressCard({
       {/* Poster */}
       <div className="relative w-10 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-white/5">
         {getDisplayPosterUrl(entry) ? (
-          <Image
+          <TMDBPosterImage
             src={getDisplayPosterUrl(entry)!}
             alt={entry.title}
             fill

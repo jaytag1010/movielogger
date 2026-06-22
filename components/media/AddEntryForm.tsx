@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -32,6 +31,7 @@ import { NormalizedTMDBResult } from '@/types/tmdb'
 import { useTMDBDetails, useTMDBSeasonDetails } from '@/hooks/useTMDB'
 import { MediaStatus, MEDIA_STATUS_LABELS } from '@/types/media'
 import { useMedia } from '@/hooks/useMedia'
+import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 
 const COMMON_GENRES = [
   'Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary',
@@ -104,6 +104,8 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
   const watchSeasonNumber = watch('seasonNumber')
   const watchStatus = watch('status')
   const watchRewatchCount = watch('rewatchCount')
+  const showPersonalRating = watchStatus === 'completed' || watchStatus === 'dropped'
+  const showCompletionFields = watchStatus === 'completed'
 
   // Auto-prefill TMDB data when arriving via "Add to Library" from GlobalSearch.
   useEffect(() => {
@@ -216,7 +218,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         totalEpisodes: resolvedTotalEpisodes,
         episodeDurationMinutes: data.episodeDurationMinutes ?? null,
         watchHours: data.watchHours ?? null,
-        rewatchCount: data.status === 'completed' ? (data.rewatchCount ?? 0) : 0,
+        rewatchCount: data.rewatchCount ?? 0,
         personalRating: data.personalRating ?? null,
         priority,
         priorityUpdatedAt,
@@ -311,7 +313,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
       {tmdbData?.posterUrl && (
         <div className="flex gap-4 p-3 bg-white/5 rounded-xl border border-white/10">
           <div className="relative w-16 h-24 flex-shrink-0 rounded-lg overflow-hidden">
-            <Image src={tmdbData.posterUrl} alt={tmdbData.title} fill className="object-cover" sizes="64px" />
+            <TMDBPosterImage src={tmdbData.posterUrl} alt={tmdbData.title} fill className="object-cover" sizes="64px" />
           </div>
           <div>
             <p className="font-semibold text-white">{tmdbData.title}</p>
@@ -419,7 +421,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
       </div>
 
       {/* Rating */}
-      <div className="space-y-1.5">
+      {showPersonalRating && <div className="space-y-1.5">
         <Label>Personal Rating (0–10)</Label>
         <div className="flex items-center gap-3">
           <Input
@@ -449,7 +451,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
           </div>
         </div>
         {errors.personalRating && <p className="text-xs text-red-400">{errors.personalRating.message}</p>}
-      </div>
+      </div>}
 
       {/* Series-specific fields */}
       {watchType === 'series' && (
@@ -487,7 +489,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
                 )}
               </div>
             </div>
-            {watchStatus === 'completed' && (
+            {showCompletionFields && (
               <div className="space-y-1.5">
                 <Label>Rewatch Counter</Label>
                 <div className="flex items-center gap-1.5">
@@ -540,7 +542,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         </div>
       )}
 
-      {watchStatus === 'completed' && watchType !== 'series' && (
+      {showCompletionFields && watchType !== 'series' && (
         <div className="space-y-1.5">
           <Label>Rewatch Counter</Label>
           <div className="flex items-center gap-1.5">
@@ -579,7 +581,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
       </div>
 
       {/* Date Finished */}
-      <div className="space-y-1.5">
+      {showCompletionFields && <div className="space-y-1.5">
         <Label>Date Finished</Label>
         <div className="flex items-center gap-2">
           <Input type="date" {...register('dateFinished')} className="text-white/70 flex-1" />
@@ -592,7 +594,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
             Set as Today
           </Button>
         </div>
-      </div>
+      </div>}
 
       {/* Genres */}
       <div className="space-y-1.5">

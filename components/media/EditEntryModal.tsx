@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import Image from 'next/image'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -35,6 +34,7 @@ import { TMDBSearch } from './TMDBSearch'
 import { uploadPoster, deletePoster, validatePosterFile } from '@/lib/imgbb'
 import { getDisplayPosterUrl } from '@/utils/formatters'
 import { format } from 'date-fns'
+import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 
 const COMMON_GENRES = [
   'Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary',
@@ -97,6 +97,8 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
   const watchTotalEpisodes = watch('totalEpisodes')
   const watchEpDuration    = watch('episodeDurationMinutes')
   const watchRewatchCount  = watch('rewatchCount')
+  const showPersonalRating = watchStatus === 'completed' || watchStatus === 'dropped'
+  const showCompletionFields = watchStatus === 'completed'
 
   const isSeriesType = watchType === 'series'
   const calculatedSeriesWatchHours: number | null = (() => {
@@ -297,14 +299,16 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
         correctedTotal = recordedTotal
       }
       const episodesWatched = data.status === 'completed' ? null : watched
-      const priority = data.status === 'planned' || data.status === 'on_hold'
+      const priorityApplies = data.status === 'planned' || data.status === 'on_hold'
+      const priority = priorityApplies
         ? (data.priority ?? 3)
-        : null
+        : (entry.priority ?? null)
       const previousPriority = entry.priority ?? null
-      const priorityChanged = previousPriority !== priority
+      const priorityChanged = priorityApplies && previousPriority !== priority
+      const shouldStampPriority = priorityApplies && (priorityChanged || !entry.priorityUpdatedAt)
       const priorityUpdatedAt = priority == null
         ? null
-        : priorityChanged || !entry.priorityUpdatedAt
+        : shouldStampPriority
           ? Timestamp.now()
           : (entry.priorityUpdatedAt ?? null)
 
@@ -342,7 +346,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
         totalEpisodes:          correctedTotal,
         episodeDurationMinutes: data.episodeDurationMinutes ?? null,
         watchHours:             isSeriesType ? (calculatedSeriesWatchHours ?? null) : (data.watchHours ?? null),
-        rewatchCount:           data.status === 'completed' ? (data.rewatchCount ?? 0) : 0,
+        rewatchCount:           data.rewatchCount ?? entry.rewatchCount ?? 0,
         personalRating:         data.personalRating         ?? null,
         priority,
         priorityUpdatedAt,
@@ -513,11 +517,11 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
           </div>
 
           {/* ── Rating & Age Rating ── */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
+          <div className={`grid gap-3 ${showPersonalRating ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {showPersonalRating && <div className="space-y-1.5">
               <Label>Rating (0–10)</Label>
               <Input type="number" step={0.01} min={0} max={10} placeholder="8.25" {...register('personalRating')} />
-            </div>
+            </div>}
             <div className="space-y-1.5">
               <Label>Age Rating</Label>
               <Input placeholder="PG-13" {...register('ageRating')} />
@@ -562,7 +566,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                   </p>
                 )}
               </div>
-              {watchStatus === 'completed' && (
+              {showCompletionFields && (
                 <div className="space-y-1.5">
                   <Label>Rewatch Counter</Label>
                   <div className="flex items-center gap-1.5">
@@ -621,7 +625,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
             </div>
           )}
 
-          {watchStatus === 'completed' && watchType !== 'series' && (
+          {showCompletionFields && watchType !== 'series' && (
             <div className="space-y-1.5">
               <Label>Rewatch Counter</Label>
               <div className="flex items-center gap-1.5">
@@ -648,7 +652,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
           )}
 
           {/* ── Watch Hours & Date Finished ── */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${showCompletionFields ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <div className="space-y-1.5">
               <Label>Watch Hours</Label>
               {isSeriesType ? (
@@ -666,10 +670,10 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                 <Input type="number" step={0.01} min={0} placeholder="e.g. 7.33" {...register('watchHours')} />
               )}
             </div>
-            <div className="space-y-1.5">
+            {showCompletionFields && <div className="space-y-1.5">
               <Label>Date Finished</Label>
               <Input type="date" {...register('dateFinished')} className="text-white/70" />
-            </div>
+            </div>}
           </div>
 
           {/* ── Genres ── */}
@@ -716,7 +720,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
               {/* Thumbnail */}
               <div className="relative w-12 h-[72px] flex-shrink-0 rounded-lg overflow-hidden bg-white/5 border border-white/10">
                 {modalPosterDisplay ? (
-                  <Image
+                  <TMDBPosterImage
                     src={modalPosterDisplay}
                     alt="Poster preview"
                     fill

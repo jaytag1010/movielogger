@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { Star, Clock, Calendar, MoreVertical, Edit, Trash2, Film, Tv } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
@@ -18,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { formatDate, formatWatchHours, formatGenres, truncateText, getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
 import { calculateEntryWatchHours } from '@/utils/watchTime'
 import { getPriorityDisplay } from '@/utils/priority'
+import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 
 interface MediaCardProps {
   entry: MediaEntry
@@ -48,7 +48,7 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
           {/* Poster */}
           <div className="relative w-16 h-24 flex-shrink-0 rounded-xl overflow-hidden bg-white/5 border border-white/10">
             {displayPoster && !imgError ? (
-              <Image
+              <TMDBPosterImage
                 src={displayPoster}
                 alt={entry.title}
                 fill

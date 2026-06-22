@@ -1,6 +1,6 @@
 'use client'
 
-import Image from 'next/image'
+import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import { Link2, Film, Tv, CheckCircle2, Lock } from 'lucide-react'
 import {
   Dialog,
@@ -80,7 +80,7 @@ export function TMDBLinkDialog({
               <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">Your Entry</p>
               <div className="relative w-10 h-14 rounded-lg overflow-hidden bg-white/5 border border-white/10 mx-auto flex-shrink-0">
                 {getDisplayPosterUrl(entry) ? (
-                  <Image src={getDisplayPosterUrl(entry)!} alt={entry.title} fill className="object-cover" sizes="40px" />
+                  <TMDBPosterImage src={getDisplayPosterUrl(entry)!} alt={entry.title} fill className="object-cover" sizes="40px" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <Film className="w-4 h-4 text-white/15" />
@@ -100,7 +100,7 @@ export function TMDBLinkDialog({
               <p className="text-[10px] font-semibold text-blue-400/60 uppercase tracking-wider">TMDB</p>
               <div className="relative w-10 h-14 rounded-lg overflow-hidden bg-blue-500/10 border border-blue-500/20 mx-auto flex-shrink-0">
                 {tmdbResult.posterUrl ? (
-                  <Image src={tmdbResult.posterUrl} alt={tmdbResult.title} fill className="object-cover" sizes="40px" />
+                  <TMDBPosterImage src={tmdbResult.posterUrl} alt={tmdbResult.title} fill className="object-cover" sizes="40px" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <TypeIcon className="w-4 h-4 text-blue-400/30" />
