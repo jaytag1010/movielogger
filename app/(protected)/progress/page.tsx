@@ -13,6 +13,7 @@ import { GlassCard } from '@/components/common/GlassCard'
 import { ProgressCard } from '@/components/progress/ProgressCard'
 import { FinishConfirmDialog } from '@/components/progress/FinishConfirmDialog'
 import { CompletionDetailsModal, CompletionDetails } from '@/components/progress/CompletionDetailsModal'
+import { CompletionStatisticsModal } from '@/components/progress/CompletionStatisticsModal'
 import { TMDBLinkDialog } from '@/components/progress/TMDBLinkDialog'
 import { EditEntryModal } from '@/components/media/EditEntryModal'
 import { TMDBSearch } from '@/components/media/TMDBSearch'
@@ -21,13 +22,17 @@ import { useMedia } from '@/hooks/useMedia'
 import { MediaEntry, MediaStatus } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
 import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
-import { comparePriorityDescThenUpdatedDesc } from '@/utils/priority'
+import { comparePriorityDescThenCreatedDesc } from '@/utils/priority'
 import {
   fetchMovieMetadata,
   fetchTVMetadata,
   fetchSeasonMetadata,
 } from '@/lib/tmdb/api'
 import { cn } from '@/utils/cn'
+import {
+  calculateCompletionStatistics,
+  CompletionStatistics,
+} from '@/utils/completionStatistics'
 
 type ProgressFilter = 'all' | 'watching' | 'planned' | 'on_hold' | 'dropped'
 
@@ -42,14 +47,6 @@ const FILTER_PILLS: { label: string; value: ProgressFilter }[] = [
 const PROGRESS_STATUSES: MediaStatus[] = ['watching', 'planned', 'on_hold', 'dropped']
 
 function sortProgressEntries(a: MediaEntry, b: MediaEntry): number {
-  const aUsesPriority = a.status === 'planned' || a.status === 'on_hold'
-  const bUsesPriority = b.status === 'planned' || b.status === 'on_hold'
-
-  if (aUsesPriority && bUsesPriority && a.status === b.status) {
-    const priorityOrder = comparePriorityDescThenUpdatedDesc(a, b)
-    if (priorityOrder !== 0) return priorityOrder
-  }
-
   return (b.updatedAt?.toMillis() ?? 0) - (a.updatedAt?.toMillis() ?? 0)
 }
 
@@ -82,6 +79,7 @@ export default function ProgressPage() {
   const [finishTarget, setFinishTarget] = useState<MediaEntry | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [finishing, setFinishing] = useState(false)
+  const [completionStatistics, setCompletionStatistics] = useState<CompletionStatistics | null>(null)
 
   // ── Bulk refresh ──────────────────────────────────────────────────────────
   const [refreshing, setRefreshing] = useState(false)
@@ -127,7 +125,10 @@ export default function ProgressPage() {
   const filteredEntries = useMemo(() => {
     if (notificationEntries) return notificationEntries
     if (filter === 'all') return progressEntries
-    return progressEntries.filter((e) => e.status === filter)
+    const matchingEntries = progressEntries.filter((e) => e.status === filter)
+    return filter === 'planned' || filter === 'on_hold'
+      ? matchingEntries.sort(comparePriorityDescThenCreatedDesc)
+      : matchingEntries
   }, [notificationEntries, progressEntries, filter])
 
   const counts: Record<ProgressFilter, number> = useMemo(() => ({
@@ -188,17 +189,34 @@ export default function ProgressPage() {
         watchedEpisodes > 0 &&
         (finishTarget.totalEpisodes == null || watchedEpisodes > finishTarget.totalEpisodes)
 
+      const completedAt = Timestamp.fromDate(new Date(details.dateFinished))
       await editEntry(finishTarget.id, {
         status: 'completed',
-        dateFinished: Timestamp.fromDate(new Date(details.dateFinished)),
+        dateFinished: completedAt,
         personalRating: details.personalRating,
         specialNotes: details.specialNotes,
         nextEpisodeToWatch: null,
         ...(shouldUpdateTotal ? { totalEpisodes: watchedEpisodes } : {}),
       })
+
+      const completedEntry: MediaEntry = {
+        ...finishTarget,
+        status: 'completed',
+        dateFinished: completedAt,
+        personalRating: details.personalRating,
+        specialNotes: details.specialNotes,
+        nextEpisodeToWatch: null,
+        totalEpisodes: shouldUpdateTotal ? watchedEpisodes : finishTarget.totalEpisodes,
+        updatedAt: Timestamp.now(),
+      }
+      const completedLibrary = entries.some((entry) => entry.id === completedEntry.id)
+        ? entries.map((entry) => entry.id === completedEntry.id ? completedEntry : entry)
+        : [...entries, completedEntry]
+
       toast.success(`"${getDisplayTitle(finishTarget)}" marked as finished!`)
       setFinishTarget(null)
       setDetailsOpen(false)
+      setCompletionStatistics(calculateCompletionStatistics(completedEntry, completedLibrary))
     } catch {
       toast.error('Failed to update entry')
     } finally {
@@ -613,6 +631,11 @@ export default function ProgressPage() {
         }}
         onConfirm={handleSaveAndComplete}
         loading={finishing}
+      />
+
+      <CompletionStatisticsModal
+        statistics={completionStatistics}
+        onClose={() => setCompletionStatistics(null)}
       />
 
       <TMDBLinkDialog

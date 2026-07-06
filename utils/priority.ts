@@ -32,6 +32,11 @@ interface PrioritySortable {
   priorityUpdatedAt?: { toMillis?: () => number } | null
 }
 
+interface PriorityCreatedSortable extends PrioritySortable {
+  createdAt?: { toMillis?: () => number } | null
+  title: string
+}
+
 function priorityUpdatedMillis(entry: PrioritySortable): number {
   return entry.priorityUpdatedAt?.toMillis?.() ?? 0
 }
@@ -46,4 +51,17 @@ export function comparePriorityAscThenUpdatedDesc(a: PrioritySortable, b: Priori
   const priorityDiff = normalizePriority(a.priority) - normalizePriority(b.priority)
   if (priorityDiff !== 0) return priorityDiff
   return priorityUpdatedMillis(b) - priorityUpdatedMillis(a)
+}
+
+export function comparePriorityDescThenCreatedDesc(
+  a: PriorityCreatedSortable,
+  b: PriorityCreatedSortable
+): number {
+  const priorityDiff = normalizePriority(b.priority) - normalizePriority(a.priority)
+  if (priorityDiff !== 0) return priorityDiff
+
+  const createdDiff = (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)
+  if (createdDiff !== 0) return createdDiff
+
+  return a.title.localeCompare(b.title)
 }
