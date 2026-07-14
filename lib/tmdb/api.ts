@@ -259,6 +259,8 @@ export interface TVAvailabilityInfo {
   totalEpisodes: number
   /** Episodes whose air_date exists and is today or earlier. Future/undated episodes are excluded. */
   airedEpisodes: number
+  /** Earliest known episode air date, used for premiere messaging. */
+  firstEpisodeAirDate: string | null
   /** True only when every listed episode has an air_date and has already aired. */
   isFullyAired: boolean
 }
@@ -273,6 +275,13 @@ function todayIsoLocal(): string {
 
 function countAiredEpisodes(episodes: TMDBSeasonDetails['episodes'], today = todayIsoLocal()): number {
   return episodes.filter((episode) => episode.air_date != null && episode.air_date <= today).length
+}
+
+function getFirstEpisodeAirDate(episodes: TMDBSeasonDetails['episodes']): string | null {
+  return episodes
+    .map((episode) => episode.air_date)
+    .filter((airDate): airDate is string => Boolean(airDate))
+    .sort()[0] ?? null
 }
 
 export async function fetchTVAvailabilityInfo(
@@ -290,6 +299,7 @@ export async function fetchTVAvailabilityInfo(
       tmdbId: series.id,
       totalEpisodes,
       airedEpisodes,
+      firstEpisodeAirDate: getFirstEpisodeAirDate(season.episodes),
       isFullyAired: totalEpisodes > 0 && airedEpisodes === totalEpisodes,
     }
   }
@@ -304,17 +314,21 @@ export async function fetchTVAvailabilityInfo(
 
   let totalEpisodes = 0
   let airedEpisodes = 0
+  const firstAirDates: string[] = []
 
   for (const result of seasonDetails) {
     if (result.status !== 'fulfilled') continue
     totalEpisodes += result.value.episodes.length
     airedEpisodes += countAiredEpisodes(result.value.episodes, today)
+    const firstAirDate = getFirstEpisodeAirDate(result.value.episodes)
+    if (firstAirDate) firstAirDates.push(firstAirDate)
   }
 
   return {
     tmdbId: series.id,
     totalEpisodes,
     airedEpisodes,
+    firstEpisodeAirDate: firstAirDates.sort()[0] ?? null,
     isFullyAired: totalEpisodes > 0 && airedEpisodes === totalEpisodes,
   }
 }

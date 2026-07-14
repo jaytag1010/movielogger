@@ -19,6 +19,7 @@ import { EditEntryModal } from '@/components/media/EditEntryModal'
 import { TMDBSearch } from '@/components/media/TMDBSearch'
 import { Button } from '@/components/ui/button'
 import { useMedia } from '@/hooks/useMedia'
+import { useProgressReleaseStatuses } from '@/hooks/useProgressReleaseStatuses'
 import { MediaEntry, MediaStatus } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
 import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
@@ -48,6 +49,12 @@ const PROGRESS_STATUSES: MediaStatus[] = ['watching', 'planned', 'on_hold', 'dro
 
 function sortProgressEntries(a: MediaEntry, b: MediaEntry): number {
   return (b.updatedAt?.toMillis() ?? 0) - (a.updatedAt?.toMillis() ?? 0)
+}
+
+function sortCreatedDescThenTitleAsc(a: MediaEntry, b: MediaEntry): number {
+  const createdDiff = (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)
+  if (createdDiff !== 0) return createdDiff
+  return a.title.localeCompare(b.title)
 }
 
 export default function ProgressPage() {
@@ -123,13 +130,19 @@ export default function ProgressPage() {
   }, [filteredIdSet, progressEntries])
 
   const filteredEntries = useMemo(() => {
-    if (notificationEntries) return notificationEntries
-    if (filter === 'all') return progressEntries
+    if (notificationEntries) {
+      return filter === 'planned' || filter === 'on_hold'
+        ? [...notificationEntries].sort(comparePriorityDescThenCreatedDesc)
+        : notificationEntries
+    }
+    if (filter === 'all') return [...progressEntries].sort(sortCreatedDescThenTitleAsc)
     const matchingEntries = progressEntries.filter((e) => e.status === filter)
     return filter === 'planned' || filter === 'on_hold'
       ? matchingEntries.sort(comparePriorityDescThenCreatedDesc)
       : matchingEntries
   }, [notificationEntries, progressEntries, filter])
+
+  const releaseStatuses = useProgressReleaseStatuses(filteredEntries)
 
   const counts: Record<ProgressFilter, number> = useMemo(() => ({
     all: progressEntries.length,
@@ -604,6 +617,7 @@ export default function ProgressPage() {
                       onSearchTMDB={handleSearchTMDB}
                       onRefreshMetadata={handleRefreshMetadata}
                       refreshing={singleRefreshingId === entry.id}
+                      releaseStatus={entry.id ? releaseStatuses[entry.id] : undefined}
                     />
                   </motion.div>
                 ))}

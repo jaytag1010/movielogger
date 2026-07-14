@@ -19,6 +19,7 @@ import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
 import { useMedia } from '@/hooks/useMedia'
 import { useDataQuality } from '@/hooks/useDataQuality'
 import { useEpisodeAvailability, NewEpisodeInfo } from '@/hooks/useEpisodeAvailability'
+import { comparePriorityDescThenCreatedDesc } from '@/utils/priority'
 
 export function DataQualityCenter() {
   const [open, setOpen] = useState(false)
@@ -28,6 +29,7 @@ export function DataQualityCenter() {
   const { result, ignoreDuplicate } = useDataQuality(entries)
   const episodeAvail = useEpisodeAvailability(entries)
   const [fixingId, setFixingId] = useState<string | null>(null)
+  const readyToBinge = [...episodeAvail.readyToBinge].sort(comparePriorityDescThenCreatedDesc)
 
   // Trigger async TMDB episode checks when the dialog opens
   useEffect(() => {
@@ -47,7 +49,7 @@ export function DataQualityCenter() {
     result.missingTmdbLink.length +
     result.missingEpisodeProgress.length +
     result.missingPoster.length
-  const episodeCount = episodeAvail.newEpisodes.length + episodeAvail.readyToBinge.length
+  const episodeCount = episodeAvail.newEpisodes.length + readyToBinge.length
   const totalBellCount = dqCount + episodeCount
 
   function goToEntry(entry: MediaEntry) {
@@ -166,10 +168,10 @@ export function DataQualityCenter() {
               <Section
                 icon={<PackageOpen className="w-4 h-4 text-violet-400" />}
                 title="Ready to Binge"
-                count={episodeAvail.readyToBinge.length}
-                onOpenList={() => openProgressList(episodeAvail.readyToBinge, 'Ready to Binge', 'planned')}
+                count={readyToBinge.length}
+                onOpenList={() => openProgressList(readyToBinge, 'Ready to Binge', 'planned')}
               >
-                {episodeAvail.readyToBinge.map((e) => (
+                {readyToBinge.map((e) => (
                   <Row
                     key={e.id}
                     entry={e}

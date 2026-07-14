@@ -6,6 +6,7 @@ import { getDisplayTitle, getEffectiveMediaType, getEpisodesWatched, getDisplayP
 import { cn } from '@/utils/cn'
 import { getPriorityDisplay } from '@/utils/priority'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
+import { ProgressReleaseStatus } from '@/hooks/useProgressReleaseStatuses'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +25,7 @@ interface ProgressCardProps {
   onRefreshMetadata: (entry: MediaEntry) => void
   /** Shows a spinner on the Refresh Metadata item while refreshing this entry. */
   refreshing?: boolean
+  releaseStatus?: ProgressReleaseStatus
 }
 
 export function ProgressCard({
@@ -35,6 +37,7 @@ export function ProgressCard({
   onSearchTMDB,
   onRefreshMetadata,
   refreshing = false,
+  releaseStatus,
 }: ProgressCardProps) {
   const displayTitle = getDisplayTitle(entry)
 
@@ -62,6 +65,14 @@ export function ProgressCard({
   const statusColor = MEDIA_STATUS_COLORS[entry.status]
   const showPriority = entry.status === 'planned' || entry.status === 'on_hold'
   const priorityDisplay = getPriorityDisplay(entry.priority)
+  const releaseStatusTone =
+    releaseStatus?.tone === 'released'
+      ? 'text-emerald-300'
+      : releaseStatus?.tone === 'upcoming'
+        ? 'text-blue-300'
+        : releaseStatus?.tone === 'airing'
+          ? 'text-sky-300'
+          : 'text-white/35'
 
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 bg-white/[0.03] border border-white/8 rounded-xl hover:bg-white/[0.05] transition-colors">
@@ -158,6 +169,12 @@ export function ProgressCard({
             Finished
           </button>
         </div>
+
+        {releaseStatus && (
+          <p className={cn('text-[11px] leading-tight truncate', releaseStatusTone)}>
+            {releaseStatus.label}
+          </p>
+        )}
       </div>
 
       {/* ⋮ Menu */}
