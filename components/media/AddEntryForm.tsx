@@ -39,6 +39,11 @@ const COMMON_GENRES = [
   'Thriller', 'Western', 'Biography', 'History', 'Music', 'Sport', 'War',
 ]
 
+const optionalPositiveNumber = z.preprocess(
+  (v) => (v === '' || v == null ? null : v),
+  z.coerce.number().min(0.01).nullable().optional()
+)
+
 const schema = z.object({
   title: z.string().min(1, 'Title is required'),
   type: z.enum(['movie', 'series']),
@@ -51,7 +56,7 @@ const schema = z.object({
   nextEpisodeToWatch: z.coerce.number().int().min(0).nullable().optional(),
   yearMade: z.coerce.number().min(1888).max(2100).nullable().optional(),
   totalEpisodes: z.coerce.number().min(1).nullable().optional(),
-  episodeDurationMinutes: z.coerce.number().min(0.01).nullable().optional(),
+  episodeDurationMinutes: optionalPositiveNumber,
   watchHours: z.coerce.number().min(0).nullable().optional(),
   rewatchCount: z.coerce.number().int().min(0).nullable().optional(),
   personalRating: z.coerce.number().min(0).max(10).nullable().optional(),
@@ -512,15 +517,9 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
               </div>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Episodes This Season</Label>
-              <Input type="number" placeholder="24" {...register('totalEpisodes')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Ep Duration (min)</Label>
-              <Input type="number" step={0.01} min={0.01} placeholder="22.5" {...register('episodeDurationMinutes')} />
-            </div>
+          <div className="space-y-1.5">
+            <Label>Episodes This Season</Label>
+            <Input type="number" placeholder="24" {...register('totalEpisodes')} />
           </div>
         </div>
       )}
@@ -567,6 +566,12 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
           </p>
         </div>
       )}
+
+      {/* Episode Duration */}
+      <div className="space-y-1.5">
+        <Label>Episode Duration (min)</Label>
+        <Input type="number" step={0.01} min={0.01} placeholder="Optional" {...register('episodeDurationMinutes')} />
+      </div>
 
       {/* Watch Hours + Age Rating */}
       <div className="grid grid-cols-2 gap-3">

@@ -42,6 +42,11 @@ const COMMON_GENRES = [
   'Thriller', 'Western', 'Biography', 'History', 'Music', 'Sport', 'War',
 ]
 
+const optionalPositiveNumber = z.preprocess(
+  (v) => (v === '' || v == null ? null : v),
+  z.coerce.number().min(0.01).nullable().optional()
+)
+
 const schema = z.object({
   title: z.string().min(1, 'Title is required'),
   type: z.enum(['movie', 'series']),
@@ -54,7 +59,7 @@ const schema = z.object({
   nextEpisodeToWatch: z.coerce.number().int().min(0).nullable().optional(),
   yearMade: z.coerce.number().nullable().optional(),
   totalEpisodes: z.coerce.number().nullable().optional(),
-  episodeDurationMinutes: z.coerce.number().min(0.01).nullable().optional(),
+  episodeDurationMinutes: optionalPositiveNumber,
   watchHours: z.coerce.number().nullable().optional(),
   rewatchCount: z.coerce.number().int().min(0).nullable().optional(),
   personalRating: z.coerce.number().min(0).max(10).nullable().optional(),
@@ -589,21 +594,9 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                 </div>
               )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Episodes This Season</Label>
-                  <Input type="number" {...register('totalEpisodes')} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Ep Duration (min)</Label>
-                  <Input
-                    type="number"
-                    step={0.01}
-                    min={0.01}
-                    placeholder="22.5"
-                    {...register('episodeDurationMinutes')}
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label>Episodes This Season</Label>
+                <Input type="number" {...register('totalEpisodes')} />
               </div>
             </div>
           )}
@@ -650,6 +643,18 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
               </p>
             </div>
           )}
+
+          {/* ── Episode Duration ── */}
+          <div className="space-y-1.5">
+            <Label>Episode Duration (min)</Label>
+            <Input
+              type="number"
+              step={0.01}
+              min={0.01}
+              placeholder="Optional"
+              {...register('episodeDurationMinutes')}
+            />
+          </div>
 
           {/* ── Watch Hours & Date Finished ── */}
           <div className={`grid gap-3 ${showCompletionFields ? 'grid-cols-2' : 'grid-cols-1'}`}>

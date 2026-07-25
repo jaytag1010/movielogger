@@ -8,6 +8,22 @@ import { getEffectiveMediaType } from '@/utils/formatters'
 export interface ProgressReleaseStatus {
   label: string
   tone: 'muted' | 'released' | 'upcoming' | 'airing'
+  /** Sort rank: 3=released, 2=airing, 1=not yet released, 0=unknown. */
+  releaseRank: number
+  releasedEpisodes: number | null
+  expectedEpisodes: number | null
+  episodesWaiting: number | null
+}
+
+function makeStatus(
+  label: string,
+  tone: ProgressReleaseStatus['tone'],
+  releaseRank: number,
+  releasedEpisodes: number | null = null,
+  expectedEpisodes: number | null = null,
+  episodesWaiting: number | null = null
+): ProgressReleaseStatus {
+  return { label, tone, releaseRank, releasedEpisodes, expectedEpisodes, episodesWaiting }
 }
 
 function todayIsoLocal(): string {
@@ -38,6 +54,8 @@ function cacheKey(entry: MediaEntry): string {
     entry.tmdbId ?? 'none',
     getEffectiveMediaType(entry),
     entry.seasonNumber ?? 'all',
+    entry.totalEpisodes ?? 'unknown-total',
+    entry.nextEpisodeToWatch ?? 'unknown-progress',
     entry.tmdbReleaseDate ?? 'no-date',
   ].join(':')
 }
@@ -61,48 +79,66 @@ async function buildReleaseStatus(entry: MediaEntry): Promise<ProgressReleaseSta
     }
 
     if (!releaseDate) {
-      return { label: '🎬 Release date unavailable', tone: 'muted' }
+      return makeStatus('🎬 Release date unavailable', 'muted', 0)
     }
 
     if (releaseDate > today) {
-      return { label: `🎬 Releases on ${formatIsoDate(releaseDate)}`, tone: 'upcoming' }
+      return makeStatus(`🎬 Releases on ${formatIsoDate(releaseDate)}`, 'upcoming', 1, 0, 1)
     }
 
-    return { label: '✅ Movie Released', tone: 'released' }
+    return makeStatus('✅ Movie Released', 'released', 3, 1, 1)
   }
 
   if (entry.tmdbId == null) {
-    return { label: '📺 Episode release information unavailable', tone: 'muted' }
+    return makeStatus('Episode release information unavailable', 'muted', 0)
   }
 
   try {
     const info = await fetchTVAvailabilityInfo(entry.tmdbId, entry.seasonNumber)
+    const expectedEpisodes = entry.totalEpisodes ?? info.totalEpisodes
 
-    if (info.totalEpisodes <= 0) {
-      return { label: '📺 Episode release information unavailable', tone: 'muted' }
+    if (info.totalEpisodes <= 0 || expectedEpisodes <= 0) {
+      return makeStatus('Episode release information unavailable', 'muted', 0)
     }
 
     if (info.airedEpisodes === 0) {
       if (info.firstEpisodeAirDate) {
-        return {
-          label: `📺 Season premieres on ${formatIsoDate(info.firstEpisodeAirDate)}`,
-          tone: 'upcoming',
-        }
+        return makeStatus(
+          `📺 Season premieres on ${formatIsoDate(info.firstEpisodeAirDate)}`,
+          'upcoming',
+          1,
+          0,
+          expectedEpisodes
+        )
       }
 
-      return { label: '📺 Episode release information unavailable', tone: 'muted' }
+      return makeStatus('Episode release information unavailable', 'muted', 0)
     }
 
-    if (info.isFullyAired) {
-      return { label: '✅ All Episodes Released', tone: 'released' }
+    const releasedEpisodes = Math.min(info.airedEpisodes, expectedEpisodes)
+    const episodesWaiting = Math.max(0, releasedEpisodes - (entry.nextEpisodeToWatch ?? 0))
+
+    if (releasedEpisodes >= expectedEpisodes) {
+      return makeStatus(
+        '✅ All Episodes Released',
+        'released',
+        3,
+        releasedEpisodes,
+        expectedEpisodes,
+        episodesWaiting
+      )
     }
 
-    return {
-      label: formatEpisodeReleasedLabel(info.airedEpisodes, info.totalEpisodes),
-      tone: 'airing',
-    }
+    return makeStatus(
+      formatEpisodeReleasedLabel(releasedEpisodes, expectedEpisodes),
+      'airing',
+      2,
+      releasedEpisodes,
+      expectedEpisodes,
+      episodesWaiting
+    )
   } catch {
-    return { label: '📺 Episode release information unavailable', tone: 'muted' }
+    return makeStatus('Episode release information unavailable', 'muted', 0)
   }
 }
 

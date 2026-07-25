@@ -65,3 +65,16 @@ export function comparePriorityDescThenCreatedDesc(
 
   return a.title.localeCompare(b.title)
 }
+
+export function comparePriorityAscThenCreatedDesc(
+  a: PriorityCreatedSortable,
+  b: PriorityCreatedSortable
+): number {
+  const priorityDiff = normalizePriority(a.priority) - normalizePriority(b.priority)
+  if (priorityDiff !== 0) return priorityDiff
+
+  const createdDiff = (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)
+  if (createdDiff !== 0) return createdDiff
+
+  return a.title.localeCompare(b.title)
+}

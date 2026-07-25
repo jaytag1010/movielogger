@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { format } from 'date-fns'
-import { CheckCircle, Star } from 'lucide-react'
+import { CheckCircle, Clock, Star } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -22,13 +22,15 @@ import { getDisplayTitle } from '@/utils/formatters'
 // ── Schema ───────────────────────────────────────────────────────────────────
 
 const schema = z.object({
-  personalRating: z.coerce
-    .number()
-    .min(0, 'Min 0')
-    .max(10, 'Max 10')
-    .nullable()
-    .optional(),
+  personalRating: z.preprocess(
+    (v) => (v === '' || v == null ? undefined : v),
+    z.coerce.number({ required_error: 'Rating is required' }).min(0, 'Min 0').max(10, 'Max 10')
+  ),
   dateFinished: z.string().min(1, 'Date is required'),
+  episodeDurationMinutes: z.preprocess(
+    (v) => (v === '' || v == null ? undefined : v),
+    z.coerce.number({ required_error: 'Episode duration is required' }).min(0.01, 'Episode duration is required')
+  ),
   specialNotes: z.string().optional(),
 })
 
@@ -37,8 +39,9 @@ type FormData = z.infer<typeof schema>
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface CompletionDetails {
-  personalRating: number | null
+  personalRating: number
   dateFinished: string       // 'yyyy-MM-dd'
+  episodeDurationMinutes: number
   specialNotes: string | null
 }
 
@@ -77,14 +80,16 @@ export function CompletionDetailsModal({
       dateFinished: entry.dateFinished
         ? format(entry.dateFinished.toDate(), 'yyyy-MM-dd')
         : format(new Date(), 'yyyy-MM-dd'),
+      episodeDurationMinutes: entry.episodeDurationMinutes ?? undefined,
       specialNotes: entry.specialNotes ?? '',
     })
   }, [entry, open, reset])
 
   function onSubmit(data: FormData) {
     onConfirm({
-      personalRating: data.personalRating ?? null,
+      personalRating: data.personalRating,
       dateFinished: data.dateFinished,
+      episodeDurationMinutes: data.episodeDurationMinutes,
       specialNotes: data.specialNotes || null,
     })
   }
@@ -112,7 +117,7 @@ export function CompletionDetailsModal({
             <Label className="flex items-center gap-1.5">
               <Star className="w-3.5 h-3.5 text-amber-400" />
               Personal Rating
-              <span className="text-white/30 font-normal">(0–10, optional)</span>
+              <span className="text-white/30 font-normal">(0–10, required)</span>
             </Label>
             <Input
               type="number"
@@ -137,6 +142,25 @@ export function CompletionDetailsModal({
             />
             {errors.dateFinished && (
               <p className="text-xs text-red-400">{errors.dateFinished.message}</p>
+            )}
+          </div>
+
+          {/* Episode Duration */}
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-blue-400" />
+              Episode Duration
+              <span className="text-white/30 font-normal">(minutes, required)</span>
+            </Label>
+            <Input
+              type="number"
+              min={0.01}
+              step={0.01}
+              placeholder="45.5"
+              {...register('episodeDurationMinutes')}
+            />
+            {errors.episodeDurationMinutes && (
+              <p className="text-xs text-red-400">{errors.episodeDurationMinutes.message}</p>
             )}
           </div>
 

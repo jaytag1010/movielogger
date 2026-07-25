@@ -18,12 +18,19 @@ import { TMDBLinkDialog } from '@/components/progress/TMDBLinkDialog'
 import { EditEntryModal } from '@/components/media/EditEntryModal'
 import { TMDBSearch } from '@/components/media/TMDBSearch'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useMedia } from '@/hooks/useMedia'
 import { useProgressReleaseStatuses } from '@/hooks/useProgressReleaseStatuses'
 import { MediaEntry, MediaStatus } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
-import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
-import { comparePriorityDescThenCreatedDesc } from '@/utils/priority'
+import { getDisplayTitle, getEffectiveMediaType, getEpisodesWatched } from '@/utils/formatters'
+import { comparePriorityAscThenCreatedDesc, comparePriorityDescThenCreatedDesc } from '@/utils/priority'
 import {
   fetchMovieMetadata,
   fetchTVMetadata,
@@ -36,6 +43,20 @@ import {
 } from '@/utils/completionStatistics'
 
 type ProgressFilter = 'all' | 'watching' | 'planned' | 'on_hold' | 'dropped'
+type ProgressSort =
+  | 'episodesWaiting'
+  | 'episodesWatched'
+  | 'progressPercent'
+  | 'releaseStatus'
+  | 'alpha'
+  | 'dateAddedDesc'
+  | 'dateAddedAsc'
+  | 'priorityDesc'
+  | 'priorityAsc'
+  | 'ratingDesc'
+  | 'status'
+
+const SORT_STORAGE_KEY = 'movielogger.progressSortPrefs'
 
 const FILTER_PILLS: { label: string; value: ProgressFilter }[] = [
   { label: 'All', value: 'all' },
@@ -46,6 +67,59 @@ const FILTER_PILLS: { label: string; value: ProgressFilter }[] = [
 ]
 
 const PROGRESS_STATUSES: MediaStatus[] = ['watching', 'planned', 'on_hold', 'dropped']
+const STATUS_SORT_ORDER: Record<ProgressFilter, number> = {
+  watching: 0,
+  planned: 1,
+  on_hold: 2,
+  dropped: 3,
+  all: 4,
+}
+
+const DEFAULT_SORT_BY_FILTER: Record<ProgressFilter, ProgressSort> = {
+  all: 'dateAddedDesc',
+  watching: 'dateAddedDesc',
+  planned: 'priorityDesc',
+  on_hold: 'priorityDesc',
+  dropped: 'dateAddedDesc',
+}
+
+const SORT_OPTIONS_BY_FILTER: Record<ProgressFilter, { label: string; value: ProgressSort }[]> = {
+  all: [
+    { label: 'Date Added (Newest)', value: 'dateAddedDesc' },
+    { label: 'Date Added (Oldest)', value: 'dateAddedAsc' },
+    { label: 'Alphabetical (A-Z)', value: 'alpha' },
+    { label: 'Status', value: 'status' },
+  ],
+  watching: [
+    { label: 'Episodes Waiting (Highest)', value: 'episodesWaiting' },
+    { label: 'Episodes Watched (Highest)', value: 'episodesWatched' },
+    { label: 'Progress Percentage (Highest)', value: 'progressPercent' },
+    { label: 'Release Status', value: 'releaseStatus' },
+    { label: 'Alphabetical (A-Z)', value: 'alpha' },
+    { label: 'Date Added (Newest)', value: 'dateAddedDesc' },
+    { label: 'Date Added (Oldest)', value: 'dateAddedAsc' },
+  ],
+  planned: [
+    { label: 'Highest Priority', value: 'priorityDesc' },
+    { label: 'Lowest Priority', value: 'priorityAsc' },
+    { label: 'Date Added (Newest)', value: 'dateAddedDesc' },
+    { label: 'Date Added (Oldest)', value: 'dateAddedAsc' },
+    { label: 'Alphabetical (A-Z)', value: 'alpha' },
+  ],
+  on_hold: [
+    { label: 'Highest Priority', value: 'priorityDesc' },
+    { label: 'Lowest Priority', value: 'priorityAsc' },
+    { label: 'Date Added (Newest)', value: 'dateAddedDesc' },
+    { label: 'Date Added (Oldest)', value: 'dateAddedAsc' },
+    { label: 'Alphabetical (A-Z)', value: 'alpha' },
+  ],
+  dropped: [
+    { label: 'Date Added (Newest)', value: 'dateAddedDesc' },
+    { label: 'Date Added (Oldest)', value: 'dateAddedAsc' },
+    { label: 'Personal Rating (Highest)', value: 'ratingDesc' },
+    { label: 'Alphabetical (A-Z)', value: 'alpha' },
+  ],
+}
 
 function sortProgressEntries(a: MediaEntry, b: MediaEntry): number {
   return (b.updatedAt?.toMillis() ?? 0) - (a.updatedAt?.toMillis() ?? 0)
@@ -57,6 +131,12 @@ function sortCreatedDescThenTitleAsc(a: MediaEntry, b: MediaEntry): number {
   return a.title.localeCompare(b.title)
 }
 
+function sortCreatedAscThenTitleAsc(a: MediaEntry, b: MediaEntry): number {
+  const createdDiff = (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0)
+  if (createdDiff !== 0) return createdDiff
+  return a.title.localeCompare(b.title)
+}
+
 export default function ProgressPage() {
   const { entries, editEntry, refreshEntry } = useMedia()
   const router = useRouter()
@@ -64,8 +144,34 @@ export default function ProgressPage() {
 
   // ── Filter state ──────────────────────────────────────────────────────────
   const [filter, setFilter] = useState<ProgressFilter>('watching')
+  const [sortPrefs, setSortPrefs] = useState<Record<ProgressFilter, ProgressSort>>(DEFAULT_SORT_BY_FILTER)
   const filteredIdsParam = searchParams.get('ids')
   const filteredLabel = searchParams.get('label')
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SORT_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as Partial<Record<ProgressFilter, ProgressSort>>
+      setSortPrefs({
+        all: parsed.all ?? DEFAULT_SORT_BY_FILTER.all,
+        watching: parsed.watching ?? DEFAULT_SORT_BY_FILTER.watching,
+        planned: parsed.planned ?? DEFAULT_SORT_BY_FILTER.planned,
+        on_hold: parsed.on_hold ?? DEFAULT_SORT_BY_FILTER.on_hold,
+        dropped: parsed.dropped ?? DEFAULT_SORT_BY_FILTER.dropped,
+      })
+    } catch {
+      setSortPrefs(DEFAULT_SORT_BY_FILTER)
+    }
+  }, [])
+
+  function updateSortPreference(value: ProgressSort) {
+    setSortPrefs((current) => {
+      const next = { ...current, [filter]: value }
+      localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(next))
+      return next
+    })
+  }
 
   useEffect(() => {
     const requestedFilter = searchParams.get('filter')
@@ -129,20 +235,77 @@ export default function ProgressPage() {
     return progressEntries.filter((e) => e.id && filteredIdSet.has(e.id))
   }, [filteredIdSet, progressEntries])
 
-  const filteredEntries = useMemo(() => {
-    if (notificationEntries) {
-      return filter === 'planned' || filter === 'on_hold'
-        ? [...notificationEntries].sort(comparePriorityDescThenCreatedDesc)
-        : notificationEntries
-    }
-    if (filter === 'all') return [...progressEntries].sort(sortCreatedDescThenTitleAsc)
-    const matchingEntries = progressEntries.filter((e) => e.status === filter)
-    return filter === 'planned' || filter === 'on_hold'
-      ? matchingEntries.sort(comparePriorityDescThenCreatedDesc)
-      : matchingEntries
-  }, [notificationEntries, progressEntries, filter])
+  const releaseStatuses = useProgressReleaseStatuses(progressEntries)
 
-  const releaseStatuses = useProgressReleaseStatuses(filteredEntries)
+  function compareBySort(a: MediaEntry, b: MediaEntry, sortBy: ProgressSort): number {
+    switch (sortBy) {
+      case 'episodesWaiting': {
+        const waitingDiff =
+          (releaseStatuses[b.id ?? '']?.episodesWaiting ?? 0) -
+          (releaseStatuses[a.id ?? '']?.episodesWaiting ?? 0)
+        if (waitingDiff !== 0) return waitingDiff
+        return sortCreatedDescThenTitleAsc(a, b)
+      }
+      case 'episodesWatched': {
+        const watchedDiff = getEpisodesWatched(b) - getEpisodesWatched(a)
+        if (watchedDiff !== 0) return watchedDiff
+        return sortCreatedDescThenTitleAsc(a, b)
+      }
+      case 'progressPercent': {
+        const pct = (entry: MediaEntry) => {
+          const total = getEffectiveMediaType(entry) === 'movie'
+            ? (entry.totalEpisodes ?? 1)
+            : (entry.totalEpisodes ?? 0)
+          return total > 0 ? getEpisodesWatched(entry) / total : 0
+        }
+        const pctDiff = pct(b) - pct(a)
+        if (pctDiff !== 0) return pctDiff
+        return sortCreatedDescThenTitleAsc(a, b)
+      }
+      case 'releaseStatus': {
+        const rankDiff =
+          (releaseStatuses[b.id ?? '']?.releaseRank ?? 0) -
+          (releaseStatuses[a.id ?? '']?.releaseRank ?? 0)
+        if (rankDiff !== 0) return rankDiff
+        return sortCreatedDescThenTitleAsc(a, b)
+      }
+      case 'priorityDesc':
+        return comparePriorityDescThenCreatedDesc(a, b)
+      case 'priorityAsc':
+        return comparePriorityAscThenCreatedDesc(a, b)
+      case 'dateAddedAsc':
+        return sortCreatedAscThenTitleAsc(a, b)
+      case 'alpha':
+        return a.title.localeCompare(b.title)
+      case 'ratingDesc': {
+        const ratingDiff = (b.personalRating ?? -1) - (a.personalRating ?? -1)
+        if (ratingDiff !== 0) return ratingDiff
+        return sortCreatedDescThenTitleAsc(a, b)
+      }
+      case 'status': {
+        const statusDiff =
+          STATUS_SORT_ORDER[a.status as ProgressFilter] -
+          STATUS_SORT_ORDER[b.status as ProgressFilter]
+        if (statusDiff !== 0) return statusDiff
+        return compareBySort(a, b, sortPrefs[a.status as ProgressFilter] ?? DEFAULT_SORT_BY_FILTER[a.status as ProgressFilter])
+      }
+      case 'dateAddedDesc':
+      default:
+        return sortCreatedDescThenTitleAsc(a, b)
+    }
+  }
+
+  const filteredEntries = useMemo(() => {
+    const sortBy = sortPrefs[filter] ?? DEFAULT_SORT_BY_FILTER[filter]
+    if (notificationEntries) {
+      const notificationSort = filteredLabel === 'Ready to Binge' ? 'priorityDesc' : sortBy
+      return [...notificationEntries].sort((a, b) => compareBySort(a, b, notificationSort))
+    }
+    const matchingEntries = filter === 'all'
+      ? progressEntries
+      : progressEntries.filter((e) => e.status === filter)
+    return [...matchingEntries].sort((a, b) => compareBySort(a, b, sortBy))
+  }, [notificationEntries, filteredLabel, progressEntries, filter, sortPrefs, releaseStatuses])
 
   const counts: Record<ProgressFilter, number> = useMemo(() => ({
     all: progressEntries.length,
@@ -196,17 +359,25 @@ export default function ProgressPage() {
       // watched = nextEpisodeToWatch - 1. If the user watched past the recorded
       // total (e.g. bonus episodes), update totalEpisodes to match — but never
       // reduce it.
-      const watchedEpisodes = (finishTarget.nextEpisodeToWatch ?? 1) - 1
+      const watchedEpisodes = getEpisodesWatched(finishTarget)
       const shouldUpdateTotal =
         getEffectiveMediaType(finishTarget) === 'series' &&
         watchedEpisodes > 0 &&
         (finishTarget.totalEpisodes == null || watchedEpisodes > finishTarget.totalEpisodes)
+      const completedTotalEpisodes = shouldUpdateTotal ? watchedEpisodes : finishTarget.totalEpisodes
+      const completedWatchHours = getEffectiveMediaType(finishTarget) === 'series'
+        ? completedTotalEpisodes != null
+          ? Math.round((completedTotalEpisodes * details.episodeDurationMinutes / 60) * 100) / 100
+          : null
+        : Math.round((details.episodeDurationMinutes / 60) * 100) / 100
 
       const completedAt = Timestamp.fromDate(new Date(details.dateFinished))
       await editEntry(finishTarget.id, {
         status: 'completed',
         dateFinished: completedAt,
         personalRating: details.personalRating,
+        episodeDurationMinutes: details.episodeDurationMinutes,
+        watchHours: completedWatchHours,
         specialNotes: details.specialNotes,
         nextEpisodeToWatch: null,
         ...(shouldUpdateTotal ? { totalEpisodes: watchedEpisodes } : {}),
@@ -217,9 +388,11 @@ export default function ProgressPage() {
         status: 'completed',
         dateFinished: completedAt,
         personalRating: details.personalRating,
+        episodeDurationMinutes: details.episodeDurationMinutes,
+        watchHours: completedWatchHours,
         specialNotes: details.specialNotes,
         nextEpisodeToWatch: null,
-        totalEpisodes: shouldUpdateTotal ? watchedEpisodes : finishTarget.totalEpisodes,
+        totalEpisodes: completedTotalEpisodes,
         updatedAt: Timestamp.now(),
       }
       const completedLibrary = entries.some((entry) => entry.id === completedEntry.id)
@@ -516,31 +689,52 @@ export default function ProgressPage() {
         </GlassCard>
 
         {/* ── Filter pills + Bulk Refresh ── */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {FILTER_PILLS.map(({ label, value }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setFilter(value)}
-                className={cn(
-                  'inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-3 py-1.5 border transition-all',
-                  filter === value
-                    ? 'bg-blue-600/20 border-blue-500/40 text-blue-300'
-                    : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white/70'
-                )}
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {FILTER_PILLS.map(({ label, value }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setFilter(value)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-3 py-1.5 border transition-all',
+                    filter === value
+                      ? 'bg-blue-600/20 border-blue-500/40 text-blue-300'
+                      : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white/70'
+                  )}
+                >
+                  {label}
+                  {counts[value] > 0 && (
+                    <span className={cn(
+                      'text-[10px] rounded-full px-1.5 py-0.5 font-bold',
+                      filter === value ? 'bg-blue-500/30 text-blue-300' : 'bg-white/10 text-white/30'
+                    )}>
+                      {counts[value]}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-white/35">Sort</span>
+              <Select
+                value={sortPrefs[filter] ?? DEFAULT_SORT_BY_FILTER[filter]}
+                onValueChange={(value) => updateSortPreference(value as ProgressSort)}
               >
-                {label}
-                {counts[value] > 0 && (
-                  <span className={cn(
-                    'text-[10px] rounded-full px-1.5 py-0.5 font-bold',
-                    filter === value ? 'bg-blue-500/30 text-blue-300' : 'bg-white/10 text-white/30'
-                  )}>
-                    {counts[value]}
-                  </span>
-                )}
-              </button>
-            ))}
+                <SelectTrigger className="h-8 w-[220px] max-w-[calc(100vw-2rem)] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS_BY_FILTER[filter].map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <Button
