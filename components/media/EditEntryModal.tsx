@@ -35,6 +35,7 @@ import { uploadPoster, deletePoster, validatePosterFile } from '@/lib/imgbb'
 import { getDisplayPosterUrl } from '@/utils/formatters'
 import { format } from 'date-fns'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
+import { calculateStoredWatchHours } from '@/utils/watchHours'
 
 const COMMON_GENRES = [
   'Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary',
@@ -106,15 +107,10 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
   const showCompletionFields = watchStatus === 'completed'
 
   const isSeriesType = watchType === 'series'
-  const calculatedSeriesWatchHours: number | null = (() => {
-    if (!isSeriesType) return null
-    const eps = watchTotalEpisodes ?? null
-    const dur = watchEpDuration   ?? null
-    if (eps != null && eps > 0 && dur != null && dur > 0) {
-      return Math.round((eps * dur / 60) * 100) / 100
-    }
-    return null
-  })()
+  const calculatedWatchHours = calculateStoredWatchHours({
+    totalEpisodes: isSeriesType ? watchTotalEpisodes : (watchTotalEpisodes ?? 1),
+    episodeDurationMinutes: watchEpDuration,
+  })
 
   // ── Genre state ──────────────────────────────────────────────────────────
   const [genres, setGenres]         = useState<string[]>([])
@@ -350,7 +346,10 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
         yearMade:               data.yearMade               ?? null,
         totalEpisodes:          correctedTotal,
         episodeDurationMinutes: data.episodeDurationMinutes ?? null,
-        watchHours:             isSeriesType ? (calculatedSeriesWatchHours ?? null) : (data.watchHours ?? null),
+        watchHours:             calculateStoredWatchHours({
+          totalEpisodes: correctedTotal,
+          episodeDurationMinutes: data.episodeDurationMinutes ?? null,
+        }),
         rewatchCount:           data.rewatchCount ?? entry.rewatchCount ?? 0,
         personalRating:         data.personalRating         ?? null,
         priority,
@@ -660,12 +659,12 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
           <div className={`grid gap-3 ${showCompletionFields ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <div className="space-y-1.5">
               <Label>Watch Hours</Label>
-              {isSeriesType ? (
+              {true ? (
                 <>
                   <Input
                     type="number"
                     step={0.01}
-                    value={calculatedSeriesWatchHours ?? ''}
+                    value={calculatedWatchHours.toFixed(2)}
                     readOnly
                     className="bg-white/[0.02] text-white/50 cursor-not-allowed"
                   />

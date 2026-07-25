@@ -5,8 +5,9 @@ import { Pencil, Trash2, Film, Tv } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { MediaEntry, MEDIA_STATUS_LABELS, MEDIA_STATUS_COLORS } from '@/types/media'
-import { getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
+import { formatWatchHours, getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
 import { cn } from '@/utils/cn'
+import { calculateEntryWatchHours } from '@/utils/watchTime'
 
 interface MediaTableProps {
   entries: MediaEntry[]
@@ -121,7 +122,7 @@ export function MediaTable({ entries, onEdit, onDelete }: MediaTableProps) {
 
                 {/* Watch Hours */}
                 <td className="px-3 py-2 text-right text-white/60 text-xs tabular-nums">
-                  {calcWatchHours(entry)}
+                  {formatWatchHours(calculateEntryWatchHours(entry))}
                 </td>
 
                 {/* Actions */}

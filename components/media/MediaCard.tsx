@@ -158,12 +158,10 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
 
             {/* Stats row */}
             <div className="flex items-center gap-3 mt-1.5 text-xs text-white/40">
-              {watchHours > 0 && (
-                <span className="flex items-center gap-0.5">
-                  <Clock className="w-3 h-3" />
-                  {formatWatchHours(watchHours)}
-                </span>
-              )}
+              <span className="flex items-center gap-0.5">
+                <Clock className="w-3 h-3" />
+                {formatWatchHours(watchHours)}
+              </span>
               {entry.dateFinished && (
                 <span className="flex items-center gap-0.5">
                   <Calendar className="w-3 h-3" />

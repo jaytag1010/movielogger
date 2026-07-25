@@ -19,12 +19,112 @@ import {
 } from 'firebase/firestore'
 import { initApp } from './config'
 import { MediaEntry, MediaEntryInput, MediaEntryUpdate } from '@/types/media'
-import { generateInternalId, reserveInternalIds } from '@/utils/idGenerator'
+import { formatInternalId, generateInternalId, parseInternalIdNumber, reserveInternalIds } from '@/utils/idGenerator'
+import { normalizeCountry } from '@/utils/countries'
+import { calculateStoredWatchHours, watchHoursDiffer } from '@/utils/watchHours'
 
 const COLLECTION = 'mediaEntries'
+const SEQUENTIAL_ID_MIGRATION = 'sequentialInternalIdsV1'
 
 function db() {
   return getFirestore(initApp())
+}
+
+function normalizeEntryInput<T extends Partial<MediaEntryInput | MediaEntryUpdate>>(input: T): T {
+  const normalized: Record<string, unknown> = { ...input }
+
+  if ('country' in normalized) {
+    normalized.country = normalizeCountry(normalized.country as string | null | undefined)
+  }
+
+  if ('totalEpisodes' in normalized || 'episodeDurationMinutes' in normalized) {
+    normalized.watchHours = calculateStoredWatchHours({
+      totalEpisodes: normalized.totalEpisodes as number | null | undefined,
+      episodeDurationMinutes: normalized.episodeDurationMinutes as number | null | undefined,
+    })
+  }
+
+  return normalized as T
+}
+
+function migrationSort(a: { id: string; data: MediaEntry }, b: { id: string; data: MediaEntry }): number {
+  const aCreated = a.data.createdAt?.toMillis?.() ?? 0
+  const bCreated = b.data.createdAt?.toMillis?.() ?? 0
+  if (aCreated !== bCreated) return aCreated - bCreated
+
+  const aYear = a.data.yearMade ?? Number.MAX_SAFE_INTEGER
+  const bYear = b.data.yearMade ?? Number.MAX_SAFE_INTEGER
+  if (aYear !== bYear) return aYear - bYear
+
+  const titleDiff = a.data.title.localeCompare(b.data.title)
+  if (titleDiff !== 0) return titleDiff
+
+  return a.id.localeCompare(b.id)
+}
+
+async function migrateUserEntriesIfNeeded(userId: string, docs: { id: string; data: MediaEntry }[]): Promise<MediaEntry[]> {
+  const firestore = db()
+  const counterRef = doc(firestore, 'counters', `user_${userId}`)
+  const counterSnap = await getDoc(counterRef)
+  const counter = counterSnap.exists() ? counterSnap.data() : {}
+  const sequentialIdsAlreadyMigrated = counter[SEQUENTIAL_ID_MIGRATION] === true
+  const sortedForIds = [...docs].sort(migrationSort)
+  const targetInternalIds = new Map(sortedForIds.map((item, index) => [item.id, formatInternalId(index + 1)]))
+  const migratedEntries: MediaEntry[] = []
+  const pendingUpdates: { id: string; updates: Record<string, unknown> }[] = []
+
+  for (const item of docs) {
+    const entry = { ...item.data }
+    const updates: Record<string, unknown> = {}
+
+    if (!sequentialIdsAlreadyMigrated) {
+      const nextInternalId = targetInternalIds.get(item.id)!
+      if (entry.internalId !== nextInternalId) {
+        updates.internalId = nextInternalId
+        entry.internalId = nextInternalId
+      }
+    }
+
+    const normalizedCountry = normalizeCountry(entry.country)
+    if (entry.country !== normalizedCountry) {
+      updates.country = normalizedCountry
+      entry.country = normalizedCountry
+    }
+
+    const calculatedWatchHours = calculateStoredWatchHours(entry)
+    if (watchHoursDiffer(entry.watchHours, calculatedWatchHours)) {
+      updates.watchHours = calculatedWatchHours
+      entry.watchHours = calculatedWatchHours
+    }
+
+    if (Object.keys(updates).length > 0) {
+      pendingUpdates.push({ id: item.id, updates })
+    }
+
+    migratedEntries.push(entry)
+  }
+
+  if (pendingUpdates.length > 0 || !sequentialIdsAlreadyMigrated) {
+    const CHUNK = 450
+    for (let i = 0; i < pendingUpdates.length; i += CHUNK) {
+      const batch = writeBatch(firestore)
+      pendingUpdates.slice(i, i + CHUNK).forEach((item) => {
+        batch.update(doc(firestore, COLLECTION, item.id), item.updates)
+      })
+      await batch.commit()
+    }
+
+    const currentCount = typeof counter.count === 'number' ? counter.count : 0
+    const maxExistingId = migratedEntries.reduce((max, entry) => {
+      return Math.max(max, parseInternalIdNumber(entry.internalId) ?? 0)
+    }, 0)
+    await setDoc(counterRef, {
+      count: Math.max(currentCount, maxExistingId),
+      [SEQUENTIAL_ID_MIGRATION]: true,
+    }, { merge: true })
+  }
+
+  return migratedEntries
 }
 
 export async function createMediaEntry(
@@ -33,8 +133,10 @@ export async function createMediaEntry(
 ): Promise<MediaEntry> {
   const internalId = await generateInternalId(userId)
 
+  const normalizedInput = normalizeEntryInput(input)
+
   const entry = {
-    ...input,
+    ...normalizedInput,
     userId,
     internalId,
     createdAt: serverTimestamp(),
@@ -59,7 +161,13 @@ export async function updateMediaEntry(
   }
 ): Promise<void> {
   const docRef = doc(db(), COLLECTION, entryId)
+  const currentSnap = await getDoc(docRef)
+  const current = currentSnap.exists() ? currentSnap.data() as MediaEntry : null
+  const source = current ? { ...current, ...updates } : updates
+  const normalizedUpdates = normalizeEntryInput(source)
   const payload: Record<string, unknown> = { ...updates }
+  if ('country' in normalizedUpdates) payload.country = normalizedUpdates.country
+  if ('watchHours' in normalizedUpdates) payload.watchHours = normalizedUpdates.watchHours
   if (!options?.preserveOrder) {
     payload.updatedAt = serverTimestamp()
   }
@@ -86,7 +194,8 @@ export async function getUserMediaEntries(userId: string): Promise<MediaEntry[]>
     where('userId', '==', userId)
   )
   const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as MediaEntry))
+  const docs = snap.docs.map((d) => ({ id: d.id, data: { id: d.id, ...d.data() } as MediaEntry }))
+  return migrateUserEntriesIfNeeded(userId, docs)
 }
 
 export async function getUserMediaEntriesPaginated(
@@ -112,7 +221,7 @@ export async function getUserMediaEntriesPaginated(
   }
 
   const snap = await getDocs(q)
-  const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MediaEntry))
+  const entries = snap.docs.map((d) => normalizeEntryInput({ id: d.id, ...d.data() } as MediaEntry) as MediaEntry)
   const newLastDoc = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null
 
   return { entries, lastDoc: newLastDoc }
@@ -141,8 +250,9 @@ export async function batchCreateMediaEntries(
 
     chunk.forEach((input, j) => {
       const docRef = doc(collection(firestore, COLLECTION))
+      const normalizedInput = normalizeEntryInput(input)
       batch.set(docRef, {
-        ...input,
+        ...normalizedInput,
         userId,
         internalId: ids[i + j],
         createdAt: serverTimestamp(),

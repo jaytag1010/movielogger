@@ -4,6 +4,7 @@ import { MediaEntry, MediaStatus } from '@/types/media'
 import { Timestamp } from 'firebase/firestore'
 import { calculateTotalWatchHours } from '@/utils/watchTime'
 import { getEffectiveMediaType } from '@/utils/formatters'
+import { calculateStoredWatchHours } from '@/utils/watchHours'
 
 function formatTimestamp(ts: Timestamp | null | undefined): string {
   if (!ts) return ''
@@ -24,7 +25,7 @@ function entryToRow(entry: MediaEntry) {
     'Total Episodes': entry.totalEpisodes ?? '',
     'Episode Duration': entry.episodeDurationMinutes ?? '',
     'Episode Average Duration': entry.episodeDurationMinutes ?? '',
-    'Watch Hours': entry.watchHours ?? '',
+    'Watch Hours': Number(calculateStoredWatchHours(entry).toFixed(2)),
     'Rewatch Count': entry.rewatchCount ?? 0,
     'Personal Rating': entry.personalRating ?? '',
     Priority: entry.priority ?? '',
@@ -250,6 +251,9 @@ function styleMainWorksheet(worksheet: XLSX.WorkSheet, rows: ExportRow[]) {
           vertical: 'top',
           wrapText: isHeader || header === 'Title' || header === 'Special Notes',
         },
+      }
+      if (!isHeader && header === 'Watch Hours') {
+        cell.z = '0.00'
       }
     }
   }

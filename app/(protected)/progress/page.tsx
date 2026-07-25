@@ -41,6 +41,7 @@ import {
   calculateCompletionStatistics,
   CompletionStatistics,
 } from '@/utils/completionStatistics'
+import { compareInternalIdAscThenTitleAsc, compareInternalIdDescThenTitleAsc } from '@/utils/internalIdSort'
 
 type ProgressFilter = 'all' | 'watching' | 'planned' | 'on_hold' | 'dropped'
 type ProgressSort =
@@ -126,15 +127,11 @@ function sortProgressEntries(a: MediaEntry, b: MediaEntry): number {
 }
 
 function sortCreatedDescThenTitleAsc(a: MediaEntry, b: MediaEntry): number {
-  const createdDiff = (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)
-  if (createdDiff !== 0) return createdDiff
-  return a.title.localeCompare(b.title)
+  return compareInternalIdDescThenTitleAsc(a, b)
 }
 
 function sortCreatedAscThenTitleAsc(a: MediaEntry, b: MediaEntry): number {
-  const createdDiff = (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0)
-  if (createdDiff !== 0) return createdDiff
-  return a.title.localeCompare(b.title)
+  return compareInternalIdAscThenTitleAsc(a, b)
 }
 
 export default function ProgressPage() {

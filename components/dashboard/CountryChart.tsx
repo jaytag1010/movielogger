@@ -17,6 +17,7 @@ import { Globe } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { GlassCard } from '@/components/common/GlassCard'
 import { normalizeCountry } from '@/utils/countries'
+import { calculateEntryWatchHours } from '@/utils/watchTime'
 import {
   Select,
   SelectContent,
@@ -67,7 +68,7 @@ function makeTooltip(mode: CountryMode) {
     const label =
       mode === 'titles'
         ? `${d.value} title${d.value !== 1 ? 's' : ''}`
-        : `${Number.isInteger(d.value) ? d.value : d.value.toFixed(1)} hrs`
+        : `${d.value.toFixed(2)} h`
     return (
       <div className="bg-[#0D0D1A] border border-white/10 rounded-xl px-3 py-2 text-sm shadow-xl">
         <p className="text-white font-medium">{d.name}</p>
@@ -110,8 +111,7 @@ export function CountryChart({ entries }: CountryChartProps) {
       if (mode === 'titles') {
         totals[country] = (totals[country] || 0) + 1
       } else {
-        // Hours mode: skip entries with no watchHours
-        const hours = entry.watchHours ?? 0
+        const hours = calculateEntryWatchHours(entry)
         if (hours === 0) continue
         totals[country] = (totals[country] || 0) + hours
       }

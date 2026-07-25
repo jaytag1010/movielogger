@@ -15,14 +15,7 @@ export function formatDateRelative(date: Timestamp | Date | null | undefined): s
 }
 
 export function formatWatchTime(hours: number | null | undefined): string {
-  if (!hours || hours === 0) return '0h'
-  if (hours < 1) {
-    return `${Math.round(hours * 60)}m`
-  }
-  const h = Math.floor(hours)
-  const m = Math.round((hours - h) * 60)
-  if (m === 0) return `${h}h`
-  return `${h}h ${m}m`
+  return formatWatchHours(hours)
 }
 
 export function formatWatchTimeDetailed(totalHours: number): {
@@ -54,8 +47,7 @@ export function formatRating(rating: number | null | undefined): string {
  * Examples: 8.76 → "8.76h"   3101.17 → "3101.17h"   0 → "0.00h"
  */
 export function formatWatchHours(hours: number | null | undefined): string {
-  if (hours == null || hours === 0) return '0.00h'
-  return `${hours.toFixed(2)}h`
+  return `${(hours ?? 0).toFixed(2)} h`
 }
 
 export function formatNumber(n: number | null | undefined): string {

@@ -94,8 +94,7 @@ export function WatchTimeProjection({ entries }: WatchTimeProjectionProps) {
           <span>Total content watched</span>
         </div>
         <p className="text-2xl font-bold text-white">
-          {projection.totalHours.toFixed(2)}
-          <span className="text-sm font-normal text-white/50 ml-1">hours</span>
+          {formatWatchHours(projection.totalHours)}
         </p>
       </div>
 

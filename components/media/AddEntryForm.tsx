@@ -32,6 +32,7 @@ import { useTMDBDetails, useTMDBSeasonDetails } from '@/hooks/useTMDB'
 import { MediaStatus, MEDIA_STATUS_LABELS } from '@/types/media'
 import { useMedia } from '@/hooks/useMedia'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
+import { calculateStoredWatchHours } from '@/utils/watchHours'
 
 const COMMON_GENRES = [
   'Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary',
@@ -109,6 +110,12 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
   const watchSeasonNumber = watch('seasonNumber')
   const watchStatus = watch('status')
   const watchRewatchCount = watch('rewatchCount')
+  const watchTotalEpisodes = watch('totalEpisodes')
+  const watchEpDuration = watch('episodeDurationMinutes')
+  const calculatedWatchHours = calculateStoredWatchHours({
+    totalEpisodes: watchType === 'movie' ? (watchTotalEpisodes ?? 1) : watchTotalEpisodes,
+    episodeDurationMinutes: watchEpDuration,
+  })
   const showPersonalRating = watchStatus === 'completed' || watchStatus === 'dropped'
   const showCompletionFields = watchStatus === 'completed'
 
@@ -222,7 +229,10 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         yearMade: data.yearMade ?? null,
         totalEpisodes: resolvedTotalEpisodes,
         episodeDurationMinutes: data.episodeDurationMinutes ?? null,
-        watchHours: data.watchHours ?? null,
+        watchHours: calculateStoredWatchHours({
+          totalEpisodes: resolvedTotalEpisodes,
+          episodeDurationMinutes: data.episodeDurationMinutes ?? null,
+        }),
         rewatchCount: data.rewatchCount ?? 0,
         personalRating: data.personalRating ?? null,
         priority,
@@ -577,7 +587,14 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>Watch Hours</Label>
-          <Input type="number" step={0.01} min={0} placeholder="e.g. 7.33" {...register('watchHours')} />
+          <Input
+            type="number"
+            step={0.01}
+            min={0}
+            value={calculatedWatchHours.toFixed(2)}
+            readOnly
+            className="bg-white/[0.02] text-white/50 cursor-not-allowed"
+          />
         </div>
         <div className="space-y-1.5">
           <Label>Age Rating</Label>

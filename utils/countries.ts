@@ -176,6 +176,9 @@ export const ISO_TO_COUNTRY: Record<string, string> = {
  */
 const COUNTRY_NAME_ALIASES: Record<string, string> = {
   // United States variants
+  'us':                        'United States',
+  'u.s.':                      'United States',
+  'u.s':                       'United States',
   'usa':                       'United States',
   'u.s.a.':                    'United States',
   'u.s.a':                     'United States',

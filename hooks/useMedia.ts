@@ -13,6 +13,9 @@ import {
 import { MediaEntry, MediaEntryInput, MediaEntryUpdate, MediaFilters } from '@/types/media'
 import { getEffectiveMediaType } from '@/utils/formatters'
 import { comparePriorityAscThenUpdatedDesc, comparePriorityDescThenUpdatedDesc } from '@/utils/priority'
+import { getInternalIdSortNumber } from '@/utils/internalIdSort'
+import { normalizeCountry } from '@/utils/countries'
+import { calculateStoredWatchHours } from '@/utils/watchHours'
 
 export function useMedia() {
   const { entries, loading, filters, activeTab } = useMediaStore()
@@ -49,7 +52,16 @@ export function useMedia() {
 
   const editEntry = useCallback(async (id: string, updates: MediaEntryUpdate) => {
     await updateMediaEntry(id, updates)
-    useMediaStore.getState().updateEntry(id, updates as Partial<MediaEntry>)
+    const current = useMediaStore.getState().entries.find((entry) => entry.id === id)
+    const merged = current ? { ...current, ...updates } : updates
+    const normalizedUpdates: Partial<MediaEntry> = { ...(updates as Partial<MediaEntry>) }
+    if ('country' in merged) {
+      normalizedUpdates.country = normalizeCountry(merged.country)
+    }
+    if ('totalEpisodes' in merged || 'episodeDurationMinutes' in merged) {
+      normalizedUpdates.watchHours = calculateStoredWatchHours(merged)
+    }
+    useMediaStore.getState().updateEntry(id, normalizedUpdates)
   }, [])
 
   /**
@@ -63,7 +75,15 @@ export function useMedia() {
     // Update in-place: map over the existing array without reordering
     const current = useMediaStore.getState().entries
     useMediaStore.getState().setEntries(
-      current.map((e) => e.id === id ? { ...e, ...updates } : e)
+      current.map((e) => {
+        if (e.id !== id) return e
+        const merged = { ...e, ...updates }
+        return {
+          ...merged,
+          country: normalizeCountry(merged.country),
+          watchHours: calculateStoredWatchHours(merged),
+        }
+      })
     )
   }, [])
 
@@ -163,9 +183,7 @@ function getFilteredEntries(entries: MediaEntry[], filters: MediaFilters): Media
         return order * (toSortKey(a) - toSortKey(b))
       }
       case 'createdAt': {
-        const aDate = a.createdAt?.toMillis() ?? 0
-        const bDate = b.createdAt?.toMillis() ?? 0
-        return order * (aDate - bDate)
+        return order * (getInternalIdSortNumber(a) - getInternalIdSortNumber(b))
       }
       default:
         return 0

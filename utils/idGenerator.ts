@@ -25,7 +25,7 @@ export async function reserveInternalIds(userId: string, count: number): Promise
     const counterDoc = await transaction.get(counterRef)
     const currentCount = counterDoc.exists() ? (counterDoc.data().count as number) : 0
     const newCount = currentCount + count
-    transaction.set(counterRef, { count: newCount })
+    transaction.set(counterRef, { count: newCount }, { merge: true })
     return currentCount // first reserved number is currentCount + 1
   })
 

@@ -1,4 +1,5 @@
 import { MediaEntry } from '@/types/media'
+import { calculateWatchHoursFromRuntime } from '@/utils/watchHours'
 
 interface WatchHourOptions {
   includeRewatchHours?: boolean
@@ -10,16 +11,7 @@ export function calculateEntryWatchHours(entry: MediaEntry, options: WatchHourOp
     return hours * (1 + Math.max(0, entry.rewatchCount ?? 0))
   }
 
-  if (entry.watchHours && entry.watchHours > 0) {
-    return applyRewatchMultiplier(entry.watchHours)
-  }
-  if (entry.totalEpisodes && entry.episodeDurationMinutes) {
-    return applyRewatchMultiplier((entry.totalEpisodes * entry.episodeDurationMinutes) / 60)
-  }
-  if (entry.episodeDurationMinutes) {
-    return applyRewatchMultiplier(entry.episodeDurationMinutes / 60)
-  }
-  return 0
+  return applyRewatchMultiplier(calculateWatchHoursFromRuntime(entry))
 }
 
 export function calculateTotalWatchHours(entries: MediaEntry[], options: WatchHourOptions = {}): number {
