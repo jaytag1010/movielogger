@@ -19,12 +19,11 @@ import {
 } from 'firebase/firestore'
 import { initApp } from './config'
 import { MediaEntry, MediaEntryInput, MediaEntryUpdate } from '@/types/media'
-import { formatInternalId, generateInternalId, parseInternalIdNumber, reserveInternalIds } from '@/utils/idGenerator'
+import { formatInternalId, generateInternalId, reserveInternalIds } from '@/utils/idGenerator'
 import { normalizeCountry } from '@/utils/countries'
 import { calculateStoredWatchHours, watchHoursDiffer } from '@/utils/watchHours'
 
 const COLLECTION = 'mediaEntries'
-const SEQUENTIAL_ID_MIGRATION = 'sequentialInternalIdsV1'
 
 function db() {
   return getFirestore(initApp())
@@ -67,7 +66,6 @@ async function migrateUserEntriesIfNeeded(userId: string, docs: { id: string; da
   const counterRef = doc(firestore, 'counters', `user_${userId}`)
   const counterSnap = await getDoc(counterRef)
   const counter = counterSnap.exists() ? counterSnap.data() : {}
-  const sequentialIdsAlreadyMigrated = counter[SEQUENTIAL_ID_MIGRATION] === true
   const sortedForIds = [...docs].sort(migrationSort)
   const targetInternalIds = new Map(sortedForIds.map((item, index) => [item.id, formatInternalId(index + 1)]))
   const migratedEntries: MediaEntry[] = []
@@ -77,12 +75,10 @@ async function migrateUserEntriesIfNeeded(userId: string, docs: { id: string; da
     const entry = { ...item.data }
     const updates: Record<string, unknown> = {}
 
-    if (!sequentialIdsAlreadyMigrated) {
-      const nextInternalId = targetInternalIds.get(item.id)!
-      if (entry.internalId !== nextInternalId) {
-        updates.internalId = nextInternalId
-        entry.internalId = nextInternalId
-      }
+    const nextInternalId = targetInternalIds.get(item.id)!
+    if (entry.internalId !== nextInternalId) {
+      updates.internalId = nextInternalId
+      entry.internalId = nextInternalId
     }
 
     const normalizedCountry = normalizeCountry(entry.country)
@@ -104,7 +100,7 @@ async function migrateUserEntriesIfNeeded(userId: string, docs: { id: string; da
     migratedEntries.push(entry)
   }
 
-  if (pendingUpdates.length > 0 || !sequentialIdsAlreadyMigrated) {
+  if (pendingUpdates.length > 0 || counter.count !== migratedEntries.length) {
     const CHUNK = 450
     for (let i = 0; i < pendingUpdates.length; i += CHUNK) {
       const batch = writeBatch(firestore)
@@ -114,13 +110,9 @@ async function migrateUserEntriesIfNeeded(userId: string, docs: { id: string; da
       await batch.commit()
     }
 
-    const currentCount = typeof counter.count === 'number' ? counter.count : 0
-    const maxExistingId = migratedEntries.reduce((max, entry) => {
-      return Math.max(max, parseInternalIdNumber(entry.internalId) ?? 0)
-    }, 0)
     await setDoc(counterRef, {
-      count: Math.max(currentCount, maxExistingId),
-      [SEQUENTIAL_ID_MIGRATION]: true,
+      count: migratedEntries.length,
+      compactSequentialIdsV2: true,
     }, { merge: true })
   }
 
@@ -141,6 +133,7 @@ export async function createMediaEntry(
     internalId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    watchingActivityAt: normalizedInput.status === 'watching' ? serverTimestamp() : null,
   }
 
   const docRef = await addDoc(collection(db(), COLLECTION), entry)
@@ -154,8 +147,8 @@ export async function updateMediaEntry(
   options?: {
     /**
      * When true, skip updating `updatedAt`.
-     * Use this for background metadata refreshes that should not disturb the
-     * user-established ordering of the In Progress list (which sorts by updatedAt).
+     * Use this for background metadata refreshes that should not disturb
+     * generic modification timestamps or progress-specific activity ordering.
      */
     preserveOrder?: boolean
   }
@@ -168,6 +161,12 @@ export async function updateMediaEntry(
   const payload: Record<string, unknown> = { ...updates }
   if ('country' in normalizedUpdates) payload.country = normalizedUpdates.country
   if ('watchHours' in normalizedUpdates) payload.watchHours = normalizedUpdates.watchHours
+  if (
+    ('nextEpisodeToWatch' in updates && updates.nextEpisodeToWatch !== current?.nextEpisodeToWatch) ||
+    (updates.status === 'watching' && current?.status !== 'watching')
+  ) {
+    payload.watchingActivityAt = serverTimestamp()
+  }
   if (!options?.preserveOrder) {
     payload.updatedAt = serverTimestamp()
   }
@@ -175,7 +174,38 @@ export async function updateMediaEntry(
 }
 
 export async function deleteMediaEntry(entryId: string): Promise<void> {
-  await deleteDoc(doc(db(), COLLECTION, entryId))
+  const firestore = db()
+  const docRef = doc(firestore, COLLECTION, entryId)
+  const snap = await getDoc(docRef)
+  if (!snap.exists()) return
+  const userId = (snap.data() as MediaEntry).userId
+  await deleteDoc(docRef)
+  await compactUserInternalIds(userId)
+}
+
+async function compactUserInternalIds(userId: string): Promise<void> {
+  const firestore = db()
+  const q = query(collection(firestore, COLLECTION), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  const docs = snap.docs.map((d) => ({ id: d.id, data: { id: d.id, ...d.data() } as MediaEntry }))
+  const sorted = docs.sort(migrationSort)
+
+  const CHUNK = 450
+  for (let i = 0; i < sorted.length; i += CHUNK) {
+    const batch = writeBatch(firestore)
+    sorted.slice(i, i + CHUNK).forEach((item, offset) => {
+      const nextId = formatInternalId(i + offset + 1)
+      if (item.data.internalId !== nextId) {
+        batch.update(doc(firestore, COLLECTION, item.id), { internalId: nextId })
+      }
+    })
+    await batch.commit()
+  }
+
+  await setDoc(doc(firestore, 'counters', `user_${userId}`), {
+    count: sorted.length,
+    compactSequentialIdsV2: true,
+  }, { merge: true })
 }
 
 export async function getMediaEntry(entryId: string): Promise<MediaEntry | null> {
@@ -257,6 +287,7 @@ export async function batchCreateMediaEntries(
         internalId: ids[i + j],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        watchingActivityAt: normalizedInput.status === 'watching' ? serverTimestamp() : null,
       })
     })
 

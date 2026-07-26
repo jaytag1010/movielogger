@@ -86,6 +86,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
   const [genres, setGenres] = useState<string[]>([])
   const [genreInput, setGenreInput] = useState('')
   const [showDiscard, setShowDiscard] = useState(false)
+  const [submitMode, setSubmitMode] = useState<'exit' | 'another'>('exit')
   const { fetchDetails, loading: tmdbLoading } = useTMDBDetails()
   const { fetchSeason, loading: seasonLoading } = useTMDBSeasonDetails()
   const { addEntry, entries } = useMedia()
@@ -94,6 +95,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
     register,
     handleSubmit,
     setValue,
+    setFocus,
     watch,
     control,
     reset,
@@ -249,11 +251,22 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         manualPosterUrl: null,
         legacyId: null,
       })
-      toast.success(`"${data.title}" added to your list!`)
-      reset({ status: 'completed', rewatchCount: 0, priority: 3 })
+      toast.success(submitMode === 'another' ? 'Added to Library' : `"${data.title}" added to your list!`)
+      reset({
+        type: data.type,
+        status: data.status,
+        rewatchCount: 0,
+        priority: data.priority ?? 3,
+        nextEpisodeToWatch: data.status === 'completed' ? undefined : 0,
+      })
       setTmdbData(null)
       setGenres([])
-      onSuccess?.()
+      setGenreInput('')
+      if (submitMode === 'another') {
+        setTimeout(() => setFocus('title'), 0)
+      } else {
+        onSuccess?.()
+      }
     } catch (err) {
       toast.error('Failed to add entry')
     }
@@ -667,13 +680,33 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         <Textarea placeholder="Any thoughts, notes, or review..." {...register('specialNotes')} />
       </div>
 
-      <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
-        {isSubmitting ? (
-          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Adding...</>
-        ) : (
-          <><Plus className="w-4 h-4 mr-2" />Add to My List</>
-        )}
-      </Button>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Button
+          type="submit"
+          variant="outline"
+          size="lg"
+          disabled={isSubmitting}
+          onClick={() => setSubmitMode('another')}
+        >
+          {isSubmitting && submitMode === 'another' ? (
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Adding...</>
+          ) : (
+            <><Plus className="w-4 h-4 mr-2" />Add Another Title</>
+          )}
+        </Button>
+        <Button
+          type="submit"
+          size="lg"
+          disabled={isSubmitting}
+          onClick={() => setSubmitMode('exit')}
+        >
+          {isSubmitting && submitMode === 'exit' ? (
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Adding...</>
+          ) : (
+            <><Plus className="w-4 h-4 mr-2" />Add to List</>
+          )}
+        </Button>
+      </div>
     </motion.form>
     </>
   )

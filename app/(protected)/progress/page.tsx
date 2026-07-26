@@ -41,7 +41,7 @@ import {
   calculateCompletionStatistics,
   CompletionStatistics,
 } from '@/utils/completionStatistics'
-import { compareInternalIdAscThenTitleAsc, compareInternalIdDescThenTitleAsc } from '@/utils/internalIdSort'
+import { compareDateAdded, compareDateAddedDesc, getInternalIdSortNumber } from '@/utils/internalIdSort'
 
 type ProgressFilter = 'all' | 'watching' | 'planned' | 'on_hold' | 'dropped'
 type ProgressSort =
@@ -56,8 +56,10 @@ type ProgressSort =
   | 'priorityAsc'
   | 'ratingDesc'
   | 'status'
+  | 'recentlyUpdated'
 
 const SORT_STORAGE_KEY = 'movielogger.progressSortPrefs'
+const WATCHING_SORT_SESSION_KEY = 'movielogger.progressWatchingSort'
 
 const FILTER_PILLS: { label: string; value: ProgressFilter }[] = [
   { label: 'All', value: 'all' },
@@ -78,7 +80,7 @@ const STATUS_SORT_ORDER: Record<ProgressFilter, number> = {
 
 const DEFAULT_SORT_BY_FILTER: Record<ProgressFilter, ProgressSort> = {
   all: 'dateAddedDesc',
-  watching: 'dateAddedDesc',
+  watching: 'recentlyUpdated',
   planned: 'priorityDesc',
   on_hold: 'priorityDesc',
   dropped: 'dateAddedDesc',
@@ -92,6 +94,7 @@ const SORT_OPTIONS_BY_FILTER: Record<ProgressFilter, { label: string; value: Pro
     { label: 'Status', value: 'status' },
   ],
   watching: [
+    { label: 'Recently Updated (Default)', value: 'recentlyUpdated' },
     { label: 'Episodes Waiting (Highest)', value: 'episodesWaiting' },
     { label: 'Episodes Watched (Highest)', value: 'episodesWatched' },
     { label: 'Progress Percentage (Highest)', value: 'progressPercent' },
@@ -127,11 +130,11 @@ function sortProgressEntries(a: MediaEntry, b: MediaEntry): number {
 }
 
 function sortCreatedDescThenTitleAsc(a: MediaEntry, b: MediaEntry): number {
-  return compareInternalIdDescThenTitleAsc(a, b)
+  return compareDateAddedDesc(a, b)
 }
 
 function sortCreatedAscThenTitleAsc(a: MediaEntry, b: MediaEntry): number {
-  return compareInternalIdAscThenTitleAsc(a, b)
+  return compareDateAdded(a, b)
 }
 
 export default function ProgressPage() {
@@ -148,11 +151,18 @@ export default function ProgressPage() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(SORT_STORAGE_KEY)
-      if (!raw) return
+      const sessionWatching = sessionStorage.getItem(WATCHING_SORT_SESSION_KEY) as ProgressSort | null
+      if (!raw) {
+        setSortPrefs({
+          ...DEFAULT_SORT_BY_FILTER,
+          watching: sessionWatching ?? DEFAULT_SORT_BY_FILTER.watching,
+        })
+        return
+      }
       const parsed = JSON.parse(raw) as Partial<Record<ProgressFilter, ProgressSort>>
       setSortPrefs({
         all: parsed.all ?? DEFAULT_SORT_BY_FILTER.all,
-        watching: parsed.watching ?? DEFAULT_SORT_BY_FILTER.watching,
+        watching: sessionWatching ?? DEFAULT_SORT_BY_FILTER.watching,
         planned: parsed.planned ?? DEFAULT_SORT_BY_FILTER.planned,
         on_hold: parsed.on_hold ?? DEFAULT_SORT_BY_FILTER.on_hold,
         dropped: parsed.dropped ?? DEFAULT_SORT_BY_FILTER.dropped,
@@ -165,7 +175,12 @@ export default function ProgressPage() {
   function updateSortPreference(value: ProgressSort) {
     setSortPrefs((current) => {
       const next = { ...current, [filter]: value }
-      localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(next))
+      if (filter === 'watching') {
+        sessionStorage.setItem(WATCHING_SORT_SESSION_KEY, value)
+      } else {
+        const persisted = { ...next, watching: DEFAULT_SORT_BY_FILTER.watching }
+        localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(persisted))
+      }
       return next
     })
   }
@@ -236,6 +251,17 @@ export default function ProgressPage() {
 
   function compareBySort(a: MediaEntry, b: MediaEntry, sortBy: ProgressSort): number {
     switch (sortBy) {
+      case 'recentlyUpdated': {
+        const activityDiff =
+          (b.watchingActivityAt?.toMillis?.() ?? b.updatedAt?.toMillis?.() ?? 0) -
+          (a.watchingActivityAt?.toMillis?.() ?? a.updatedAt?.toMillis?.() ?? 0)
+        if (activityDiff !== 0) return activityDiff
+
+        const idDiff = getInternalIdSortNumber(b) - getInternalIdSortNumber(a)
+        if (idDiff !== 0) return idDiff
+
+        return a.title.localeCompare(b.title)
+      }
       case 'episodesWaiting': {
         const waitingDiff =
           (releaseStatuses[b.id ?? '']?.episodesWaiting ?? 0) -

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -19,7 +19,9 @@ import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
 import { useMedia } from '@/hooks/useMedia'
 import { useDataQuality } from '@/hooks/useDataQuality'
 import { useEpisodeAvailability, NewEpisodeInfo } from '@/hooks/useEpisodeAvailability'
+import { useProgressReleaseStatuses, ProgressReleaseStatus } from '@/hooks/useProgressReleaseStatuses'
 import { comparePriorityDescThenCreatedDesc } from '@/utils/priority'
+import { cn } from '@/utils/cn'
 
 export function DataQualityCenter() {
   const [open, setOpen] = useState(false)
@@ -28,6 +30,11 @@ export function DataQualityCenter() {
   const { entries, editEntry } = useMedia()
   const { result, ignoreDuplicate } = useDataQuality(entries)
   const episodeAvail = useEpisodeAvailability(entries)
+  const newEpisodeEntries = useMemo(
+    () => open ? episodeAvail.newEpisodes.map((item) => item.entry) : [],
+    [episodeAvail.newEpisodes, open]
+  )
+  const releaseStatuses = useProgressReleaseStatuses(newEpisodeEntries)
   const [fixingId, setFixingId] = useState<string | null>(null)
   const readyToBinge = [...episodeAvail.readyToBinge].sort(comparePriorityDescThenCreatedDesc)
 
@@ -153,15 +160,24 @@ export function DataQualityCenter() {
                   'watching'
                 )}
               >
-                {episodeAvail.newEpisodes.map(({ entry, delta }: NewEpisodeInfo) => (
-                  <Row
-                    key={entry.id}
-                    entry={entry}
-                    onView={() => openProgressList([entry], 'Episodes Waiting For You', 'watching')}
-                  >
-                    <span className="text-[10px] text-sky-400 font-semibold">{delta} waiting</span>
-                  </Row>
-                ))}
+                {episodeAvail.newEpisodes.map(({ entry, delta }: NewEpisodeInfo) => {
+                  const releaseStatus = entry.id ? releaseStatuses[entry.id] : null
+
+                  return (
+                    <Row
+                      key={entry.id}
+                      entry={entry}
+                      onView={() => openProgressList([entry], 'Episodes Waiting For You', 'watching')}
+                    >
+                      <span className="text-[10px] text-sky-400 font-semibold">{delta} waiting</span>
+                      {releaseStatus && (
+                        <span className={cn('text-[10px] font-semibold', releaseStatusToneClass(releaseStatus))}>
+                          {releaseStatus.label}
+                        </span>
+                      )}
+                    </Row>
+                  )
+                })}
               </Section>
 
               {/* Ready to Binge */}
@@ -317,6 +333,19 @@ export function DataQualityCenter() {
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
+
+function releaseStatusToneClass(status: ProgressReleaseStatus): string {
+  switch (status.tone) {
+    case 'released':
+      return 'text-emerald-300'
+    case 'upcoming':
+      return 'text-blue-300'
+    case 'airing':
+      return 'text-sky-300'
+    default:
+      return 'text-white/35'
+  }
+}
 
 function Section({
   icon, title, count, children, onOpenList,

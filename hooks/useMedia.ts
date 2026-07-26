@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useCallback } from 'react'
+import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
 import { useMediaStore } from '@/store/mediaStore'
 import { useAuthStore } from '@/store/authStore'
@@ -13,7 +14,7 @@ import {
 import { MediaEntry, MediaEntryInput, MediaEntryUpdate, MediaFilters } from '@/types/media'
 import { getEffectiveMediaType } from '@/utils/formatters'
 import { comparePriorityAscThenUpdatedDesc, comparePriorityDescThenUpdatedDesc } from '@/utils/priority'
-import { getInternalIdSortNumber } from '@/utils/internalIdSort'
+import { compareDateAdded } from '@/utils/internalIdSort'
 import { normalizeCountry } from '@/utils/countries'
 import { calculateStoredWatchHours } from '@/utils/watchHours'
 
@@ -61,6 +62,12 @@ export function useMedia() {
     if ('totalEpisodes' in merged || 'episodeDurationMinutes' in merged) {
       normalizedUpdates.watchHours = calculateStoredWatchHours(merged)
     }
+    if (
+      ('nextEpisodeToWatch' in updates && updates.nextEpisodeToWatch !== current?.nextEpisodeToWatch) ||
+      (updates.status === 'watching' && current?.status !== 'watching')
+    ) {
+      normalizedUpdates.watchingActivityAt = Timestamp.now()
+    }
     useMediaStore.getState().updateEntry(id, normalizedUpdates)
   }, [])
 
@@ -89,8 +96,8 @@ export function useMedia() {
 
   const removeEntry = useCallback(async (id: string) => {
     await deleteMediaEntry(id)
-    useMediaStore.getState().removeEntry(id)
-  }, [])
+    await loadEntries()
+  }, [loadEntries])
 
   const filteredEntries = getFilteredEntries(entries, filters)
 
@@ -183,7 +190,7 @@ function getFilteredEntries(entries: MediaEntry[], filters: MediaFilters): Media
         return order * (toSortKey(a) - toSortKey(b))
       }
       case 'createdAt': {
-        return order * (getInternalIdSortNumber(a) - getInternalIdSortNumber(b))
+        return order * compareDateAdded(a, b)
       }
       default:
         return 0
