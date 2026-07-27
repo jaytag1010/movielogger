@@ -120,6 +120,6 @@ export const DEFAULT_FILTERS: MediaFilters = {
   country: 'all',
   year: 'all',
   ageRating: 'all',
-  sortBy: 'dateFinished',
+  sortBy: 'createdAt',
   sortOrder: 'desc',
 }

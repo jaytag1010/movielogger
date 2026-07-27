@@ -1,0 +1,420 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { Film, Link2, Loader2, Search, Tv } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
+import { TMDBSearch } from '@/components/media/TMDBSearch'
+import { MediaEntry, MediaEntryUpdate } from '@/types/media'
+import { NormalizedTMDBResult } from '@/types/tmdb'
+import { fetchMovieMetadata, fetchSeasonMetadata, fetchTVMetadata, searchMultiNormalized } from '@/lib/tmdb/api'
+import { getDisplayPosterUrl, getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
+
+type MatchState = 'pending' | 'linked' | 'skipped' | 'unmatched'
+
+interface MatchSuggestion {
+  entry: MediaEntry
+  strong: NormalizedTMDBResult | null
+  possible: NormalizedTMDBResult[]
+  state: MatchState
+}
+
+interface LibraryMaintenanceProps {
+  entries: MediaEntry[]
+  editEntry: (id: string, updates: MediaEntryUpdate) => Promise<void>
+}
+
+function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(/\([^)]*\)/g, '').replace(/[^a-z0-9]/g, '').trim()
+}
+
+function scoreMatch(entry: MediaEntry, result: NormalizedTMDBResult): number {
+  let score = 0
+  if (normalizeTitle(entry.title) === normalizeTitle(result.title)) score += 3
+  if (entry.yearMade && result.year && entry.yearMade === result.year) score += 2
+  if (getEffectiveMediaType(entry) === result.type) score += 2
+  return score
+}
+
+function statusLabel(status: MediaEntry['status']): string {
+  return status === 'on_hold' ? 'On Hold' : status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenanceProps) {
+  const unmatched = useMemo(
+    () => entries.filter((entry) => entry.tmdbId == null),
+    [entries]
+  )
+  const [searching, setSearching] = useState(false)
+  const [progress, setProgress] = useState({ current: 0, total: 0 })
+  const [suggestions, setSuggestions] = useState<Record<string, MatchSuggestion>>({})
+  const [manualSearchId, setManualSearchId] = useState<string | null>(null)
+  const [linkingId, setLinkingId] = useState<string | null>(null)
+  const [summary, setSummary] = useState<{ checked: number; linked: number; review: number; unmatched: number } | null>(null)
+
+  async function searchOne(entry: MediaEntry): Promise<MatchSuggestion> {
+    const queries = [
+      [entry.title, entry.yearMade].filter(Boolean).join(' '),
+      entry.nativeTitle ? [entry.nativeTitle, entry.yearMade].filter(Boolean).join(' ') : null,
+      entry.title,
+    ].filter((query): query is string => Boolean(query && query.trim().length >= 2))
+
+    const seen = new Set<string>()
+    const results: NormalizedTMDBResult[] = []
+    for (const query of queries) {
+      try {
+        const found = await searchMultiNormalized(query)
+        for (const item of found) {
+          const key = `${item.type}-${item.tmdbId}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            results.push(item)
+          }
+        }
+      } catch {
+        // Try the next query variant.
+      }
+      if (results.length >= 5) break
+    }
+
+    const ranked = results
+      .map((result) => ({ result, score: scoreMatch(entry, result) }))
+      .sort((a, b) => b.score - a.score)
+    const strong = ranked[0]?.score >= 5 ? ranked[0].result : null
+
+    return {
+      entry,
+      strong,
+      possible: ranked.map((item) => item.result).filter((item) => item !== strong).slice(0, 3),
+      state: strong || ranked.length > 0 ? 'pending' : 'unmatched',
+    }
+  }
+
+  async function handleSearchAll() {
+    if (unmatched.length === 0) return
+    setSearching(true)
+    setProgress({ current: 0, total: unmatched.length })
+    const next: Record<string, MatchSuggestion> = {}
+
+    for (let i = 0; i < unmatched.length; i++) {
+      const entry = unmatched[i]
+      if (!entry.id) continue
+      next[entry.id] = await searchOne(entry)
+      setSuggestions({ ...next })
+      setProgress({ current: i + 1, total: unmatched.length })
+    }
+
+    setSearching(false)
+    const linked = 0
+    const review = Object.values(next).filter((item) => item.strong || item.possible.length > 0).length
+    const stillUnmatched = Object.values(next).filter((item) => item.state === 'unmatched').length
+    setSummary({ checked: unmatched.length, linked, review, unmatched: stillUnmatched })
+  }
+
+  async function linkEntry(entry: MediaEntry, result: NormalizedTMDBResult) {
+    if (!entry.id) return
+    const duplicate = entries.find((candidate) =>
+      candidate.id !== entry.id &&
+      candidate.tmdbId === result.tmdbId &&
+      (candidate.seasonNumber ?? null) === (entry.seasonNumber ?? null)
+    )
+    if (duplicate && !confirm(`"${getDisplayTitle(duplicate)}" is already linked to this TMDB title. Link anyway?`)) {
+      return
+    }
+
+    setLinkingId(entry.id)
+    try {
+      const fullData = result.type === 'movie'
+        ? await fetchMovieMetadata(result.tmdbId)
+        : await fetchTVMetadata(result.tmdbId)
+
+      const updates: MediaEntryUpdate = {
+        tmdbId: fullData.tmdbId,
+        type: fullData.type,
+        posterUrl: fullData.posterUrl,
+        backdropUrl: fullData.backdropUrl,
+        country: fullData.country,
+        ageRating: fullData.ageRating,
+        genres: fullData.genres,
+        yearMade: fullData.year ?? entry.yearMade,
+        tmdbReleaseDate: fullData.releaseDate ?? null,
+      }
+
+      if (fullData.type === 'series') {
+        if (entry.seasonNumber) {
+          try {
+            const season = await fetchSeasonMetadata(fullData.tmdbId, entry.seasonNumber)
+            if (season.posterUrl) updates.posterUrl = season.posterUrl
+            if (season.year) updates.yearMade = season.year
+            if (season.episodeCount) updates.totalEpisodes = season.episodeCount
+            if (season.avgRuntime) updates.episodeDurationMinutes = season.avgRuntime
+          } catch {
+            if (fullData.totalEpisodes) updates.totalEpisodes = fullData.totalEpisodes
+            if (fullData.runtime) updates.episodeDurationMinutes = fullData.runtime
+          }
+        } else {
+          if (fullData.totalEpisodes) updates.totalEpisodes = fullData.totalEpisodes
+          if (fullData.runtime) updates.episodeDurationMinutes = fullData.runtime
+        }
+      } else if (fullData.runtime) {
+        updates.episodeDurationMinutes = fullData.runtime
+      }
+
+      await editEntry(entry.id, updates)
+      setSuggestions((current) => ({
+        ...current,
+        [entry.id!]: {
+          ...(current[entry.id!] ?? { entry, strong: result, possible: [], state: 'pending' }),
+          state: 'linked',
+        },
+      }))
+      setSummary((current) => current
+        ? {
+            ...current,
+            linked: current.linked + 1,
+            review: Math.max(0, current.review - 1),
+          }
+        : current)
+      toast.success(`Linked "${getDisplayTitle(entry)}" to TMDB`)
+    } catch {
+      toast.error('Failed to link TMDB match')
+    } finally {
+      setLinkingId(null)
+    }
+  }
+
+  async function confirmAllStrong() {
+    const strongMatches = Object.values(suggestions).filter((item) => item.state === 'pending' && item.strong)
+    for (const item of strongMatches) {
+      await linkEntry(item.entry, item.strong!)
+    }
+  }
+
+  function skipAll() {
+    setSuggestions((current) => {
+      const next = { ...current }
+      Object.keys(next).forEach((id) => {
+        next[id] = { ...next[id], state: 'skipped' }
+      })
+      return next
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">
+          Library Maintenance
+        </h3>
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-white">Unmatched TMDB Titles</p>
+              <p className="text-xs text-white/35 mt-0.5">
+                {unmatched.length} title{unmatched.length === 1 ? '' : 's'} without a TMDB link.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSearchAll}
+              disabled={searching || unmatched.length === 0}
+              className="shrink-0"
+            >
+              {searching ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+              {searching ? `${progress.current} / ${progress.total}` : 'Search All'}
+            </Button>
+          </div>
+
+          {summary && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <MiniStat label="Checked" value={summary.checked} />
+              <MiniStat label="Linked" value={summary.linked} />
+              <MiniStat label="Review" value={summary.review} />
+              <MiniStat label="Unmatched" value={summary.unmatched} />
+            </div>
+          )}
+
+          {Object.values(suggestions).some((item) => item.strong && item.state === 'pending') && (
+            <div className="flex gap-2 flex-wrap">
+              <Button size="sm" onClick={confirmAllStrong} disabled={linkingId != null}>
+                Confirm All Strong Matches
+              </Button>
+              <Button size="sm" variant="outline" onClick={skipAll}>
+                Skip All
+              </Button>
+              <Button size="sm" variant="ghost" onClick={handleSearchAll} disabled={searching}>
+                Retry Unmatched
+              </Button>
+            </div>
+          )}
+
+          <div className="space-y-2 max-h-[34rem] overflow-y-auto pr-1">
+            {unmatched.length === 0 ? (
+              <p className="text-sm text-white/40 py-4 text-center">No unmatched titles found.</p>
+            ) : (
+              unmatched.map((entry) => (
+                <MaintenanceRow
+                  key={entry.id}
+                  entry={entry}
+                  suggestion={entry.id ? suggestions[entry.id] : undefined}
+                  manualSearch={manualSearchId === entry.id}
+                  linking={linkingId === entry.id}
+                  onLink={(result) => linkEntry(entry, result)}
+                  onChooseAnother={() => setManualSearchId((current) => current === entry.id ? null : entry.id ?? null)}
+                  onSkip={() => entry.id && setSuggestions((current) => ({
+                    ...current,
+                    [entry.id!]: {
+                      ...(current[entry.id!] ?? { entry, strong: null, possible: [], state: 'pending' }),
+                      state: 'skipped',
+                    },
+                  }))}
+                  onKeepUnmatched={() => entry.id && setSuggestions((current) => ({
+                    ...current,
+                    [entry.id!]: {
+                      ...(current[entry.id!] ?? { entry, strong: null, possible: [], state: 'pending' }),
+                      state: 'unmatched',
+                    },
+                  }))}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-center">
+      <p className="text-base font-bold text-white">{value}</p>
+      <p className="text-[10px] text-white/35 uppercase tracking-wider">{label}</p>
+    </div>
+  )
+}
+
+function MaintenanceRow({
+  entry,
+  suggestion,
+  manualSearch,
+  linking,
+  onLink,
+  onChooseAnother,
+  onSkip,
+  onKeepUnmatched,
+}: {
+  entry: MediaEntry
+  suggestion?: MatchSuggestion
+  manualSearch: boolean
+  linking: boolean
+  onLink: (result: NormalizedTMDBResult) => void
+  onChooseAnother: () => void
+  onSkip: () => void
+  onKeepUnmatched: () => void
+}) {
+  const type = getEffectiveMediaType(entry)
+  const TypeIcon = type === 'movie' ? Film : Tv
+  const best = suggestion?.strong ?? suggestion?.possible[0] ?? null
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
+      <div className="flex gap-3">
+        <Poster src={getDisplayPosterUrl(entry)} title={entry.title} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white truncate">{getDisplayTitle(entry)}</p>
+              <p className="text-[11px] text-white/35">
+                {entry.internalId} · {entry.yearMade ?? '—'} · {entry.country ?? '—'} · {statusLabel(entry.status)}
+              </p>
+              <p className="text-[11px] text-white/30 flex items-center gap-1 mt-0.5">
+                <TypeIcon className="w-3 h-3" />
+                {type === 'series' ? 'Series' : 'Movie'} · Last checked: Never
+              </p>
+            </div>
+            {suggestion?.state === 'linked' && (
+              <span className="text-[10px] rounded-full bg-emerald-500/15 text-emerald-300 px-2 py-0.5">Linked</span>
+            )}
+            {suggestion?.state === 'unmatched' && (
+              <span className="text-[10px] rounded-full bg-white/10 text-white/40 px-2 py-0.5">Unmatched</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {best && suggestion?.state === 'pending' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2">
+            <p className="text-[10px] text-white/30 uppercase mb-1">Current Library</p>
+            <p className="text-xs font-medium text-white truncate">{getDisplayTitle(entry)}</p>
+            <p className="text-[10px] text-white/35">{entry.yearMade ?? '—'}</p>
+          </div>
+          <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-2 flex gap-2">
+            <Poster src={best.posterUrl} title={best.title} compact />
+            <div className="min-w-0">
+              <p className="text-[10px] text-blue-300/60 uppercase mb-1">
+                {suggestion.strong ? 'Strong Match' : 'Possible Match'}
+              </p>
+              <p className="text-xs font-medium text-white truncate">{best.title}</p>
+              <p className="text-[10px] text-blue-300/60">{best.type} · {best.year ?? '—'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {suggestion?.state === 'pending' && suggestion.possible.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {suggestion.possible.map((item) => (
+            <button
+              key={`${item.type}-${item.tmdbId}`}
+              type="button"
+              onClick={() => onLink(item)}
+              className="min-w-40 rounded-lg border border-white/10 bg-white/5 p-2 text-left hover:bg-white/10"
+            >
+              <p className="text-xs text-white truncate">{item.title}</p>
+              <p className="text-[10px] text-white/35">{item.type} · {item.year ?? '—'}</p>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {manualSearch && (
+        <TMDBSearch
+          mediaType="all"
+          defaultQuery={entry.title}
+          onSelect={onLink}
+          placeholder="Search TMDB for this title..."
+        />
+      )}
+
+      <div className="flex gap-2 flex-wrap">
+        {best && suggestion?.state === 'pending' && (
+          <Button size="sm" onClick={() => onLink(best)} disabled={linking}>
+            {linking ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5 mr-1.5" />}
+            Link
+          </Button>
+        )}
+        <Button size="sm" variant="outline" onClick={onChooseAnother}>Choose Another</Button>
+        <Button size="sm" variant="ghost" onClick={onSkip}>Skip</Button>
+        <Button size="sm" variant="ghost" onClick={onKeepUnmatched}>Keep Unmatched</Button>
+      </div>
+    </div>
+  )
+}
+
+function Poster({ src, title, compact = false }: { src: string | null; title: string; compact?: boolean }) {
+  return (
+    <div className={`${compact ? 'w-8 h-12' : 'w-10 h-14'} relative flex-shrink-0 rounded-lg overflow-hidden bg-white/5 border border-white/10`}>
+      {src ? (
+        <TMDBPosterImage src={src} alt={title} fill sizes={compact ? '32px' : '40px'} className="object-cover" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <Film className="w-4 h-4 text-white/20" />
+        </div>
+      )}
+    </div>
+  )
+}

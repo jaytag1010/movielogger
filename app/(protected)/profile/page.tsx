@@ -48,6 +48,7 @@ import { deleteAllUserEntries, getUserProfile, updateUserProfile, UserProfile } 
 import { validatePosterFile, uploadPoster } from '@/lib/imgbb'
 import { calculateTotalWatchHours } from '@/utils/watchTime'
 import { formatWatchTime } from '@/utils/formatters'
+import { LibraryMaintenance } from '@/components/profile/LibraryMaintenance'
 
 const CONFIRM_PHRASE = 'CONTINUE'
 
@@ -77,7 +78,7 @@ function formatMemberSince(creationTime: string | undefined): string | null {
 export default function ProfilePage() {
   const { user } = useAuthStore()
   const { logOut } = useAuthActions()
-  const { entries } = useMedia()
+  const { entries, editEntry } = useMedia()
   const { setEntries } = useMediaStore()
   const router = useRouter()
 
@@ -473,6 +474,10 @@ export default function ProfilePage() {
         </GlassCard>
 
         {/* ── Section 3: Statistics ── */}
+        <GlassCard padding="md">
+          <LibraryMaintenance entries={entries} editEntry={editEntry} />
+        </GlassCard>
+
         <GlassCard padding="md">
           <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">
             Statistics

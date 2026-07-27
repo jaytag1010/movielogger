@@ -25,6 +25,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useMedia } from '@/hooks/useMedia'
 import { useProgressReleaseStatuses } from '@/hooks/useProgressReleaseStatuses'
 import { MediaEntry, MediaStatus } from '@/types/media'
@@ -137,6 +143,44 @@ function sortCreatedAscThenTitleAsc(a: MediaEntry, b: MediaEntry): number {
   return compareDateAdded(a, b)
 }
 
+function formatValue(value: unknown): string {
+  if (Array.isArray(value)) return value.join(', ') || '—'
+  if (value == null || value === '') return '—'
+  return String(value)
+}
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return JSON.stringify(a ?? []) === JSON.stringify(b ?? [])
+  }
+  return a === b
+}
+
+type RefreshChange = {
+  field: string
+  before: string
+  after: string
+}
+
+type RefreshUpdatedTitle = {
+  id: string
+  title: string
+  changes: RefreshChange[]
+}
+
+type RefreshFailure = {
+  id: string
+  title: string
+  reason: string
+}
+
+type RefreshSummary = {
+  checked: number
+  updated: RefreshUpdatedTitle[]
+  unchanged: MediaEntry[]
+  failed: RefreshFailure[]
+}
+
 export default function ProgressPage() {
   const { entries, editEntry, refreshEntry } = useMedia()
   const router = useRouter()
@@ -208,6 +252,8 @@ export default function ProgressPage() {
 
   // ── Bulk refresh ──────────────────────────────────────────────────────────
   const [refreshing, setRefreshing] = useState(false)
+  const [refreshProgress, setRefreshProgress] = useState({ current: 0, total: 0 })
+  const [refreshSummary, setRefreshSummary] = useState<RefreshSummary | null>(null)
 
   // ── Per-card single refresh ───────────────────────────────────────────────
   const [singleRefreshingId, setSingleRefreshingId] = useState<string | null>(null)
@@ -225,6 +271,7 @@ export default function ProgressPage() {
   const [searchSeed, setSearchSeed] = useState('')
   const [searchKey, setSearchKey] = useState(0)
   const [linking, setLinking] = useState(false)
+  const [repairOpen, setRepairOpen] = useState(false)
 
   // ── Derived lists ─────────────────────────────────────────────────────────
 
@@ -253,8 +300,8 @@ export default function ProgressPage() {
     switch (sortBy) {
       case 'recentlyUpdated': {
         const activityDiff =
-          (b.watchingActivityAt?.toMillis?.() ?? b.updatedAt?.toMillis?.() ?? 0) -
-          (a.watchingActivityAt?.toMillis?.() ?? a.updatedAt?.toMillis?.() ?? 0)
+          (b.watchingActivityAt?.toMillis?.() ?? b.createdAt?.toMillis?.() ?? 0) -
+          (a.watchingActivityAt?.toMillis?.() ?? a.createdAt?.toMillis?.() ?? 0)
         if (activityDiff !== 0) return activityDiff
 
         const idDiff = getInternalIdSortNumber(b) - getInternalIdSortNumber(a)
@@ -447,6 +494,7 @@ export default function ProgressPage() {
     setLinkTarget(entry)
     setSearchSeed(entry.title)       // seed with canonical (undecorated) title
     setSearchKey((k) => k + 1)       // force TMDBSearch remount with fresh query
+    setRepairOpen(true)
   }
 
   /** Clear the active link target and reset the search bar. */
@@ -454,6 +502,7 @@ export default function ProgressPage() {
     setLinkTarget(null)
     setSearchSeed('')
     setSearchKey((k) => k + 1)
+    setRepairOpen(false)
   }
 
   /** Called when user selects a result from the TMDB search dropdown. */
@@ -523,6 +572,7 @@ export default function ProgressPage() {
       setLinkResult(null)
       setSearchSeed('')
       setSearchKey((k) => k + 1)
+      setRepairOpen(false)
     } catch {
       toast.error('Failed to link entry to TMDB')
     } finally {
@@ -601,10 +651,16 @@ export default function ProgressPage() {
       return
     }
     setRefreshing(true)
-    let updated = 0
-    let failed = 0
+    setRefreshProgress({ current: 0, total: toRefresh.length })
+    const summary: RefreshSummary = {
+      checked: toRefresh.length,
+      updated: [],
+      unchanged: [],
+      failed: [],
+    }
 
-    for (const entry of toRefresh) {
+    for (let index = 0; index < toRefresh.length; index++) {
+      const entry = toRefresh[index]
       try {
         const updates: Parameters<typeof editEntry>[1] = {}
 
@@ -647,18 +703,50 @@ export default function ProgressPage() {
 
         if (Object.keys(updates).length > 0) {
           await refreshEntry(entry.id!, updates)
-          updated++
+          summary.updated.push({
+            id: entry.id!,
+            title: getDisplayTitle(entry),
+            changes: Object.entries(updates)
+              .filter(([key, nextValue]) => !valuesEqual(entry[key as keyof MediaEntry], nextValue))
+              .map(([key, nextValue]) => ({
+                field: ({
+                  posterUrl: 'Poster',
+                  backdropUrl: 'Backdrop',
+                  yearMade: 'Release Year',
+                  ageRating: 'Age Rating',
+                  genres: 'Genres',
+                  country: 'Country',
+                  episodeDurationMinutes: 'Runtime',
+                  tmdbReleaseDate: 'Release Date',
+                  totalEpisodes: 'TMDB Episode Count',
+                  watchHours: 'Watch Hours',
+                } as Partial<Record<keyof MediaEntry, string>>)[key as keyof MediaEntry] ?? key,
+                before: formatValue(entry[key as keyof MediaEntry]),
+                after: formatValue(nextValue),
+              })),
+          })
+        } else {
+          summary.unchanged.push(entry)
         }
-      } catch {
-        failed++
+      } catch (err) {
+        summary.failed.push({
+          id: entry.id!,
+          title: getDisplayTitle(entry),
+          reason: err instanceof Error ? err.message : 'TMDB refresh failed',
+        })
+      } finally {
+        setRefreshProgress({ current: index + 1, total: toRefresh.length })
       }
     }
 
     setRefreshing(false)
+    setRefreshSummary(summary)
+    const updated: number = 0
+    const failed: number = 0
 
-    if (updated > 0 && failed === 0) {
-      toast.success(`Refreshed ${updated} entr${updated === 1 ? 'y' : 'ies'} with missing data`)
-    } else if (updated > 0) {
+    if (true) {
+      return
+    } else if (0 > 0) {
       toast.success(`Refreshed ${updated} — ${failed} failed`)
     } else if (failed > 0) {
       toast.error(`Refresh failed for ${failed} entr${failed === 1 ? 'y' : 'ies'}`)
@@ -677,14 +765,14 @@ export default function ProgressPage() {
       <div className="space-y-3">
 
         {/* ── TMDB Repair Search ── */}
-        <GlassCard padding="sm">
+        {false && (<GlassCard padding="sm">
           <div className="space-y-2">
             {/* Context indicator — shows which entry is being targeted */}
             {linkTarget ? (
               <div className="flex items-center justify-between gap-2 px-1">
                 <p className="text-xs text-blue-400 truncate">
                   <span className="text-blue-400/50">Linking: </span>
-                  <span className="font-medium">{getDisplayTitle(linkTarget)}</span>
+                  <span className="font-medium">{linkTarget ? getDisplayTitle(linkTarget!) : ''}</span>
                 </p>
                 <button
                   type="button"
@@ -709,7 +797,7 @@ export default function ProgressPage() {
               defaultQuery={searchSeed}
             />
           </div>
-        </GlassCard>
+        </GlassCard>)}
 
         {/* ── Filter pills + Bulk Refresh ── */}
         <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -768,7 +856,7 @@ export default function ProgressPage() {
             className="shrink-0 text-xs border-white/10 text-white/50 hover:text-white hover:bg-white/10"
           >
             <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', refreshing && 'animate-spin')} />
-            {refreshing ? 'Refreshing…' : 'Refresh All'}
+            {refreshing ? `Refreshing ${refreshProgress.current} / ${refreshProgress.total}` : 'Refresh All'}
           </Button>
         </div>
 
@@ -869,6 +957,100 @@ export default function ProgressPage() {
         onClose={() => setCompletionStatistics(null)}
       />
 
+      <Dialog
+        open={repairOpen && linkTarget != null}
+        onOpenChange={(open) => {
+          if (!open && !linking) clearLinkTarget()
+        }}
+      >
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-xl max-h-[85vh] overflow-visible">
+          <DialogHeader>
+            <DialogTitle className="text-blue-400">TMDB Repair</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2">
+              <p className="text-xs text-blue-300/70">Linking</p>
+              <p className="text-sm font-semibold text-white truncate">
+                {linkTarget ? getDisplayTitle(linkTarget) : ''}
+              </p>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto pr-1">
+              <TMDBSearch
+                key={searchKey}
+                mediaType="all"
+                onSelect={handleSearchSelect}
+                placeholder="Search TMDB to link or repair an entry..."
+                defaultQuery={searchSeed}
+              />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={refreshSummary != null} onOpenChange={(open) => { if (!open) setRefreshSummary(null) }}>
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-400">
+              <RefreshCw className="w-5 h-5" />
+              Refresh Complete
+            </DialogTitle>
+          </DialogHeader>
+          {refreshSummary && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <SummaryStat label="Checked" value={refreshSummary.checked} />
+                <SummaryStat label="Updated" value={refreshSummary.updated.length} />
+                <SummaryStat label="Unchanged" value={refreshSummary.unchanged.length} />
+                <SummaryStat label="Failed" value={refreshSummary.failed.length} />
+              </div>
+
+              {refreshSummary.updated.length === 0 && refreshSummary.failed.length === 0 ? (
+                <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-4 text-center">
+                  <p className="text-sm font-medium text-white">No changes found.</p>
+                </div>
+              ) : null}
+
+              {refreshSummary.updated.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-white/40">Updated Titles</p>
+                  {refreshSummary.updated.map((item) => (
+                    <div key={item.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                      <p className="text-sm font-semibold text-white mb-2">{item.title}</p>
+                      <div className="space-y-1">
+                        {item.changes.map((change) => (
+                          <div key={`${item.id}-${change.field}`} className="text-xs text-white/45">
+                            <span className="text-white/70">{change.field}</span>
+                            <span className="mx-1.5">{change.before}</span>
+                            <span className="text-blue-300">→</span>
+                            <span className="ml-1.5 text-white/70">{change.after}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {refreshSummary.failed.length > 0 && (
+                <details className="rounded-xl border border-red-500/20 bg-red-500/10 p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-red-300">
+                    Failed Refreshes ({refreshSummary.failed.length})
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    {refreshSummary.failed.map((item) => (
+                      <div key={item.id} className="text-xs">
+                        <p className="font-medium text-white">{item.title}</p>
+                        <p className="text-red-300/70">{item.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <TMDBLinkDialog
         entry={linkTarget}
         tmdbResult={linkResult}
@@ -887,5 +1069,14 @@ export default function ProgressPage() {
         }}
       />
     </AppLayout>
+  )
+}
+
+function SummaryStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-center">
+      <p className="text-lg font-bold text-white">{value}</p>
+      <p className="text-[10px] uppercase tracking-wider text-white/35">{label}</p>
+    </div>
   )
 }
