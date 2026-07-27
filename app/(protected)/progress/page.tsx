@@ -41,6 +41,7 @@ import {
   fetchMovieMetadata,
   fetchTVMetadata,
   fetchSeasonMetadata,
+  fetchTVAvailabilityInfo,
 } from '@/lib/tmdb/api'
 import { cn } from '@/utils/cn'
 import {
@@ -147,6 +148,50 @@ function formatValue(value: unknown): string {
   if (Array.isArray(value)) return value.join(', ') || '—'
   if (value == null || value === '') return '—'
   return String(value)
+}
+
+function formatDateValue(value: string | null | undefined): string {
+  if (!value) return '—'
+  return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function formatFieldValue(field: string, value: unknown): string {
+  if (field === 'episodeDurationMinutes') return value == null ? '—' : `${value} min`
+  if (field === 'tmdbReleaseDate') return formatDateValue(value as string | null | undefined)
+  if (field === 'posterUrl') return value ? 'Poster available' : 'No poster'
+  return formatValue(value)
+}
+
+function todayIsoLocal(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function movieReleaseStatusLabel(releaseDate: string | null | undefined): string {
+  if (!releaseDate) return 'Movie release date unavailable'
+  return releaseDate > todayIsoLocal()
+    ? `Releases on ${formatDateValue(releaseDate)}`
+    : 'Movie Released'
+}
+
+function seriesReleaseStatusLabel(airedEpisodes: number, expectedEpisodes: number, firstAirDate?: string | null): string {
+  if (expectedEpisodes <= 0) return 'Episode release information unavailable'
+  if (airedEpisodes === 0) {
+    return firstAirDate
+      ? `Season premieres on ${formatDateValue(firstAirDate)}`
+      : 'Episode release information unavailable'
+  }
+  const released = Math.min(airedEpisodes, expectedEpisodes)
+  if (released >= expectedEpisodes) return 'All Episodes Released'
+  const noun = released === 1 ? 'Episode' : 'Episodes'
+  return `${released}/${expectedEpisodes} ${noun} Released`
 }
 
 function valuesEqual(a: unknown, b: unknown): boolean {
@@ -663,10 +708,12 @@ export default function ProgressPage() {
       const entry = toRefresh[index]
       try {
         const updates: Parameters<typeof editEntry>[1] = {}
+        const releaseChanges: RefreshChange[] = []
+        const beforeReleaseStatus = entry.id ? releaseStatuses[entry.id] : undefined
 
         if (entry.type === 'movie') {
           const data = await fetchMovieMetadata(entry.tmdbId!)
-          if (data.posterUrl) updates.posterUrl = data.posterUrl
+          if (!entry.posterUrl && !entry.manualPosterUrl && data.posterUrl) updates.posterUrl = data.posterUrl
           if (!entry.backdropUrl && data.backdropUrl) updates.backdropUrl = data.backdropUrl
           if (!entry.yearMade && data.year) updates.yearMade = data.year
           if (!entry.ageRating && data.ageRating) updates.ageRating = data.ageRating
@@ -674,11 +721,21 @@ export default function ProgressPage() {
           if (!entry.country && data.country) updates.country = data.country
           if (!entry.episodeDurationMinutes && data.runtime) updates.episodeDurationMinutes = data.runtime
           if (!entry.tmdbReleaseDate && data.releaseDate) updates.tmdbReleaseDate = data.releaseDate
+          const afterReleaseDate = updates.tmdbReleaseDate ?? entry.tmdbReleaseDate
+          const afterMovieStatus = movieReleaseStatusLabel(afterReleaseDate)
+          if (beforeReleaseStatus?.label && beforeReleaseStatus.label !== afterMovieStatus) {
+            releaseChanges.push({
+              field: 'Movie Release Status',
+              before: beforeReleaseStatus.label,
+              after: afterMovieStatus,
+            })
+          }
         } else {
+          let availability: Awaited<ReturnType<typeof fetchTVAvailabilityInfo>> | null = null
           if (entry.seasonNumber) {
             try {
               const sd = await fetchSeasonMetadata(entry.tmdbId!, entry.seasonNumber)
-              if (sd.posterUrl) updates.posterUrl = sd.posterUrl
+              if (!entry.posterUrl && !entry.manualPosterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
               if (!entry.yearMade && sd.year) updates.yearMade = sd.year
               if (!entry.episodeDurationMinutes && sd.avgRuntime) updates.episodeDurationMinutes = sd.avgRuntime
               if (sd.episodeCount > (entry.totalEpisodes ?? 0)) updates.totalEpisodes = sd.episodeCount
@@ -694,23 +751,49 @@ export default function ProgressPage() {
           if (!entry.ageRating && sd.ageRating) updates.ageRating = sd.ageRating
           if (!entry.genres?.length && sd.genres.length) updates.genres = sd.genres
           if (!entry.country && sd.country) updates.country = sd.country
-          if (!updates.posterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
+          if (!entry.posterUrl && !entry.manualPosterUrl && !updates.posterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
           if (!entry.seasonNumber && sd.totalEpisodes && sd.totalEpisodes > (entry.totalEpisodes ?? 0)) {
             updates.totalEpisodes = sd.totalEpisodes
           }
           if (!entry.tmdbReleaseDate && sd.releaseDate) updates.tmdbReleaseDate = sd.releaseDate
+          try {
+            availability = await fetchTVAvailabilityInfo(entry.tmdbId!, entry.seasonNumber)
+          } catch {
+            availability = null
+          }
+          if (availability) {
+            const afterExpectedEpisodes = updates.totalEpisodes ?? entry.totalEpisodes ?? availability.totalEpisodes
+            const afterReleasedEpisodes = Math.min(availability.airedEpisodes, afterExpectedEpisodes)
+            const afterReleaseStatus = seriesReleaseStatusLabel(
+              availability.airedEpisodes,
+              afterExpectedEpisodes,
+              availability.firstEpisodeAirDate
+            )
+            if (
+              beforeReleaseStatus?.releasedEpisodes != null &&
+              beforeReleaseStatus.releasedEpisodes !== afterReleasedEpisodes
+            ) {
+              releaseChanges.push({
+                field: 'Episodes Released',
+                before: String(beforeReleaseStatus.releasedEpisodes),
+                after: String(afterReleasedEpisodes),
+              })
+            }
+            if (beforeReleaseStatus?.label && beforeReleaseStatus.label !== afterReleaseStatus) {
+              releaseChanges.push({
+                field: 'Release Status',
+                before: beforeReleaseStatus.label,
+                after: afterReleaseStatus,
+              })
+            }
+          }
         }
 
-        if (Object.keys(updates).length > 0) {
-          await refreshEntry(entry.id!, updates)
-          summary.updated.push({
-            id: entry.id!,
-            title: getDisplayTitle(entry),
-            changes: Object.entries(updates)
-              .filter(([key, nextValue]) => !valuesEqual(entry[key as keyof MediaEntry], nextValue))
-              .map(([key, nextValue]) => ({
+        const metadataChanges = Object.entries(updates)
+          .filter(([key, nextValue]) => !valuesEqual(entry[key as keyof MediaEntry], nextValue))
+          .map(([key, nextValue]) => ({
                 field: ({
-                  posterUrl: 'Poster',
+                  posterUrl: 'Poster Added',
                   backdropUrl: 'Backdrop',
                   yearMade: 'Release Year',
                   ageRating: 'Age Rating',
@@ -721,9 +804,19 @@ export default function ProgressPage() {
                   totalEpisodes: 'TMDB Episode Count',
                   watchHours: 'Watch Hours',
                 } as Partial<Record<keyof MediaEntry, string>>)[key as keyof MediaEntry] ?? key,
-                before: formatValue(entry[key as keyof MediaEntry]),
-                after: formatValue(nextValue),
-              })),
+                before: formatFieldValue(key, entry[key as keyof MediaEntry]),
+                after: formatFieldValue(key, nextValue),
+              }))
+        const changes = [...metadataChanges, ...releaseChanges]
+
+        if (changes.length > 0) {
+          if (Object.keys(updates).length > 0) {
+            await refreshEntry(entry.id!, updates)
+          }
+          summary.updated.push({
+            id: entry.id!,
+            title: getDisplayTitle(entry),
+            changes,
           })
         } else {
           summary.unchanged.push(entry)

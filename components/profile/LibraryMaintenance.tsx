@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
 import { Film, Link2, Loader2, Search, Tv } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -18,6 +19,8 @@ interface MatchSuggestion {
   strong: NormalizedTMDBResult | null
   possible: NormalizedTMDBResult[]
   state: MatchState
+  failed?: boolean
+  reason?: string
 }
 
 interface LibraryMaintenanceProps {
@@ -41,6 +44,17 @@ function statusLabel(status: MediaEntry['status']): string {
   return status === 'on_hold' ? 'On Hold' : status.charAt(0).toUpperCase() + status.slice(1)
 }
 
+function formatCheckedAt(value?: Timestamp | null): string {
+  if (!value) return 'Never'
+  return value.toDate().toLocaleString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
 export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenanceProps) {
   const unmatched = useMemo(
     () => entries.filter((entry) => entry.tmdbId == null),
@@ -51,7 +65,14 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
   const [suggestions, setSuggestions] = useState<Record<string, MatchSuggestion>>({})
   const [manualSearchId, setManualSearchId] = useState<string | null>(null)
   const [linkingId, setLinkingId] = useState<string | null>(null)
-  const [summary, setSummary] = useState<{ checked: number; linked: number; review: number; unmatched: number } | null>(null)
+  const [summary, setSummary] = useState<{
+    checked: number
+    strong: number
+    possible: number
+    noMatch: number
+    failed: number
+    completedAt: Date
+  } | null>(null)
 
   async function searchOne(entry: MediaEntry): Promise<MatchSuggestion> {
     const queries = [
@@ -62,8 +83,11 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
 
     const seen = new Set<string>()
     const results: NormalizedTMDBResult[] = []
+    let started = false
+    let failures = 0
     for (const query of queries) {
       try {
+        started = true
         const found = await searchMultiNormalized(query)
         for (const item of found) {
           const key = `${item.type}-${item.tmdbId}`
@@ -73,7 +97,7 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
           }
         }
       } catch {
-        // Try the next query variant.
+        failures++
       }
       if (results.length >= 5) break
     }
@@ -88,6 +112,8 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
       strong,
       possible: ranked.map((item) => item.result).filter((item) => item !== strong).slice(0, 3),
       state: strong || ranked.length > 0 ? 'pending' : 'unmatched',
+      failed: started && failures === queries.length && results.length === 0,
+      reason: started && failures === queries.length && results.length === 0 ? 'TMDB search failed' : undefined,
     }
   }
 
@@ -96,20 +122,40 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
     setSearching(true)
     setProgress({ current: 0, total: unmatched.length })
     const next: Record<string, MatchSuggestion> = {}
+    let checked = 0
 
     for (let i = 0; i < unmatched.length; i++) {
       const entry = unmatched[i]
       if (!entry.id) continue
-      next[entry.id] = await searchOne(entry)
+      try {
+        next[entry.id] = await searchOne(entry)
+      } catch (err) {
+        next[entry.id] = {
+          entry,
+          strong: null,
+          possible: [],
+          state: 'unmatched',
+          failed: true,
+          reason: err instanceof Error ? err.message : 'TMDB search failed',
+        }
+      } finally {
+        checked++
+        await editEntry(entry.id, { tmdbLastCheckedAt: Timestamp.now() })
+      }
       setSuggestions({ ...next })
       setProgress({ current: i + 1, total: unmatched.length })
     }
 
     setSearching(false)
-    const linked = 0
-    const review = Object.values(next).filter((item) => item.strong || item.possible.length > 0).length
-    const stillUnmatched = Object.values(next).filter((item) => item.state === 'unmatched').length
-    setSummary({ checked: unmatched.length, linked, review, unmatched: stillUnmatched })
+    const searched = Object.values(next)
+    setSummary({
+      checked,
+      strong: searched.filter((item) => item.strong && !item.failed).length,
+      possible: searched.filter((item) => !item.strong && item.possible.length > 0 && !item.failed).length,
+      noMatch: searched.filter((item) => item.state === 'unmatched' && !item.failed).length,
+      failed: searched.filter((item) => item.failed).length,
+      completedAt: new Date(),
+    })
   }
 
   async function linkEntry(entry: MediaEntry, result: NormalizedTMDBResult) {
@@ -170,11 +216,7 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
         },
       }))
       setSummary((current) => current
-        ? {
-            ...current,
-            linked: current.linked + 1,
-            review: Math.max(0, current.review - 1),
-          }
+        ? current
         : current)
       toast.success(`Linked "${getDisplayTitle(entry)}" to TMDB`)
     } catch {
@@ -228,11 +270,26 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
           </div>
 
           {summary && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <MiniStat label="Checked" value={summary.checked} />
-              <MiniStat label="Linked" value={summary.linked} />
-              <MiniStat label="Review" value={summary.review} />
-              <MiniStat label="Unmatched" value={summary.unmatched} />
+            <div className="space-y-2 rounded-xl border border-blue-500/20 bg-blue-500/10 p-3">
+              <div>
+                <p className="text-sm font-semibold text-white">TMDB Search Complete</p>
+                <p className="text-xs text-blue-300/70">
+                  Completed: {summary.completedAt.toLocaleString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <MiniStat label="Checked" value={summary.checked} />
+                <MiniStat label="Strong" value={summary.strong} />
+                <MiniStat label="Possible" value={summary.possible} />
+                <MiniStat label="No Match" value={summary.noMatch} />
+                <MiniStat label="Failed" value={summary.failed} />
+              </div>
             </div>
           )}
 
@@ -332,7 +389,7 @@ function MaintenanceRow({
               </p>
               <p className="text-[11px] text-white/30 flex items-center gap-1 mt-0.5">
                 <TypeIcon className="w-3 h-3" />
-                {type === 'series' ? 'Series' : 'Movie'} · Last checked: Never
+                {type === 'series' ? 'Series' : 'Movie'} · Last checked: {formatCheckedAt(entry.tmdbLastCheckedAt)}
               </p>
             </div>
             {suggestion?.state === 'linked' && (

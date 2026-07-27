@@ -77,6 +77,7 @@ export interface MediaEntry {
   updatedAt: Timestamp
   /** Viewing-related activity timestamp used for Watching → Recently Updated. */
   watchingActivityAt?: Timestamp | null
+  tmdbLastCheckedAt?: Timestamp | null
   userId: string
 }
 
