@@ -195,10 +195,31 @@ function seriesReleaseStatusLabel(airedEpisodes: number, expectedEpisodes: numbe
 }
 
 function valuesEqual(a: unknown, b: unknown): boolean {
-  if (Array.isArray(a) || Array.isArray(b)) {
-    return JSON.stringify(a ?? []) === JSON.stringify(b ?? [])
+  const normalize = (value: unknown): unknown => {
+    if (value == null || value === '') return null
+    if (typeof value === 'number') return value
+    if (typeof value === 'string') {
+      const stripped = value
+        .replace(/^[^A-Za-z0-9]+/, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase()
+      if (stripped === '') return null
+      const numeric = Number(stripped)
+      return Number.isFinite(numeric) && stripped === String(numeric) ? numeric : stripped
+    }
+    return value
   }
-  return a === b
+
+  if (Array.isArray(a) || Array.isArray(b)) {
+    const normalizeArray = (value: unknown) =>
+      (Array.isArray(value) ? value : [])
+        .map(normalize)
+        .filter((item) => item != null)
+        .sort()
+    return JSON.stringify(normalizeArray(a)) === JSON.stringify(normalizeArray(b))
+  }
+  return normalize(a) === normalize(b)
 }
 
 type RefreshChange = {
@@ -714,16 +735,16 @@ export default function ProgressPage() {
         if (entry.type === 'movie') {
           const data = await fetchMovieMetadata(entry.tmdbId!)
           if (!entry.posterUrl && !entry.manualPosterUrl && data.posterUrl) updates.posterUrl = data.posterUrl
-          if (!entry.backdropUrl && data.backdropUrl) updates.backdropUrl = data.backdropUrl
-          if (!entry.yearMade && data.year) updates.yearMade = data.year
-          if (!entry.ageRating && data.ageRating) updates.ageRating = data.ageRating
-          if (!entry.genres?.length && data.genres.length) updates.genres = data.genres
-          if (!entry.country && data.country) updates.country = data.country
-          if (!entry.episodeDurationMinutes && data.runtime) updates.episodeDurationMinutes = data.runtime
-          if (!entry.tmdbReleaseDate && data.releaseDate) updates.tmdbReleaseDate = data.releaseDate
+          if (data.backdropUrl && !valuesEqual(entry.backdropUrl, data.backdropUrl)) updates.backdropUrl = data.backdropUrl
+          if (data.year && !valuesEqual(entry.yearMade, data.year)) updates.yearMade = data.year
+          if (data.ageRating && !valuesEqual(entry.ageRating, data.ageRating)) updates.ageRating = data.ageRating
+          if (data.genres.length && !valuesEqual(entry.genres, data.genres)) updates.genres = data.genres
+          if (data.country && !valuesEqual(entry.country, data.country)) updates.country = data.country
+          if (data.runtime && !valuesEqual(entry.episodeDurationMinutes, data.runtime)) updates.episodeDurationMinutes = data.runtime
+          if (data.releaseDate && !valuesEqual(entry.tmdbReleaseDate, data.releaseDate)) updates.tmdbReleaseDate = data.releaseDate
           const afterReleaseDate = updates.tmdbReleaseDate ?? entry.tmdbReleaseDate
           const afterMovieStatus = movieReleaseStatusLabel(afterReleaseDate)
-          if (beforeReleaseStatus?.label && beforeReleaseStatus.label !== afterMovieStatus) {
+          if (beforeReleaseStatus?.label && !valuesEqual(beforeReleaseStatus.label, afterMovieStatus)) {
             releaseChanges.push({
               field: 'Movie Release Status',
               before: beforeReleaseStatus.label,
@@ -736,9 +757,9 @@ export default function ProgressPage() {
             try {
               const sd = await fetchSeasonMetadata(entry.tmdbId!, entry.seasonNumber)
               if (!entry.posterUrl && !entry.manualPosterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
-              if (!entry.yearMade && sd.year) updates.yearMade = sd.year
-              if (!entry.episodeDurationMinutes && sd.avgRuntime) updates.episodeDurationMinutes = sd.avgRuntime
-              if (sd.episodeCount > (entry.totalEpisodes ?? 0)) updates.totalEpisodes = sd.episodeCount
+              if (sd.year && !valuesEqual(entry.yearMade, sd.year)) updates.yearMade = sd.year
+              if (sd.avgRuntime && !valuesEqual(entry.episodeDurationMinutes, sd.avgRuntime)) updates.episodeDurationMinutes = sd.avgRuntime
+              if (sd.episodeCount && !valuesEqual(entry.totalEpisodes, sd.episodeCount)) updates.totalEpisodes = sd.episodeCount
               if (updates.totalEpisodes && (updates.episodeDurationMinutes ?? entry.episodeDurationMinutes)) {
                 const eps = updates.totalEpisodes
                 const mins = updates.episodeDurationMinutes ?? entry.episodeDurationMinutes!
@@ -747,15 +768,15 @@ export default function ProgressPage() {
             } catch { /* non-fatal */ }
           }
           const sd = await fetchTVMetadata(entry.tmdbId!)
-          if (!entry.backdropUrl && sd.backdropUrl) updates.backdropUrl = sd.backdropUrl
-          if (!entry.ageRating && sd.ageRating) updates.ageRating = sd.ageRating
-          if (!entry.genres?.length && sd.genres.length) updates.genres = sd.genres
-          if (!entry.country && sd.country) updates.country = sd.country
+          if (sd.backdropUrl && !valuesEqual(entry.backdropUrl, sd.backdropUrl)) updates.backdropUrl = sd.backdropUrl
+          if (sd.ageRating && !valuesEqual(entry.ageRating, sd.ageRating)) updates.ageRating = sd.ageRating
+          if (sd.genres.length && !valuesEqual(entry.genres, sd.genres)) updates.genres = sd.genres
+          if (sd.country && !valuesEqual(entry.country, sd.country)) updates.country = sd.country
           if (!entry.posterUrl && !entry.manualPosterUrl && !updates.posterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
-          if (!entry.seasonNumber && sd.totalEpisodes && sd.totalEpisodes > (entry.totalEpisodes ?? 0)) {
+          if (!entry.seasonNumber && sd.totalEpisodes && !valuesEqual(entry.totalEpisodes, sd.totalEpisodes)) {
             updates.totalEpisodes = sd.totalEpisodes
           }
-          if (!entry.tmdbReleaseDate && sd.releaseDate) updates.tmdbReleaseDate = sd.releaseDate
+          if (sd.releaseDate && !valuesEqual(entry.tmdbReleaseDate, sd.releaseDate)) updates.tmdbReleaseDate = sd.releaseDate
           try {
             availability = await fetchTVAvailabilityInfo(entry.tmdbId!, entry.seasonNumber)
           } catch {
@@ -779,7 +800,7 @@ export default function ProgressPage() {
                 after: String(afterReleasedEpisodes),
               })
             }
-            if (beforeReleaseStatus?.label && beforeReleaseStatus.label !== afterReleaseStatus) {
+            if (beforeReleaseStatus?.label && !valuesEqual(beforeReleaseStatus.label, afterReleaseStatus)) {
               releaseChanges.push({
                 field: 'Release Status',
                 before: beforeReleaseStatus.label,

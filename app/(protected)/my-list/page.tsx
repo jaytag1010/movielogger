@@ -28,7 +28,7 @@ type SortByValue = 'title' | 'rating' | 'year' | 'dateFinished' | 'createdAt' | 
 
 export default function MyListPage() {
   const { entries, filteredEntries, loading, removeEntry } = useMedia()
-  const { activeTab, setActiveTab, resetFilters } = useMediaStore()
+  const { activeTab, filters, setActiveTab, resetFilters } = useMediaStore()
   const searchParams = useSearchParams()
   const router = useRouter()
   const watchHistoryYearParam = searchParams.get('watchHistoryYear')
@@ -54,7 +54,7 @@ export default function MyListPage() {
     }
     if (watchHistoryYear != null) {
       setActiveTab('all')
-      setPage(1)
+      resetPagination()
       useMediaStore.getState().setFilters({
         search: '',
         type: 'all',
@@ -80,7 +80,7 @@ export default function MyListPage() {
     }
     if (searchParams.get('ids')) {
       setActiveTab('all')
-      setPage(1)
+      resetPagination()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
@@ -109,10 +109,17 @@ export default function MyListPage() {
   // (triggered by saves) don't re-fire setEditingEntry mid-save.
   const openedEntryIdRef = useRef<string | null>(null)
   const [page, setPage] = useState(1)
+  const [pageGroupStart, setPageGroupStart] = useState(1)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const listTopRef = useRef<HTMLDivElement>(null)
 
   const VIEW_MODE_KEY = 'movielogger-view-mode'
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
+
+  const resetPagination = () => {
+    setPage(1)
+    setPageGroupStart(1)
+  }
 
   // Initialise from localStorage on mount; write back on change
   useEffect(() => {
@@ -153,8 +160,49 @@ export default function MyListPage() {
       ? baseEntries
       : baseEntries.filter((e) => getEffectiveMediaType(e) === activeTab)
 
-  const paginatedEntries = tabEntries.slice(0, page * ITEMS_PER_PAGE)
-  const hasMore = tabEntries.length > page * ITEMS_PER_PAGE
+  const totalPages = Math.max(1, Math.ceil(tabEntries.length / ITEMS_PER_PAGE))
+  const safePage = Math.min(page, totalPages)
+  const paginatedEntries = tabEntries.slice(
+    (safePage - 1) * ITEMS_PER_PAGE,
+    safePage * ITEMS_PER_PAGE
+  )
+  const pageGroupSize = 5
+  const lastGroupStart = Math.max(1, Math.floor((totalPages - 1) / pageGroupSize) * pageGroupSize + 1)
+  const safeGroupStart = Math.min(pageGroupStart, lastGroupStart)
+  const visiblePages = Array.from(
+    { length: Math.min(pageGroupSize, totalPages - safeGroupStart + 1) },
+    (_, index) => safeGroupStart + index
+  )
+
+  useEffect(() => {
+    setPage(1)
+    setPageGroupStart(1)
+  }, [
+    activeTab,
+    filters.search,
+    filters.type,
+    filters.status,
+    filters.genre,
+    filters.country,
+    filters.year,
+    filters.ageRating,
+    filters.sortBy,
+    filters.sortOrder,
+    watchHistoryYearParam,
+    filteredIdsParam,
+  ])
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+    if (pageGroupStart > lastGroupStart) setPageGroupStart(lastGroupStart)
+  }, [lastGroupStart, page, pageGroupStart, totalPages])
+
+  function selectPage(nextPage: number) {
+    setPage(nextPage)
+    requestAnimationFrame(() => {
+      listTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
 
   function handleEdit(entry: MediaEntry) {
     setEditingEntry(entry)
@@ -180,7 +228,7 @@ export default function MyListPage() {
         value={activeTab}
         onValueChange={(v) => {
           setActiveTab(v as 'all' | 'movie' | 'series')
-          setPage(1)
+          resetPagination()
         }}
       >
         <TabsList className="w-full mb-4">
@@ -220,7 +268,7 @@ export default function MyListPage() {
                 onClick={() => {
                   resetFilters()
                   setActiveTab('all')
-                  setPage(1)
+                  resetPagination()
                   router.replace('/my-list')
                 }}
               >
@@ -243,7 +291,7 @@ export default function MyListPage() {
                 size="sm"
                 className="h-7 text-xs flex-shrink-0"
                 onClick={() => {
-                  setPage(1)
+                  resetPagination()
                   router.replace('/my-list')
                 }}
               >
@@ -259,6 +307,8 @@ export default function MyListPage() {
             />
           )}
         </div>
+
+        <div ref={listTopRef} />
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
@@ -310,12 +360,19 @@ export default function MyListPage() {
           </>
         )}
 
-        {hasMore && !loading && (
-          <div className="text-center mt-4">
-            <Button variant="outline" onClick={() => setPage((p) => p + 1)}>
-              Load More ({tabEntries.length - paginatedEntries.length} remaining)
-            </Button>
-          </div>
+        {!loading && totalPages > 1 && (
+          <PaginationControls
+            currentPage={safePage}
+            totalPages={totalPages}
+            visiblePages={visiblePages}
+            groupStart={safeGroupStart}
+            lastGroupStart={lastGroupStart}
+            onFirstGroup={() => setPageGroupStart(1)}
+            onPrevGroup={() => setPageGroupStart((current) => Math.max(1, current - pageGroupSize))}
+            onNextGroup={() => setPageGroupStart((current) => Math.min(lastGroupStart, current + pageGroupSize))}
+            onLastGroup={() => setPageGroupStart(lastGroupStart)}
+            onSelectPage={selectPage}
+          />
         )}
       </Tabs>
 
@@ -387,5 +444,86 @@ function MediaList({
         ))}
       </AnimatePresence>
     </div>
+  )
+}
+
+function PaginationControls({
+  currentPage,
+  totalPages,
+  visiblePages,
+  groupStart,
+  lastGroupStart,
+  onFirstGroup,
+  onPrevGroup,
+  onNextGroup,
+  onLastGroup,
+  onSelectPage,
+}: {
+  currentPage: number
+  totalPages: number
+  visiblePages: number[]
+  groupStart: number
+  lastGroupStart: number
+  onFirstGroup: () => void
+  onPrevGroup: () => void
+  onNextGroup: () => void
+  onLastGroup: () => void
+  onSelectPage: (page: number) => void
+}) {
+  const atFirstGroup = groupStart <= 1
+  const atLastGroup = groupStart >= lastGroupStart
+
+  return (
+    <nav
+      className="mt-4 flex items-center justify-center gap-1.5 flex-wrap"
+      aria-label={`Pagination, ${totalPages} pages`}
+    >
+      <PageButton label="«" disabled={atFirstGroup} onClick={onFirstGroup} ariaLabel="Show first page group" />
+      <PageButton label="<" disabled={atFirstGroup} onClick={onPrevGroup} ariaLabel="Show previous page group" />
+      {visiblePages.map((pageNumber) => (
+        <PageButton
+          key={pageNumber}
+          label={String(pageNumber)}
+          active={pageNumber === currentPage}
+          onClick={() => onSelectPage(pageNumber)}
+          ariaLabel={`Open page ${pageNumber}`}
+        />
+      ))}
+      <PageButton label=">" disabled={atLastGroup} onClick={onNextGroup} ariaLabel="Show next page group" />
+      <PageButton label="»" disabled={atLastGroup} onClick={onLastGroup} ariaLabel="Show last page group" />
+    </nav>
+  )
+}
+
+function PageButton({
+  label,
+  active = false,
+  disabled = false,
+  onClick,
+  ariaLabel,
+}: {
+  label: string
+  active?: boolean
+  disabled?: boolean
+  onClick: () => void
+  ariaLabel: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      aria-current={active ? 'page' : undefined}
+      className={[
+        'min-w-9 h-9 px-2 rounded-lg border text-sm font-semibold transition-colors',
+        active
+          ? 'bg-blue-600/25 border-blue-500/50 text-blue-200'
+          : 'bg-white/5 border-white/10 text-white/55 hover:bg-white/10 hover:text-white',
+        disabled ? 'opacity-35 cursor-not-allowed hover:bg-white/5 hover:text-white/55' : '',
+      ].join(' ')}
+    >
+      {label}
+    </button>
   )
 }
