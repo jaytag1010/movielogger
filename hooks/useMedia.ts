@@ -54,7 +54,9 @@ export function useMedia() {
       if (!user) throw new Error('Not authenticated')
       const entry = await createMediaEntry(user.uid, input)
       useMediaStore.getState().addEntry(entry)
-      addActivity(user.uid, buildTitleAddedActivity(entry)).catch(() => {})
+      await addActivity(user.uid, buildTitleAddedActivity(entry)).catch((err) => {
+        console.warn('Failed to record title-added activity', err)
+      })
       return entry
     },
     [user]

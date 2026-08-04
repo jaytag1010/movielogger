@@ -5,7 +5,6 @@ import {
   doc,
   getDocs,
   getFirestore,
-  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -70,11 +69,12 @@ export async function addActivity(
 export async function getUserActivities(userId: string): Promise<ActivityEntry[]> {
   const q = query(
     collection(db(), COLLECTION),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
+    where('userId', '==', userId)
   )
   const snap = await getDocs(q)
-  return snap.docs.map((item) => ({ id: item.id, ...item.data() } as ActivityEntry))
+  return snap.docs
+    .map((item) => ({ id: item.id, ...item.data() } as ActivityEntry))
+    .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
 }
 
 export async function clearUserActivities(userId: string): Promise<number> {
@@ -94,12 +94,16 @@ export async function clearUserActivities(userId: string): Promise<number> {
 export async function pruneActivities(userId: string): Promise<void> {
   const q = query(
     collection(db(), COLLECTION),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
+    where('userId', '==', userId)
   )
   const snap = await getDocs(q)
   const cutoff = Timestamp.fromDate(cutoffDate()).toMillis()
-  const toDelete = snap.docs.filter((item, index) => {
+  const sorted = [...snap.docs].sort((a, b) => {
+    const aCreated = (a.data().createdAt as Timestamp | undefined)?.toMillis?.() ?? 0
+    const bCreated = (b.data().createdAt as Timestamp | undefined)?.toMillis?.() ?? 0
+    return bCreated - aCreated
+  })
+  const toDelete = sorted.filter((item, index) => {
     const data = item.data()
     const createdAt = data.createdAt as Timestamp | undefined
     const tooOld = createdAt ? createdAt.toMillis() < cutoff : false
