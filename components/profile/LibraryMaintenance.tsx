@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
-import { Film, Link2, Loader2, Search, Tv } from 'lucide-react'
+import { Film, Link2, Loader2, RotateCcw, Search, Tv } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import { TMDBSearch } from '@/components/media/TMDBSearch'
@@ -18,6 +18,7 @@ interface MatchSuggestion {
   entry: MediaEntry
   strong: NormalizedTMDBResult | null
   possible: NormalizedTMDBResult[]
+  selected?: NormalizedTMDBResult | null
   state: MatchState
   failed?: boolean
   reason?: string
@@ -57,7 +58,11 @@ function formatCheckedAt(value?: Timestamp | null): string {
 
 export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenanceProps) {
   const unmatched = useMemo(
-    () => entries.filter((entry) => entry.tmdbId == null),
+    () => entries.filter((entry) => entry.tmdbId == null && !entry.tmdbUnmatchedDismissedAt),
+    [entries]
+  )
+  const dismissedUnmatched = useMemo(
+    () => entries.filter((entry) => entry.tmdbId == null && entry.tmdbUnmatchedDismissedAt),
     [entries]
   )
   const [searching, setSearching] = useState(false)
@@ -111,6 +116,7 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
       entry,
       strong,
       possible: ranked.map((item) => item.result).filter((item) => item !== strong).slice(0, 3),
+      selected: strong ?? ranked[0]?.result ?? null,
       state: strong || ranked.length > 0 ? 'pending' : 'unmatched',
       failed: started && failures === queries.length && results.length === 0,
       reason: started && failures === queries.length && results.length === 0 ? 'TMDB search failed' : undefined,
@@ -158,8 +164,15 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
     })
   }
 
-  async function linkEntry(entry: MediaEntry, result: NormalizedTMDBResult) {
+  async function linkEntry(
+    entry: MediaEntry,
+    result: NormalizedTMDBResult,
+    options: { skipConfirm?: boolean } = {}
+  ) {
     if (!entry.id) return
+    if (!options.skipConfirm && !confirm(`Link this title to "${result.title}${result.year ? ` (${result.year})` : ''}"?`)) {
+      return
+    }
     const duplicate = entries.find((candidate) =>
       candidate.id !== entry.id &&
       candidate.tmdbId === result.tmdbId &&
@@ -185,6 +198,7 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
         genres: fullData.genres,
         yearMade: fullData.year ?? entry.yearMade,
         tmdbReleaseDate: fullData.releaseDate ?? null,
+        tmdbUnmatchedDismissedAt: null,
       }
 
       if (fullData.type === 'series') {
@@ -228,8 +242,60 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
 
   async function confirmAllStrong() {
     const strongMatches = Object.values(suggestions).filter((item) => item.state === 'pending' && item.strong)
+    if (
+      strongMatches.length === 0 ||
+      !confirm(`Link all ${strongMatches.length} strong TMDB match${strongMatches.length === 1 ? '' : 'es'}?`)
+    ) {
+      return
+    }
     for (const item of strongMatches) {
-      await linkEntry(item.entry, item.strong!)
+      await linkEntry(item.entry, item.strong!, { skipConfirm: true })
+    }
+  }
+
+  function previewMatch(entry: MediaEntry, result: NormalizedTMDBResult) {
+    if (!entry.id) return
+    setSuggestions((current) => ({
+      ...current,
+      [entry.id!]: {
+        ...(current[entry.id!] ?? { entry, strong: null, possible: [], state: 'pending' }),
+        selected: result,
+        state: 'pending',
+      },
+    }))
+  }
+
+  async function keepUnmatched(entry: MediaEntry) {
+    if (!entry.id) return
+    try {
+      await editEntry(entry.id, { tmdbUnmatchedDismissedAt: Timestamp.now() })
+      setSuggestions((current) => {
+        const next = { ...current }
+        delete next[entry.id!]
+        return next
+      })
+      toast.success(`Kept "${getDisplayTitle(entry)}" unmatched`)
+    } catch {
+      toast.error('Failed to keep title unmatched')
+    }
+  }
+
+  async function handleRescan() {
+    if (dismissedUnmatched.length === 0) return
+    setSearching(true)
+    try {
+      for (const entry of dismissedUnmatched) {
+        if (entry.id) {
+          await editEntry(entry.id, { tmdbUnmatchedDismissedAt: null })
+        }
+      }
+      setSuggestions({})
+      setSummary(null)
+      toast.success(`Restored ${dismissedUnmatched.length} unmatched title${dismissedUnmatched.length === 1 ? '' : 's'}`)
+    } catch {
+      toast.error('Failed to rescan unmatched titles')
+    } finally {
+      setSearching(false)
     }
   }
 
@@ -257,16 +323,26 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
                 {unmatched.length} title{unmatched.length === 1 ? '' : 's'} without a TMDB link.
               </p>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleSearchAll}
-              disabled={searching || unmatched.length === 0}
-              className="shrink-0"
-            >
-              {searching ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
-              {searching ? `${progress.current} / ${progress.total}` : 'Search All'}
-            </Button>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSearchAll}
+                disabled={searching || unmatched.length === 0}
+              >
+                {searching ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+                {searching ? `${progress.current} / ${progress.total}` : 'Search All'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleRescan}
+                disabled={searching || dismissedUnmatched.length === 0}
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Rescan
+              </Button>
+            </div>
           </div>
 
           {summary && (
@@ -319,6 +395,7 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
                   manualSearch={manualSearchId === entry.id}
                   linking={linkingId === entry.id}
                   onLink={(result) => linkEntry(entry, result)}
+                  onPreview={(result) => previewMatch(entry, result)}
                   onChooseAnother={() => setManualSearchId((current) => current === entry.id ? null : entry.id ?? null)}
                   onSkip={() => entry.id && setSuggestions((current) => ({
                     ...current,
@@ -327,13 +404,7 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
                       state: 'skipped',
                     },
                   }))}
-                  onKeepUnmatched={() => entry.id && setSuggestions((current) => ({
-                    ...current,
-                    [entry.id!]: {
-                      ...(current[entry.id!] ?? { entry, strong: null, possible: [], state: 'pending' }),
-                      state: 'unmatched',
-                    },
-                  }))}
+                  onKeepUnmatched={() => keepUnmatched(entry)}
                 />
               ))
             )}
@@ -359,6 +430,7 @@ function MaintenanceRow({
   manualSearch,
   linking,
   onLink,
+  onPreview,
   onChooseAnother,
   onSkip,
   onKeepUnmatched,
@@ -368,13 +440,20 @@ function MaintenanceRow({
   manualSearch: boolean
   linking: boolean
   onLink: (result: NormalizedTMDBResult) => void
+  onPreview: (result: NormalizedTMDBResult) => void
   onChooseAnother: () => void
   onSkip: () => void
   onKeepUnmatched: () => void
 }) {
   const type = getEffectiveMediaType(entry)
   const TypeIcon = type === 'movie' ? Film : Tv
-  const best = suggestion?.strong ?? suggestion?.possible[0] ?? null
+  const best = suggestion?.selected ?? suggestion?.strong ?? suggestion?.possible[0] ?? null
+  const bestIsStrong = Boolean(
+    suggestion?.strong &&
+    best &&
+    suggestion.strong.tmdbId === best.tmdbId &&
+    suggestion.strong.type === best.type
+  )
 
   return (
     <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
@@ -413,7 +492,7 @@ function MaintenanceRow({
             <Poster src={best.posterUrl} title={best.title} compact />
             <div className="min-w-0">
               <p className="text-[10px] text-blue-300/60 uppercase mb-1">
-                {suggestion.strong ? 'Strong Match' : 'Possible Match'}
+                {bestIsStrong ? 'Strong Match' : 'Possible Match'}
               </p>
               <p className="text-xs font-medium text-white truncate">{best.title}</p>
               <p className="text-[10px] text-blue-300/60">{best.type} · {best.year ?? '—'}</p>
@@ -428,7 +507,7 @@ function MaintenanceRow({
             <button
               key={`${item.type}-${item.tmdbId}`}
               type="button"
-              onClick={() => onLink(item)}
+              onClick={() => onPreview(item)}
               className="min-w-40 rounded-lg border border-white/10 bg-white/5 p-2 text-left hover:bg-white/10"
             >
               <p className="text-xs text-white truncate">{item.title}</p>
@@ -442,7 +521,7 @@ function MaintenanceRow({
         <TMDBSearch
           mediaType="all"
           defaultQuery={entry.title}
-          onSelect={onLink}
+          onSelect={onPreview}
           placeholder="Search TMDB for this title..."
         />
       )}

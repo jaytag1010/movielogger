@@ -78,6 +78,8 @@ export interface MediaEntry {
   /** Viewing-related activity timestamp used for Watching → Recently Updated. */
   watchingActivityAt?: Timestamp | null
   tmdbLastCheckedAt?: Timestamp | null
+  /** User-dismissed unmatched TMDB item; Rescan clears this flag. */
+  tmdbUnmatchedDismissedAt?: Timestamp | null
   userId: string
 }
 

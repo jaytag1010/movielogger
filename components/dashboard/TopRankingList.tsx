@@ -6,8 +6,8 @@ import Link from 'next/link'
 import { Star, Film, Tv, ChevronRight } from 'lucide-react'
 import { MediaEntry, MediaType } from '@/types/media'
 import { GlassCard } from '@/components/common/GlassCard'
-import { Badge } from '@/components/ui/badge'
 import { getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
+import { topDenseRanked } from '@/utils/ranking'
 
 interface TopRankingListProps {
   entries: MediaEntry[]
@@ -18,15 +18,14 @@ interface TopRankingListProps {
 export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProps) {
   const filtered = entries
     .filter((e) => getEffectiveMediaType(e) === type && e.personalRating !== null && e.status === 'completed')
-    .sort((a, b) => (b.personalRating ?? 0) - (a.personalRating ?? 0))
-    .slice(0, limit)
+  const ranked = topDenseRanked(filtered, limit)
 
   const title = type === 'movie' ? 'Top Movies' : 'Top Series'
   const Icon = type === 'movie' ? Film : Tv
   const maxRating = 10
   const seeAllHref = `/my-list?tab=${type}&sort=rating_desc`
 
-  if (filtered.length === 0) {
+  if (ranked.length === 0) {
     return (
       <GlassCard padding="md">
         <div className="flex items-center gap-2 mb-4">
@@ -57,7 +56,7 @@ export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProp
       </div>
 
       <div className="space-y-2">
-        {filtered.map((entry, index) => (
+        {ranked.map(({ entry, rank }, index) => (
           <motion.div
             key={entry.id}
             initial={{ opacity: 0, x: -20 }}
@@ -68,12 +67,12 @@ export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProp
             <div className="flex items-center gap-3 py-1">
               {/* Rank */}
               <div className="w-6 flex-shrink-0 text-center">
-                {index < 3 ? (
+                {rank <= 3 ? (
                   <span className="text-sm font-bold">
-                    {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                    {rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉'}
                   </span>
                 ) : (
-                  <span className="text-xs font-semibold text-white/30">{index + 1}</span>
+                  <span className="text-xs font-semibold text-white/30">{rank}</span>
                 )}
               </div>
 

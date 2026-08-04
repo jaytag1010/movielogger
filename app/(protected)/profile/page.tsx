@@ -8,24 +8,18 @@ import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   LogOut,
-  Download,
   FileSpreadsheet,
   FileText,
-  Film,
-  Tv,
-  Clock,
-  Star,
-  CheckCircle,
   Mail,
   Trash2,
   AlertTriangle,
   Upload,
-  Database,
   Camera,
   Pencil,
   X,
   Check,
   CalendarDays,
+  Wrench,
 } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { GlassCard } from '@/components/common/GlassCard'
@@ -46,9 +40,6 @@ import { useRouter } from 'next/navigation'
 import { exportToExcel, exportToCSV } from '@/lib/export/exporter'
 import { deleteAllUserEntries, getUserProfile, updateUserProfile, UserProfile } from '@/lib/firebase/firestore'
 import { validatePosterFile, uploadPoster } from '@/lib/imgbb'
-import { calculateTotalWatchHours } from '@/utils/watchTime'
-import { formatWatchTime } from '@/utils/formatters'
-import { LibraryMaintenance } from '@/components/profile/LibraryMaintenance'
 
 const CONFIRM_PHRASE = 'CONTINUE'
 
@@ -78,7 +69,7 @@ function formatMemberSince(creationTime: string | undefined): string | null {
 export default function ProfilePage() {
   const { user } = useAuthStore()
   const { logOut } = useAuthActions()
-  const { entries, editEntry } = useMedia()
+  const { entries } = useMedia()
   const { setEntries } = useMediaStore()
   const router = useRouter()
 
@@ -120,6 +111,17 @@ export default function ProfilePage() {
   const effectivePhotoUrl    = profile.profilePhotoUrl || user?.photoURL || ''
   const maskedEmail          = user?.email ? maskEmail(user.email) : ''
   const memberSince          = formatMemberSince(user?.metadata?.creationTime)
+  const unmatchedCount       = entries.filter((entry) => entry.tmdbId == null && !entry.tmdbUnmatchedDismissedAt).length
+  const lastScanMillis       = entries.reduce((latest, entry) => Math.max(latest, entry.tmdbLastCheckedAt?.toMillis() ?? 0), 0)
+  const lastScan             = lastScanMillis > 0
+    ? new Date(lastScanMillis).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : 'Never'
 
   const initials = effectiveDisplayName
     .split(' ')
@@ -127,16 +129,6 @@ export default function ProfilePage() {
     .join('')
     .toUpperCase()
     .slice(0, 2) || 'U'
-
-  const completed = entries.filter((e) => e.status === 'completed')
-  const movies = entries.filter((e) => e.type === 'movie')
-  const series = entries.filter((e) => e.type === 'series')
-  const totalHours = calculateTotalWatchHours(completed)
-  const ratedEntries = entries.filter((e) => e.personalRating !== null)
-  const avgRating =
-    ratedEntries.length > 0
-      ? ratedEntries.reduce((s, e) => s + (e.personalRating ?? 0), 0) / ratedEntries.length
-      : 0
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -235,20 +227,6 @@ export default function ProfilePage() {
     setNameInput(profile.displayName ?? user?.displayName ?? '')
     setEditingName(false)
   }
-
-  const stats = [
-    { label: 'Movies',    value: movies.length,      icon: Film,      color: 'text-purple-400' },
-    { label: 'Series',    value: series.length,       icon: Tv,        color: 'text-cyan-400'   },
-    { label: 'Total',     value: entries.length,      icon: Database,  color: 'text-blue-400'   },
-    { label: 'Completed', value: completed.length,    icon: CheckCircle, color: 'text-emerald-400' },
-    { label: 'Watch Time', value: formatWatchTime(totalHours), icon: Clock, color: 'text-amber-400' },
-    {
-      label: 'Avg Rating',
-      value: ratedEntries.length > 0 ? avgRating.toFixed(2) : '—',
-      icon: Star,
-      color: 'text-yellow-400',
-    },
-  ]
 
   return (
     <AppLayout title="Profile" subtitle="Account &amp; settings">
@@ -473,23 +451,27 @@ export default function ProfilePage() {
           </div>
         </GlassCard>
 
-        {/* ── Section 3: Statistics ── */}
-        <GlassCard padding="md">
-          <LibraryMaintenance entries={entries} editEntry={editEntry} />
-        </GlassCard>
-
+        {/* ── Section 3: Library Tools ── */}
         <GlassCard padding="md">
           <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">
-            Statistics
+            Library Tools
           </h3>
-          <div className="grid grid-cols-3 gap-3">
-            {stats.map((stat) => (
-              <div key={stat.label} className="text-center">
-                <stat.icon className={`w-5 h-5 ${stat.color} mx-auto mb-1`} />
-                <p className="text-lg font-bold text-white">{stat.value}</p>
-                <p className="text-xs text-white/40">{stat.label}</p>
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-500/15 border border-blue-500/20 flex items-center justify-center shrink-0">
+                <Wrench className="w-4 h-4 text-blue-300" />
               </div>
-            ))}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white">Library maintenance and advanced tools</p>
+                <p className="text-xs text-white/40 mt-1">
+                  {unmatchedCount} unmatched TMDB title{unmatchedCount === 1 ? '' : 's'}
+                </p>
+                <p className="text-xs text-white/35 mt-0.5">Last Scan: {lastScan}</p>
+              </div>
+              <Button size="sm" asChild>
+                <Link href="/library-tools">Open</Link>
+              </Button>
+            </div>
           </div>
         </GlassCard>
 

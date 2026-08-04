@@ -47,7 +47,7 @@ export function hasMissingCountry(entry: MediaEntry): boolean {
 }
 
 export function hasMissingTmdbLink(entry: MediaEntry): boolean {
-  return entry.tmdbId == null
+  return entry.tmdbId == null && !entry.tmdbUnmatchedDismissedAt
 }
 
 export function hasMissingPoster(entry: MediaEntry): boolean {

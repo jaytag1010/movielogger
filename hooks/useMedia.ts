@@ -17,6 +17,7 @@ import { comparePriorityAscThenUpdatedDesc, comparePriorityDescThenUpdatedDesc }
 import { compareDateAdded } from '@/utils/internalIdSort'
 import { normalizeCountry } from '@/utils/countries'
 import { calculateStoredWatchHours } from '@/utils/watchHours'
+import { compareRankedEntries } from '@/utils/ranking'
 
 export function useMedia() {
   const { entries, loading, filters, activeTab } = useMediaStore()
@@ -171,7 +172,8 @@ function getFilteredEntries(entries: MediaEntry[], filters: MediaFilters): Media
       case 'title':
         return order * a.title.localeCompare(b.title)
       case 'rating':
-        return order * ((a.personalRating ?? 0) - (b.personalRating ?? 0))
+        if (filters.sortOrder === 'desc') return compareRankedEntries(a, b)
+        return (a.personalRating ?? 0) - (b.personalRating ?? 0) || compareRankedEntries(a, b)
       case 'year':
         return order * ((a.yearMade ?? 0) - (b.yearMade ?? 0))
       case 'priority':

@@ -1,5 +1,6 @@
 import { MediaEntry, MediaType } from '@/types/media'
 import { calculateEntryWatchHours } from '@/utils/watchTime'
+import { getDenseRankForEntry, hasRankedRating, isSameEntry } from '@/utils/ranking'
 
 export interface CompletionRank {
   rank: number
@@ -26,34 +27,8 @@ export interface CompletionStatistics {
   achievements: string[]
 }
 
-function hasRankedRating(entry: MediaEntry): boolean {
-  return entry.personalRating != null && entry.personalRating > 0
-}
-
-function finishedAt(entry: MediaEntry): number {
-  return entry.dateFinished?.toMillis() ?? 0
-}
-
-function compareCompletedRatings(a: MediaEntry, b: MediaEntry): number {
-  const ratingDiff = (b.personalRating ?? 0) - (a.personalRating ?? 0)
-  if (ratingDiff !== 0) return ratingDiff
-
-  const dateDiff = finishedAt(b) - finishedAt(a)
-  if (dateDiff !== 0) return dateDiff
-
-  return a.title.localeCompare(b.title)
-}
-
-function isSameEntry(a: MediaEntry, b: MediaEntry): boolean {
-  if (a.id && b.id) return a.id === b.id
-  return a.internalId === b.internalId
-}
-
 function rankInPool(entry: MediaEntry, pool: MediaEntry[]): CompletionRank | null {
-  if (!hasRankedRating(entry)) return null
-  const ranked = pool.filter(hasRankedRating).sort(compareCompletedRatings)
-  const index = ranked.findIndex((candidate) => isSameEntry(candidate, entry))
-  return index >= 0 ? { rank: index + 1, total: ranked.length } : null
+  return getDenseRankForEntry(entry, pool)
 }
 
 export function calculateCompletionStatistics(
