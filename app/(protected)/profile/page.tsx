@@ -20,6 +20,7 @@ import {
   Check,
   CalendarDays,
   Wrench,
+  History,
 } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { GlassCard } from '@/components/common/GlassCard'
@@ -41,6 +42,7 @@ import { exportToExcel, exportToCSV } from '@/lib/export/exporter'
 import { deleteAllUserEntries, getUserProfile, updateUserProfile, UserProfile } from '@/lib/firebase/firestore'
 import { addActivity } from '@/lib/firebase/activity'
 import { validatePosterFile, uploadPoster } from '@/lib/imgbb'
+import { useActivityHistory } from '@/hooks/useActivityHistory'
 
 const CONFIRM_PHRASE = 'CONTINUE'
 
@@ -71,6 +73,7 @@ export default function ProfilePage() {
   const { user } = useAuthStore()
   const { logOut } = useAuthActions()
   const { entries } = useMedia()
+  const { activities } = useActivityHistory()
   const { setEntries } = useMediaStore()
   const router = useRouter()
 
@@ -116,6 +119,16 @@ export default function ProfilePage() {
   const lastScanMillis       = entries.reduce((latest, entry) => Math.max(latest, entry.tmdbLastCheckedAt?.toMillis() ?? 0), 0)
   const lastScan             = lastScanMillis > 0
     ? new Date(lastScanMillis).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : 'Never'
+  const lastActivityMillis   = activities.reduce((latest, activity) => Math.max(latest, activity.createdAt?.toMillis?.() ?? 0), 0)
+  const lastActivity         = lastActivityMillis > 0
+    ? new Date(lastActivityMillis).toLocaleString('en-US', {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
@@ -473,6 +486,7 @@ export default function ProfilePage() {
           <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">
             Library Tools
           </h3>
+          <div className="space-y-2">
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
             <div className="flex items-start gap-3">
               <div className="w-9 h-9 rounded-lg bg-blue-500/15 border border-blue-500/20 flex items-center justify-center shrink-0">
@@ -489,6 +503,24 @@ export default function ProfilePage() {
                 <Link href="/library-tools">Open</Link>
               </Button>
             </div>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-purple-500/15 border border-purple-500/20 flex items-center justify-center shrink-0">
+                <History className="w-4 h-4 text-purple-300" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white">Activity History</p>
+                <p className="text-xs text-white/40 mt-1">
+                  {activities.length} recent activit{activities.length === 1 ? 'y' : 'ies'}
+                </p>
+                <p className="text-xs text-white/35 mt-0.5">Last Activity: {lastActivity}</p>
+              </div>
+              <Button size="sm" asChild>
+                <Link href="/library-tools/activity-history">Open</Link>
+              </Button>
+            </div>
+          </div>
           </div>
         </GlassCard>
 

@@ -6,7 +6,10 @@ import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -14,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { MediaEntry, MediaFilters, MediaStatus, MEDIA_STATUS_LABELS } from '@/types/media'
 import { useMediaStore } from '@/store/mediaStore'
 import { cn } from '@/utils/cn'
+import { normalizeCountry } from '@/utils/countries'
 
 interface FilterBarProps {
   entries: MediaEntry[]
@@ -30,10 +34,23 @@ export function FilterBar({ entries, viewMode, onViewModeChange }: FilterBarProp
     return Array.from(set).sort()
   }, [entries])
 
-  const countries = useMemo(() => {
-    const set = new Set<string>()
-    entries.forEach((e) => { if (e.country) set.add(e.country) })
-    return Array.from(set).sort()
+  const countryOptions = useMemo(() => {
+    const counts: Record<string, number> = {}
+    entries.forEach((e) => {
+      const country = normalizeCountry(e.country)
+      if (country) counts[country] = (counts[country] ?? 0) + 1
+    })
+    const sortedByName = Object.keys(counts).sort()
+    const topCountries = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 8)
+      .map(([country]) => country)
+    const topSet = new Set(topCountries)
+    return {
+      topCountries,
+      remainingCountries: sortedByName.filter((country) => !topSet.has(country)),
+      allCountries: sortedByName,
+    }
   }, [entries])
 
   const years = useMemo(() => {
@@ -113,7 +130,7 @@ export function FilterBar({ entries, viewMode, onViewModeChange }: FilterBarProp
           </Select>
         )}
 
-        {countries.length > 0 && (
+        {countryOptions.allCountries.length > 0 && (
           <Select
             value={filters.country}
             onValueChange={(v) => setFilters({ country: v })}
@@ -123,9 +140,32 @@ export function FilterBar({ entries, viewMode, onViewModeChange }: FilterBarProp
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Countries</SelectItem>
-              {countries.map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
-              ))}
+              {countryOptions.topCountries.length > 0 && (
+                <>
+                  <SelectSeparator />
+                  <SelectGroup>
+                    <SelectLabel className="text-[10px] text-white/30 uppercase tracking-wider px-2 py-1">
+                      Top Country Origins
+                    </SelectLabel>
+                    {countryOptions.topCountries.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </>
+              )}
+              {countryOptions.remainingCountries.length > 0 && (
+                <>
+                  <SelectSeparator />
+                  <SelectGroup>
+                    <SelectLabel className="text-[10px] text-white/30 uppercase tracking-wider px-2 py-1">
+                      All Countries
+                    </SelectLabel>
+                    {countryOptions.remainingCountries.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </>
+              )}
             </SelectContent>
           </Select>
         )}
