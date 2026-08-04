@@ -18,6 +18,12 @@ import { compareDateAdded } from '@/utils/internalIdSort'
 import { normalizeCountry } from '@/utils/countries'
 import { calculateStoredWatchHours } from '@/utils/watchHours'
 import { compareRankedEntries } from '@/utils/ranking'
+import { addActivity, ensureActivityHistoryEnabled } from '@/lib/firebase/activity'
+import {
+  buildTitleAddedActivity,
+  buildTitleDeletedActivity,
+  buildUpdateActivities,
+} from '@/utils/activity'
 
 export function useMedia() {
   const { entries, loading, filters, activeTab } = useMediaStore()
@@ -27,6 +33,7 @@ export function useMedia() {
     if (!user) return
     useMediaStore.getState().setLoading(true)
     try {
+      await ensureActivityHistoryEnabled(user.uid).catch(() => {})
       const data = await getUserMediaEntries(user.uid)
       useMediaStore.getState().setEntries(data)
     } catch (err) {
@@ -47,14 +54,15 @@ export function useMedia() {
       if (!user) throw new Error('Not authenticated')
       const entry = await createMediaEntry(user.uid, input)
       useMediaStore.getState().addEntry(entry)
+      addActivity(user.uid, buildTitleAddedActivity(entry)).catch(() => {})
       return entry
     },
     [user]
   )
 
   const editEntry = useCallback(async (id: string, updates: MediaEntryUpdate) => {
-    await updateMediaEntry(id, updates)
     const current = useMediaStore.getState().entries.find((entry) => entry.id === id)
+    await updateMediaEntry(id, updates)
     const merged = current ? { ...current, ...updates } : updates
     const normalizedUpdates: Partial<MediaEntry> = { ...(updates as Partial<MediaEntry>) }
     if ('country' in merged) {
@@ -70,7 +78,11 @@ export function useMedia() {
       normalizedUpdates.watchingActivityAt = Timestamp.now()
     }
     useMediaStore.getState().updateEntry(id, normalizedUpdates)
-  }, [])
+    if (user && current) {
+      const activities = buildUpdateActivities(current, normalizedUpdates as MediaEntryUpdate)
+      activities.forEach((activity) => addActivity(user.uid, activity).catch(() => {}))
+    }
+  }, [user])
 
   /**
    * Refresh metadata without disturbing the In Progress ordering.
@@ -96,9 +108,13 @@ export function useMedia() {
   }, [])
 
   const removeEntry = useCallback(async (id: string) => {
+    const current = useMediaStore.getState().entries.find((entry) => entry.id === id)
     await deleteMediaEntry(id)
+    if (user && current) {
+      addActivity(user.uid, buildTitleDeletedActivity(current)).catch(() => {})
+    }
     await loadEntries()
-  }, [loadEntries])
+  }, [loadEntries, user])
 
   const filteredEntries = getFilteredEntries(entries, filters)
 

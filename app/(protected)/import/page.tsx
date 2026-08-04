@@ -16,6 +16,7 @@ import { GlassCard } from '@/components/common/GlassCard'
 import { parseImportFile, buildImportPreview } from '@/lib/import/parser'
 import { fetchMovieMetadata, fetchTVMetadata, fetchSeasonMetadata } from '@/lib/tmdb/api'
 import { batchCreateMediaEntries } from '@/lib/firebase/firestore'
+import { addActivity } from '@/lib/firebase/activity'
 import { useMedia } from '@/hooks/useMedia'
 import { useAuthStore } from '@/store/authStore'
 import {
@@ -253,6 +254,21 @@ export default function ImportPage() {
   // ---------------------------------------------------------------------------
   function finalizeImport() {
     buildAndSetReport()
+    if (user) {
+      addActivity(user.uid, {
+        category: 'import_export',
+        action: 'Import Completed',
+        summary: `Imported ${accImportedCount.current} title${accImportedCount.current === 1 ? '' : 's'} from spreadsheet.`,
+        details: [
+          { label: 'Total Imported', after: accImportedCount.current },
+          { label: 'TMDB Matched Imported', after: matchedRows.filter((r) => accImportedIndexes.current.has(r.rowIndex)).length },
+          { label: 'Imported After Review', after: reviewRows.filter((r) => accImportedIndexes.current.has(r.rowIndex)).length },
+          { label: 'Duplicates Imported', after: duplicateRows.filter((r) => accImportedIndexes.current.has(r.rowIndex)).length },
+          { label: 'Invalid Rows', after: errorRows.length },
+          { label: 'Ignored Empty Rows', after: ignoredEmptyRows },
+        ],
+      }).catch(() => {})
+    }
     setStep('report')
     // Non-blocking: refresh My List store so "Go to My List" shows new entries
     loadEntries().catch(() => {})

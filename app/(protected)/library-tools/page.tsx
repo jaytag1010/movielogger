@@ -29,10 +29,19 @@ export default function LibraryToolsPage() {
 
         <GlassCard padding="md">
           <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">
-            Future Tools
+            Library Tools
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <FutureTool icon={History} label="Activity History" />
+            <Link
+              href="/library-tools/activity-history"
+              className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 flex items-center gap-2 hover:bg-blue-500/15 transition-colors"
+            >
+              <History className="w-4 h-4 text-blue-300" />
+              <div>
+                <p className="text-sm font-medium text-white">Activity History</p>
+                <p className="text-[11px] text-white/40">Review important library actions</p>
+              </div>
+            </Link>
             <FutureTool icon={SearchCheck} label="Duplicate Checker" />
             <FutureTool icon={ShieldCheck} label="Library Integrity" />
             <FutureTool icon={Hammer} label="Metadata Utilities" />

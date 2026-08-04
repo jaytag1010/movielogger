@@ -32,6 +32,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useMedia } from '@/hooks/useMedia'
+import { useAuthStore } from '@/store/authStore'
+import { addActivity } from '@/lib/firebase/activity'
 import { useProgressReleaseStatuses } from '@/hooks/useProgressReleaseStatuses'
 import { MediaEntry, MediaStatus } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
@@ -249,6 +251,7 @@ type RefreshSummary = {
 
 export default function ProgressPage() {
   const { entries, editEntry, refreshEntry } = useMedia()
+  const { user } = useAuthStore()
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -855,6 +858,27 @@ export default function ProgressPage() {
 
     setRefreshing(false)
     setRefreshSummary(summary)
+    if (user) {
+      addActivity(user.uid, {
+        category: 'refresh',
+        action: 'Refresh All',
+        summary: `${summary.updated.length} title${summary.updated.length === 1 ? '' : 's'} updated out of ${summary.checked} checked.`,
+        details: [
+          { label: 'Checked', after: summary.checked },
+          { label: 'Updated', after: summary.updated.length },
+          { label: 'Unchanged', after: summary.unchanged.length },
+          { label: 'Failed', after: summary.failed.length },
+        ],
+        items: summary.updated.map((item) => ({
+          title: item.title,
+          details: item.changes.map((change) => ({
+            label: change.field,
+            before: change.before,
+            after: change.after,
+          })),
+        })),
+      }).catch(() => {})
+    }
     const updated: number = 0
     const failed: number = 0
 

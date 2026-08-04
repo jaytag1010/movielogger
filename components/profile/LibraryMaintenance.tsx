@@ -11,6 +11,8 @@ import { MediaEntry, MediaEntryUpdate } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
 import { fetchMovieMetadata, fetchSeasonMetadata, fetchTVMetadata, searchMultiNormalized } from '@/lib/tmdb/api'
 import { getDisplayPosterUrl, getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
+import { useAuthStore } from '@/store/authStore'
+import { addActivity } from '@/lib/firebase/activity'
 
 type MatchState = 'pending' | 'linked' | 'skipped' | 'unmatched'
 
@@ -57,6 +59,7 @@ function formatCheckedAt(value?: Timestamp | null): string {
 }
 
 export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenanceProps) {
+  const { user } = useAuthStore()
   const unmatched = useMemo(
     () => entries.filter((entry) => entry.tmdbId == null && !entry.tmdbUnmatchedDismissedAt),
     [entries]
@@ -154,14 +157,29 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
 
     setSearching(false)
     const searched = Object.values(next)
-    setSummary({
+    const nextSummary = {
       checked,
       strong: searched.filter((item) => item.strong && !item.failed).length,
       possible: searched.filter((item) => !item.strong && item.possible.length > 0 && !item.failed).length,
       noMatch: searched.filter((item) => item.state === 'unmatched' && !item.failed).length,
       failed: searched.filter((item) => item.failed).length,
       completedAt: new Date(),
-    })
+    }
+    setSummary(nextSummary)
+    if (user) {
+      addActivity(user.uid, {
+        category: 'maintenance',
+        action: 'Search All Completed',
+        summary: `Checked ${nextSummary.checked} unmatched TMDB title${nextSummary.checked === 1 ? '' : 's'}.`,
+        details: [
+          { label: 'Checked', after: nextSummary.checked },
+          { label: 'Strong Matches', after: nextSummary.strong },
+          { label: 'Possible Matches', after: nextSummary.possible },
+          { label: 'No Match', after: nextSummary.noMatch },
+          { label: 'Failed', after: nextSummary.failed },
+        ],
+      }).catch(() => {})
+    }
   }
 
   async function linkEntry(
@@ -291,6 +309,14 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
       }
       setSuggestions({})
       setSummary(null)
+      if (user) {
+        addActivity(user.uid, {
+          category: 'maintenance',
+          action: 'Rescan Performed',
+          summary: `Restored ${dismissedUnmatched.length} dismissed unmatched title${dismissedUnmatched.length === 1 ? '' : 's'} to the TMDB queue.`,
+          details: [{ label: 'Restored Titles', after: dismissedUnmatched.length }],
+        }).catch(() => {})
+      }
       toast.success(`Restored ${dismissedUnmatched.length} unmatched title${dismissedUnmatched.length === 1 ? '' : 's'}`)
     } catch {
       toast.error('Failed to rescan unmatched titles')

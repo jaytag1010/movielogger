@@ -39,6 +39,7 @@ import { useMediaStore } from '@/store/mediaStore'
 import { useRouter } from 'next/navigation'
 import { exportToExcel, exportToCSV } from '@/lib/export/exporter'
 import { deleteAllUserEntries, getUserProfile, updateUserProfile, UserProfile } from '@/lib/firebase/firestore'
+import { addActivity } from '@/lib/firebase/activity'
 import { validatePosterFile, uploadPoster } from '@/lib/imgbb'
 
 const CONFIRM_PHRASE = 'CONTINUE'
@@ -146,12 +147,28 @@ export default function ProfilePage() {
   function handleExcelExport() {
     if (entries.length === 0) { toast.error('Nothing to export'); return }
     exportToExcel(entries)
+    if (user) {
+      addActivity(user.uid, {
+        category: 'import_export',
+        action: 'Export Excel',
+        summary: `Exported ${entries.length} title${entries.length === 1 ? '' : 's'} to Excel.`,
+        details: [{ label: 'Titles Exported', after: entries.length }],
+      }).catch(() => {})
+    }
     toast.success('Exported to Excel')
   }
 
   function handleCSVExport() {
     if (entries.length === 0) { toast.error('Nothing to export'); return }
     exportToCSV(entries)
+    if (user) {
+      addActivity(user.uid, {
+        category: 'import_export',
+        action: 'Export CSV',
+        summary: `Exported ${entries.length} title${entries.length === 1 ? '' : 's'} to CSV.`,
+        details: [{ label: 'Titles Exported', after: entries.length }],
+      }).catch(() => {})
+    }
     toast.success('Exported to CSV')
   }
 
