@@ -17,6 +17,9 @@ import { Badge } from '@/components/ui/badge'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import { StatusBadge } from './StatusBadge'
 import { useProgressReleaseStatuses } from '@/hooks/useProgressReleaseStatuses'
+import { updateMediaEntry } from '@/lib/firebase/firestore'
+import { fetchMovieMetadata, fetchTVMetadata } from '@/lib/tmdb/api'
+import { useMediaStore } from '@/store/mediaStore'
 import {
   formatDate,
   formatWatchHours,
@@ -48,6 +51,37 @@ export function TitleDetailsModal({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
   const releaseStatuses = useProgressReleaseStatuses(entry ? [entry] : [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadMissingOverview() {
+      if (!open || !entry?.id || entry.tmdbId == null || entry.overview?.trim()) return
+
+      try {
+        const type = getEffectiveMediaType(entry)
+        const metadata = type === 'movie'
+          ? await fetchMovieMetadata(entry.tmdbId)
+          : await fetchTVMetadata(entry.tmdbId)
+        const overview = metadata.overview?.trim() || null
+        if (!overview || cancelled) return
+
+        await updateMediaEntry(entry.id, { overview }, { preserveOrder: true })
+        const current = useMediaStore.getState().entries
+        useMediaStore.getState().setEntries(
+          current.map((item) => item.id === entry.id ? { ...item, overview } : item)
+        )
+      } catch {
+        // Missing overview is non-critical; the details popup can still render stored data.
+      }
+    }
+
+    loadMissingOverview()
+
+    return () => {
+      cancelled = true
+    }
+  }, [entry, open])
 
   if (!entry) return null
 

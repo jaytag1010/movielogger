@@ -19,14 +19,11 @@ import { normalizeCountry } from '@/utils/countries'
 import { calculateStoredWatchHours } from '@/utils/watchHours'
 import { compareRankedEntries } from '@/utils/ranking'
 import { addActivity, ensureActivityHistoryEnabled } from '@/lib/firebase/activity'
-import { fetchMovieMetadata, fetchTVMetadata } from '@/lib/tmdb/api'
 import {
   buildTitleAddedActivity,
   buildTitleDeletedActivity,
   buildUpdateActivities,
 } from '@/utils/activity'
-
-const overviewMigrationStartedForUsers = new Set<string>()
 
 export function useMedia() {
   const { entries, loading, filters, activeTab } = useMediaStore()
@@ -39,9 +36,6 @@ export function useMedia() {
       await ensureActivityHistoryEnabled(user.uid).catch(() => {})
       const data = await getUserMediaEntries(user.uid)
       useMediaStore.getState().setEntries(data)
-      migrateMissingOverviews(user.uid, data).catch((err) => {
-        console.warn('Failed to backfill TMDB overviews', err)
-      })
     } catch (err) {
       toast.error('Failed to load media entries')
     } finally {
@@ -137,34 +131,6 @@ export function useMedia() {
     editEntry,
     refreshEntry,
     removeEntry,
-  }
-}
-
-async function migrateMissingOverviews(userId: string, entries: MediaEntry[]) {
-  if (overviewMigrationStartedForUsers.has(userId)) return
-  const candidates = entries.filter((entry) => entry.id && entry.tmdbId != null && !entry.overview?.trim())
-  if (candidates.length === 0) return
-
-  overviewMigrationStartedForUsers.add(userId)
-
-  for (const entry of candidates) {
-    if (!entry.id || entry.tmdbId == null) continue
-    try {
-      const type = getEffectiveMediaType(entry)
-      const metadata = type === 'movie'
-        ? await fetchMovieMetadata(entry.tmdbId)
-        : await fetchTVMetadata(entry.tmdbId)
-      const overview = metadata.overview?.trim() || null
-      if (!overview) continue
-
-      await updateMediaEntry(entry.id, { overview }, { preserveOrder: true })
-      const current = useMediaStore.getState().entries
-      useMediaStore.getState().setEntries(
-        current.map((item) => item.id === entry.id ? { ...item, overview } : item)
-      )
-    } catch {
-      // Skip individual failures; unmatched or stale TMDB IDs remain usable.
-    }
   }
 }
 
