@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
-import { Film, GitCompare, Star, Trash2, Tv } from 'lucide-react'
+import { Film, GitCompare, Search, Star, Trash2, Tv, X } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { Button } from '@/components/ui/button'
 import {
@@ -313,8 +313,10 @@ function CompareTitlesModal({
   entries: MediaEntry[]
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [query, setQuery] = useState('')
   useEffect(() => {
     setSelectedIds([])
+    setQuery('')
   }, [primaryEntry.id, open])
 
   const selectedEntries = useMemo(() => {
@@ -322,14 +324,38 @@ function CompareTitlesModal({
     return entries.filter((entry) => entry.id && ids.has(entry.id)).slice(0, 4)
   }, [entries, primaryEntry.id, selectedIds])
   const releaseStatuses = useProgressReleaseStatuses(selectedEntries)
-  const options = entries.filter((entry) => entry.id !== primaryEntry.id)
+  const selectedIdSet = useMemo(
+    () => new Set([primaryEntry.id, ...selectedIds].filter(Boolean)),
+    [primaryEntry.id, selectedIds]
+  )
+  const searchResults = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    if (normalized.length === 0) return []
 
-  function toggle(id: string) {
+    return entries
+      .filter((entry) => {
+        if (!entry.id || selectedIdSet.has(entry.id)) return false
+        const haystack = [
+          entry.title,
+          entry.nativeTitle,
+          entry.internalId,
+        ].filter(Boolean).join(' ').toLowerCase()
+        return haystack.includes(normalized)
+      })
+      .slice(0, 12)
+  }, [entries, query, selectedIdSet])
+  const maxSelected = selectedEntries.length >= 4
+
+  function addSelection(id: string) {
     setSelectedIds((current) => {
-      if (current.includes(id)) return current.filter((item) => item !== id)
+      if (current.includes(id)) return current
       if (current.length >= 3) return current
       return [...current, id]
     })
+  }
+
+  function removeSelection(id: string) {
+    setSelectedIds((current) => current.filter((item) => item !== id))
   }
 
   return (
@@ -337,26 +363,73 @@ function CompareTitlesModal({
       <DialogContent className="max-w-5xl">
         <DialogHeader>
           <DialogTitle>Compare Titles</DialogTitle>
-          <DialogDescription>Select up to 3 more titles for comparison.</DialogDescription>
+          <DialogDescription>Search your library and select up to 4 titles total.</DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-24 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.03] p-2">
-          <div className="flex flex-wrap gap-2">
-            {options.map((entry) => (
+        <div className="space-y-3">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/35">
+              Currently Comparing
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {selectedEntries.map((entry) => (
+                <SelectedCompareCard
+                  key={entry.id ?? entry.internalId}
+                  entry={entry}
+                  locked={entry.id === primaryEntry.id}
+                  onRemove={() => entry.id && removeSelection(entry.id)}
+                />
+              ))}
+            </div>
+            {maxSelected && (
+              <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                Maximum of 4 titles selected.
+              </p>
+            )}
+          </div>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search your library..."
+              className="h-10 w-full rounded-xl border border-white/10 bg-white/5 pl-10 pr-9 text-sm text-white outline-none transition-colors placeholder:text-white/30 focus:border-blue-500/40 focus:bg-white/[0.07]"
+              autoFocus
+            />
+            {query && (
               <button
-                key={entry.id}
                 type="button"
-                onClick={() => entry.id && toggle(entry.id)}
-                className={[
-                  'rounded-full border px-2.5 py-1 text-xs transition-colors',
-                  selectedIds.includes(entry.id!)
-                    ? 'border-blue-400/50 bg-blue-500/20 text-blue-100'
-                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10',
-                ].join(' ')}
+                onClick={() => setQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/35 transition-colors hover:text-white/70"
+                aria-label="Clear compare search"
               >
-                {getDisplayTitle(entry)}
+                <X className="h-4 w-4" />
               </button>
-            ))}
+            )}
+          </div>
+
+          <div className="max-h-80 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.025] p-2">
+            {query.trim().length === 0 ? (
+              <p className="px-3 py-8 text-center text-sm text-white/35">
+                Search your library to compare another title.
+              </p>
+            ) : searchResults.length === 0 ? (
+              <p className="px-3 py-8 text-center text-sm text-white/35">
+                No matching library titles found.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {searchResults.map((entry) => (
+                  <CompareSearchResult
+                    key={entry.id ?? entry.internalId}
+                    entry={entry}
+                    disabled={maxSelected}
+                    onSelect={() => entry.id && addSelection(entry.id)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -373,6 +446,82 @@ function CompareTitlesModal({
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function SelectedCompareCard({
+  entry,
+  locked,
+  onRemove,
+}: {
+  entry: MediaEntry
+  locked?: boolean
+  onRemove: () => void
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-2">
+      <PosterThumb entry={entry} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-white">{getDisplayTitle(entry)}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          <StatusBadge status={entry.status} />
+          {entry.personalRating != null && (
+            <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-400">
+              <Star className="h-3 w-3 fill-amber-400" />
+              {entry.personalRating.toFixed(2)}
+            </span>
+          )}
+        </div>
+      </div>
+      {!locked && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-white/35 transition-colors hover:bg-white/10 hover:text-white"
+          aria-label={`Remove ${getDisplayTitle(entry)} from comparison`}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function CompareSearchResult({
+  entry,
+  disabled,
+  onSelect,
+}: {
+  entry: MediaEntry
+  disabled: boolean
+  onSelect: () => void
+}) {
+  const type = getEffectiveMediaType(entry)
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      disabled={disabled}
+      className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.035] p-2.5 text-left transition-colors hover:border-white/20 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-45"
+    >
+      <PosterThumb entry={entry} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-white">{getDisplayTitle(entry)}</p>
+        <p className="mt-0.5 truncate text-xs text-white/40">
+          {[entry.yearMade, entry.country, type === 'series' ? 'Series' : 'Movie'].filter(Boolean).join(' / ')}
+        </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <StatusBadge status={entry.status} />
+          {entry.personalRating != null && (
+            <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-400">
+              <Star className="h-3 w-3 fill-amber-400" />
+              {entry.personalRating.toFixed(2)}
+            </span>
+          )}
+          <span className="font-mono text-[10px] text-white/25">{entry.internalId}</span>
+        </div>
+      </div>
+    </button>
   )
 }
 
