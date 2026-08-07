@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
 import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
 import { useMediaStore } from '@/store/mediaStore'
@@ -118,7 +118,7 @@ export function useMedia() {
     await loadEntries()
   }, [loadEntries, user])
 
-  const filteredEntries = getFilteredEntries(entries, filters)
+  const filteredEntries = useMemo(() => getFilteredEntries(entries, filters), [entries, filters])
 
   return {
     entries,

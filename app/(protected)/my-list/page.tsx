@@ -388,21 +388,26 @@ export default function MyListPage() {
         )}
       </Tabs>
 
-      <EditEntryModal
-        entry={editingEntry}
-        open={editOpen}
-        onOpenChange={(open) => {
-          setEditOpen(open)
-          if (!open && returnToDetailId) {
-            setDetailEntryId(returnToDetailId)
-            setDetailOpen(true)
-            setReturnToDetailId(null)
-          }
-          // When the modal closes, clear the ref so the same ?entry=<id>
-          // can be re-opened if the user navigates back to it.
-          if (!open) openedEntryIdRef.current = null
-        }}
-      />
+      {(editOpen || editingEntry) && (
+        <EditEntryModal
+          entry={editingEntry}
+          open={editOpen}
+          onOpenChange={(open) => {
+            setEditOpen(open)
+            if (!open && returnToDetailId) {
+              setDetailEntryId(returnToDetailId)
+              setDetailOpen(true)
+              setReturnToDetailId(null)
+            }
+            // When the modal closes, clear the ref so the same ?entry=<id>
+            // can be re-opened if the user navigates back to it.
+            if (!open) {
+              openedEntryIdRef.current = null
+              setEditingEntry(null)
+            }
+          }}
+        />
+      )}
       <TitleDetailsModal
         entry={entries.find((entry) => entry.id === detailEntryId) ?? null}
         entries={entries}

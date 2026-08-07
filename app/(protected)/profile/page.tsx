@@ -606,7 +606,10 @@ export default function ProfilePage() {
                     <p className="text-xs text-white/40 mt-1">
                       {overviewMigration.running
                         ? `Migrating ${overviewMigration.current} / ${overviewMigration.total} (${overviewMigrationPercent}%)`
-                        : `${overviewMigrationCandidates.length} TMDB-linked title${overviewMigrationCandidates.length === 1 ? '' : 's'} missing overview`}
+                        : `${overviewMigrationCandidates.length} TMDB-linked title${overviewMigrationCandidates.length === 1 ? '' : 's'} missing TMDB overview`}
+                    </p>
+                    <p className="text-[11px] text-white/30 mt-0.5">
+                      This fills TMDB plot overviews only. Personal Notes are separate and unchanged.
                     </p>
                   </div>
                   <Button
