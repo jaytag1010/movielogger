@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
-import { Film, GitCompare, Search, Star, Trash2, Tv, X } from 'lucide-react'
+import { Film, GitCompare, Info, Search, Star, Trash2, Tv, X } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { Button } from '@/components/ui/button'
 import {
@@ -123,13 +123,13 @@ export function TitleDetailsModal({
           onOpenChange(nextOpen)
         }}
       >
-        <DialogContent className="max-w-3xl p-0">
-          <div className="max-h-[86vh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="max-w-4xl overflow-hidden p-0">
+          <div className="max-h-[88vh] overflow-y-auto bg-[#0b0d16] p-4 sm:p-5">
             <div className="flex gap-4">
               <PosterBlock entry={entry} />
               <div className="min-w-0 flex-1 pr-8">
                 <DialogHeader className="text-left">
-                  <DialogTitle className="text-xl leading-tight sm:text-2xl">
+                  <DialogTitle className="text-xl leading-tight text-white sm:text-2xl">
                     {getDisplayTitle(entry)}
                   </DialogTitle>
                   <DialogDescription className="sr-only">
@@ -140,13 +140,20 @@ export function TitleDetailsModal({
                   )}
                 </DialogHeader>
 
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/50">
+                  {entry.yearMade && <span>{entry.yearMade}</span>}
+                  <span>{type === 'series' ? 'TV Series' : 'Movie'}</span>
+                  {entry.seasonNumber != null && type === 'series' && <span>Season {entry.seasonNumber}</span>}
+                  {entry.genres.slice(0, 2).map((genre) => (
+                    <span key={genre}>{genre}</span>
+                  ))}
+                </div>
+
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <StatusBadge status={entry.status} />
-                  <Badge variant="outline">{type === 'series' ? 'Series' : 'Movie'}</Badge>
-                  {entry.seasonNumber != null && type === 'series' && (
-                    <Badge variant="outline">Season {entry.seasonNumber}</Badge>
-                  )}
-                  {entry.yearMade && <span className="text-xs text-white/45">{entry.yearMade}</span>}
+                  <Badge variant="outline" className="border-white/10 bg-white/5 text-white/55">
+                    {type === 'series' ? 'Series' : 'Movie'}
+                  </Badge>
                   {entry.country && <span className="text-xs text-white/45">{entry.country}</span>}
                   {entry.personalRating != null && (
                     <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-400">
@@ -158,56 +165,79 @@ export function TitleDetailsModal({
               </div>
             </div>
 
-            <Section title="Overview">
-              <p className="text-sm leading-relaxed text-white/65">
-                {entry.overview?.trim() || 'No overview available.'}
-              </p>
-            </Section>
-
-            <Section title="Watching / Completion">
-              <DetailGrid
-                items={[
-                  ['Status', MEDIA_STATUS_LABELS[entry.status]],
-                  ['Episodes Watched', String(watched)],
-                  totalEpisodes != null ? ['Total Episodes', String(totalEpisodes)] : null,
-                  released != null ? ['Episodes Released', String(released)] : null,
-                  remaining != null ? ['Episodes Remaining', String(remaining)] : null,
-                  entry.episodeDurationMinutes != null ? ['Episode Duration', `${entry.episodeDurationMinutes} min`] : null,
-                  ['Total Watch Hours', formatWatchHours(watchHours)],
-                  showRewatch ? ['Rewatch Counter', String(entry.rewatchCount ?? 0)] : null,
-                  showPriority ? ['Priority', `${entry.priority ?? 3}/5`] : null,
-                  entry.dateFinished ? ['Date Finished', formatDate(entry.dateFinished)] : null,
-                  entry.id && releaseStatuses[entry.id] ? ['Release Status', releaseStatuses[entry.id].label] : null,
-                ]}
+            <div className="mt-4 grid grid-cols-2 divide-x divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] sm:grid-cols-4">
+              <MetricTile label="Episodes Watched" value={`${watched}${totalEpisodes != null ? ` / ${totalEpisodes}` : ''}`} />
+              <MetricTile label="Total Episodes" value={totalEpisodes != null ? String(totalEpisodes) : '—'} />
+              <MetricTile label="Episode Duration" value={entry.episodeDurationMinutes != null ? `${entry.episodeDurationMinutes} min` : '—'} />
+              <MetricTile
+                label="Personal Rating"
+                value={entry.personalRating != null ? entry.personalRating.toFixed(2) : '—'}
+                icon={entry.personalRating != null ? <Star className="h-4 w-4 fill-amber-400 text-amber-400" /> : null}
               />
-            </Section>
+            </div>
 
-            <Section title="Metadata">
-              <DetailGrid
-                items={[
-                  entry.genres.length > 0 ? ['Genres', entry.genres.join(', ')] : null,
-                  entry.country ? ['Country', entry.country] : null,
-                  entry.yearMade ? ['Year', String(entry.yearMade)] : null,
-                  entry.ageRating ? ['Age Rating', entry.ageRating] : null,
-                  entry.tmdbId != null ? ['TMDB ID', String(entry.tmdbId)] : null,
-                ]}
-              />
-            </Section>
+            <div className="mt-4 grid gap-4 rounded-xl border border-white/10 bg-white/[0.025] p-3 lg:grid-cols-[1.08fr_1fr_0.92fr] lg:divide-x lg:divide-white/10">
+              <div className="space-y-4 lg:pr-4">
+                <Section title="Overview (TMDB)" unboxed>
+                  <p className="text-sm leading-relaxed text-white/68">
+                    {entry.overview?.trim() || 'No overview available.'}
+                  </p>
+                </Section>
 
-            <Section title="Library Information">
-              <DetailGrid
-                items={[
-                  ['ML ID', entry.internalId],
-                  ['Date Added', formatDate(entry.createdAt)],
-                ]}
-              />
-            </Section>
+                <Section title="Metadata" unboxed>
+                  <DetailGrid
+                    compact
+                    items={[
+                      entry.country ? ['Country', entry.country] : null,
+                      entry.id && releaseStatuses[entry.id] ? ['Release Status', releaseStatuses[entry.id].label] : null,
+                      entry.tmdbId != null ? ['TMDB ID', String(entry.tmdbId)] : null,
+                      entry.genres.length > 0 ? ['Genres', entry.genres.join(', ')] : null,
+                      entry.ageRating ? ['Age Rating', entry.ageRating] : null,
+                    ]}
+                  />
+                </Section>
+              </div>
 
-            {entry.specialNotes?.trim() && (
-              <Section title="Personal">
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/65">{entry.specialNotes}</p>
-              </Section>
-            )}
+              <div className="space-y-4 lg:px-4">
+                <Section title="Watching / Completion" unboxed>
+                  <DetailGrid
+                    compact
+                    items={[
+                      ['Status', MEDIA_STATUS_LABELS[entry.status]],
+                      ['Episodes Watched', String(watched)],
+                      totalEpisodes != null ? ['Total Episodes', String(totalEpisodes)] : null,
+                      released != null ? ['Episodes Released', String(released)] : null,
+                      remaining != null ? ['Episodes Remaining', String(remaining)] : null,
+                      entry.dateFinished ? ['Date Finished', formatDate(entry.dateFinished)] : null,
+                      showRewatch ? ['Rewatch Counter', String(entry.rewatchCount ?? 0)] : null,
+                      entry.episodeDurationMinutes != null ? ['Episode Duration', `${entry.episodeDurationMinutes} min`] : null,
+                      ['Total Watch Hours', formatWatchHours(watchHours)],
+                      showPriority ? ['Priority', `${entry.priority ?? 3}/5`] : null,
+                    ]}
+                  />
+                </Section>
+              </div>
+
+              <div className="space-y-4 lg:pl-4">
+                <Section title="Personal" unboxed>
+                  <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/68">
+                      {entry.specialNotes?.trim() || 'No notes.'}
+                    </p>
+                  </div>
+                </Section>
+
+                <Section title="Library Information" unboxed>
+                  <DetailGrid
+                    compact
+                    items={[
+                      ['ML ID', entry.internalId],
+                      ['Date Added', formatDate(entry.createdAt)],
+                    ]}
+                  />
+                </Section>
+              </div>
+            </div>
 
             {confirmDelete && (
               <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
@@ -225,13 +255,14 @@ export function TitleDetailsModal({
               </div>
             )}
 
-            <DialogFooter className="mt-5 gap-2 sm:space-x-0">
-              <Button variant="outline" onClick={() => setCompareOpen(true)}>
+            <DialogFooter className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:space-x-0">
+              <Button variant="outline" className="justify-center border-white/10 bg-white/[0.035]" onClick={() => setCompareOpen(true)}>
                 <GitCompare className="mr-2 h-4 w-4" />
                 Compare
               </Button>
               <Button
                 variant="outline"
+                className="justify-center border-blue-500/35 bg-blue-500/15 text-blue-100 hover:bg-blue-500/25"
                 onClick={() => {
                   onEdit(entry)
                 }}
@@ -277,24 +308,61 @@ function PosterBlock({ entry }: { entry: MediaEntry }) {
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function MetricTile({
+  label,
+  value,
+  icon,
+}: {
+  label: string
+  value: string
+  icon?: React.ReactNode
+}) {
   return (
-    <section className="mt-5">
+    <div className="flex min-h-16 flex-col items-center justify-center gap-1 px-3 py-2 text-center">
+      <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-white">
+        {icon}
+        <span>{value}</span>
+      </div>
+      <p className="text-[10px] leading-tight text-white/38">{label}</p>
+    </div>
+  )
+}
+
+function Section({
+  title,
+  children,
+  unboxed,
+}: {
+  title: string
+  children: React.ReactNode
+  unboxed?: boolean
+}) {
+  return (
+    <section className={unboxed ? '' : 'mt-5'}>
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/35">{title}</h3>
-      <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">{children}</div>
+      {unboxed ? children : <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">{children}</div>}
     </section>
   )
 }
 
-function DetailGrid({ items }: { items: Array<[string, string] | null> }) {
+function DetailGrid({
+  items,
+  compact,
+}: {
+  items: Array<[string, string] | null>
+  compact?: boolean
+}) {
   const visible = items.filter(Boolean) as Array<[string, string]>
   if (visible.length === 0) return <p className="text-sm text-white/35">No details available.</p>
   return (
-    <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+    <dl className={compact ? 'space-y-1.5' : 'grid grid-cols-1 gap-2 sm:grid-cols-2'}>
       {visible.map(([label, value]) => (
-        <div key={label} className="min-w-0">
+        <div
+          key={label}
+          className={compact ? 'grid min-w-0 grid-cols-[110px_1fr] gap-3 border-b border-white/5 pb-1.5 last:border-b-0' : 'min-w-0'}
+        >
           <dt className="text-[11px] text-white/35">{label}</dt>
-          <dd className="truncate text-sm text-white/70">{value}</dd>
+          <dd className={compact ? 'min-w-0 text-sm text-white/72' : 'truncate text-sm text-white/70'}>{value}</dd>
         </div>
       ))}
     </dl>
@@ -320,8 +388,12 @@ function CompareTitlesModal({
   }, [primaryEntry.id, open])
 
   const selectedEntries = useMemo(() => {
-    const ids = new Set([primaryEntry.id, ...selectedIds].filter(Boolean))
-    return entries.filter((entry) => entry.id && ids.has(entry.id)).slice(0, 4)
+    const byId = new Map(entries.filter((entry) => entry.id).map((entry) => [entry.id, entry]))
+    return [primaryEntry.id, ...selectedIds]
+      .filter(Boolean)
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .slice(0, 4) as MediaEntry[]
   }, [entries, primaryEntry.id, selectedIds])
   const releaseStatuses = useProgressReleaseStatuses(selectedEntries)
   const selectedIdSet = useMemo(
@@ -360,88 +432,80 @@ function CompareTitlesModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
-        <DialogHeader>
-          <DialogTitle>Compare Titles</DialogTitle>
-          <DialogDescription>Search your library and select up to 4 titles total.</DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-6xl overflow-hidden p-0">
+        <div className="max-h-[88vh] overflow-y-auto bg-[#0b0d16] p-4 sm:p-5">
+          <DialogHeader className="relative text-center">
+            <DialogTitle className="text-center">Compare Titles</DialogTitle>
+            <DialogDescription className="text-center">
+              Search your library and compare up to 4 titles total.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-3">
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/35">
-              Currently Comparing
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {selectedEntries.map((entry) => (
+              <SelectedCompareCard
+                key={entry.id ?? entry.internalId}
+                entry={entry}
+                locked={entry.id === primaryEntry.id}
+                onRemove={() => entry.id && removeSelection(entry.id)}
+              />
+            ))}
+          </div>
+          {maxSelected && (
+            <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              Maximum of 4 titles selected.
             </p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {selectedEntries.map((entry) => (
-                <SelectedCompareCard
-                  key={entry.id ?? entry.internalId}
-                  entry={entry}
-                  locked={entry.id === primaryEntry.id}
-                  onRemove={() => entry.id && removeSelection(entry.id)}
-                />
-              ))}
+          )}
+
+          <div className="mt-4 space-y-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search your library to add a title..."
+                className="h-10 w-full rounded-xl border border-white/10 bg-white/5 pl-10 pr-9 text-sm text-white outline-none transition-colors placeholder:text-white/30 focus:border-blue-500/40 focus:bg-white/[0.07]"
+                autoFocus
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/35 transition-colors hover:text-white/70"
+                  aria-label="Clear compare search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
-            {maxSelected && (
-              <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                Maximum of 4 titles selected.
-              </p>
-            )}
-          </div>
 
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search your library..."
-              className="h-10 w-full rounded-xl border border-white/10 bg-white/5 pl-10 pr-9 text-sm text-white outline-none transition-colors placeholder:text-white/30 focus:border-blue-500/40 focus:bg-white/[0.07]"
-              autoFocus
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/35 transition-colors hover:text-white/70"
-                aria-label="Clear compare search"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-
-          <div className="max-h-80 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.025] p-2">
-            {query.trim().length === 0 ? (
-              <p className="px-3 py-8 text-center text-sm text-white/35">
-                Search your library to compare another title.
-              </p>
-            ) : searchResults.length === 0 ? (
-              <p className="px-3 py-8 text-center text-sm text-white/35">
-                No matching library titles found.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {searchResults.map((entry) => (
-                  <CompareSearchResult
-                    key={entry.id ?? entry.internalId}
-                    entry={entry}
-                    disabled={maxSelected}
-                    onSelect={() => entry.id && addSelection(entry.id)}
-                  />
-                ))}
+            {query.trim().length > 0 && (
+              <div className="max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.025] p-2">
+                {searchResults.length === 0 ? (
+                  <p className="px-3 py-8 text-center text-sm text-white/35">
+                    No matching library titles found.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {searchResults.map((entry) => (
+                      <CompareSearchResult
+                        key={entry.id ?? entry.internalId}
+                        entry={entry}
+                        disabled={maxSelected}
+                        onSelect={() => entry.id && addSelection(entry.id)}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        </div>
 
-        <div className="overflow-x-auto">
-          <div className="grid min-w-[720px] gap-3" style={{ gridTemplateColumns: `repeat(${selectedEntries.length}, minmax(170px, 1fr))` }}>
-            {selectedEntries.map((entry) => (
-              <CompareColumn
-                key={entry.id}
-                entry={entry}
-                releaseStatus={entry.id ? releaseStatuses[entry.id] : undefined}
-              />
-            ))}
+          <CompareTable entries={selectedEntries} releaseStatuses={releaseStatuses} />
+
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.035] p-3 text-xs text-white/45">
+            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-300/80" />
+            <p>Only key fields are shown for quick comparison. Tap a title in My List to view full details.</p>
           </div>
         </div>
       </DialogContent>
@@ -459,25 +523,20 @@ function SelectedCompareCard({
   onRemove: () => void
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-2">
-      <PosterThumb entry={entry} />
-      <div className="min-w-0 flex-1">
+    <div className="relative min-w-0 rounded-xl border border-white/10 bg-white/[0.035] p-2 text-center">
+      <div className="mx-auto">
+        <PosterThumb entry={entry} large />
+      </div>
+      <div className="mt-2 min-w-0">
         <p className="truncate text-sm font-semibold text-white">{getDisplayTitle(entry)}</p>
-        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-          <StatusBadge status={entry.status} />
-          {entry.personalRating != null && (
-            <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-400">
-              <Star className="h-3 w-3 fill-amber-400" />
-              {entry.personalRating.toFixed(2)}
-            </span>
-          )}
-        </div>
+        <p className="text-xs text-white/45">{entry.yearMade ?? 'Year unknown'}</p>
+        <p className="mt-1 font-mono text-[10px] text-white/30">{entry.internalId}</p>
       </div>
       {!locked && (
         <button
           type="button"
           onClick={onRemove}
-          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-white/35 transition-colors hover:bg-white/10 hover:text-white"
+          className="absolute right-1.5 top-1.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-black/55 text-white/55 transition-colors hover:bg-white/10 hover:text-white"
           aria-label={`Remove ${getDisplayTitle(entry)} from comparison`}
         >
           <X className="h-4 w-4" />
@@ -525,59 +584,99 @@ function CompareSearchResult({
   )
 }
 
-function CompareColumn({
-  entry,
-  releaseStatus,
+function CompareTable({
+  entries,
+  releaseStatuses,
 }: {
-  entry: MediaEntry
-  releaseStatus?: { label: string; releasedEpisodes: number | null }
+  entries: MediaEntry[]
+  releaseStatuses: Record<string, { label: string; releasedEpisodes: number | null } | undefined>
 }) {
-  const type = getEffectiveMediaType(entry)
-  const watched = getEpisodesWatched(entry)
-  const total = entry.totalEpisodes ?? (type === 'movie' ? 1 : null)
-  const remainingEpisodes = total != null ? Math.max(0, total - watched) : null
-  const remainingHours = remainingEpisodes != null && entry.episodeDurationMinutes
-    ? remainingEpisodes * entry.episodeDurationMinutes / 60
-    : null
+  const rows = [
+    ['Status', (entry: MediaEntry) => MEDIA_STATUS_LABELS[entry.status]],
+    ['Episodes Watched', (entry: MediaEntry) => String(getEpisodesWatched(entry))],
+    ['Total Episodes', (entry: MediaEntry) => formatNullableNumber(getTotalEpisodes(entry))],
+    ['Episodes Released', (entry: MediaEntry) => {
+      const status = entry.id ? releaseStatuses[entry.id] : undefined
+      return formatNullableNumber(status?.releasedEpisodes ?? null)
+    }],
+    ['Episodes Remaining', (entry: MediaEntry) => {
+      const total = getTotalEpisodes(entry)
+      return total != null ? String(Math.max(0, total - getEpisodesWatched(entry))) : '—'
+    }],
+    ['Release Status', (entry: MediaEntry) => entry.id ? releaseStatuses[entry.id]?.label ?? '—' : '—'],
+    ['Personal Rating', (entry: MediaEntry) => entry.personalRating != null ? entry.personalRating.toFixed(2) : '—'],
+    ['Priority', (entry: MediaEntry) => entry.priority != null ? String(entry.priority) : '—'],
+    ['Total Watch Hours', (entry: MediaEntry) => formatWatchHours(calculateEntryWatchHours(entry))],
+    ['Remaining Watch Hours', (entry: MediaEntry) => formatRemainingWatchHours(entry)],
+    ['Watch Speed Projection', () => '—'],
+    ['Genres', (entry: MediaEntry) => entry.genres.length > 0 ? entry.genres.join(', ') : '—'],
+    ['Country', (entry: MediaEntry) => entry.country || '—'],
+    ['Year', (entry: MediaEntry) => entry.yearMade != null ? String(entry.yearMade) : '—'],
+    ['Rewatch Count', (entry: MediaEntry) => String(entry.rewatchCount ?? 0)],
+  ] satisfies Array<[string, (entry: MediaEntry) => string]>
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
-      <div className="mb-3 flex items-center gap-3">
-        <PosterThumb entry={entry} />
-        <div className="min-w-0">
-          <h4 className="line-clamp-2 text-sm font-semibold text-white">{getDisplayTitle(entry)}</h4>
-          <p className="text-xs text-white/40">{entry.yearMade ?? 'Year unknown'}</p>
+    <div className="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.025]">
+      <div
+        className="min-w-[760px] text-sm"
+        style={{ display: 'grid', gridTemplateColumns: `150px repeat(${entries.length}, minmax(140px, 1fr))` }}
+      >
+        <div className="border-b border-r border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold uppercase tracking-wider text-white/35">
+          Field
         </div>
+        {entries.map((entry) => (
+          <div key={entry.id ?? entry.internalId} className="min-w-0 border-b border-r border-white/10 bg-white/[0.04] px-3 py-2 text-center last:border-r-0">
+            <p className="truncate font-semibold text-white">{getDisplayTitle(entry)}</p>
+            <p className="font-mono text-[10px] text-white/30">{entry.internalId}</p>
+          </div>
+        ))}
+
+        {rows.flatMap(([label, getValue], index) => [
+          <div
+            key={`${label}-label`}
+            className={`border-r border-white/10 px-3 py-2 text-xs text-white/45 ${index % 2 === 0 ? 'bg-white/[0.025]' : 'bg-white/[0.055]'}`}
+          >
+            {label}
+          </div>,
+          ...entries.map((entry) => (
+            <div
+              key={`${label}-${entry.id ?? entry.internalId}`}
+              className={`min-w-0 border-r border-white/10 px-3 py-2 text-center text-xs text-white/72 last:border-r-0 ${index % 2 === 0 ? 'bg-white/[0.025]' : 'bg-white/[0.055]'}`}
+            >
+              <span className="line-clamp-2">{getValue(entry)}</span>
+            </div>
+          )),
+        ])}
       </div>
-      <DetailGrid
-        items={[
-          ['Status', MEDIA_STATUS_LABELS[entry.status]],
-          ['Episodes Watched', String(watched)],
-          total != null ? ['Total Episodes', String(total)] : null,
-          releaseStatus?.releasedEpisodes != null ? ['Episodes Released', String(releaseStatus.releasedEpisodes)] : null,
-          remainingEpisodes != null ? ['Episodes Remaining', String(remainingEpisodes)] : null,
-          releaseStatus ? ['Release Status', releaseStatus.label] : null,
-          entry.personalRating != null ? ['Personal Rating', entry.personalRating.toFixed(2)] : null,
-          entry.priority != null ? ['Priority', `${entry.priority}/5`] : null,
-          ['Total Watch Hours', formatWatchHours(calculateEntryWatchHours(entry))],
-          remainingHours != null ? ['Remaining Watch Hours', formatWatchHours(remainingHours)] : null,
-          entry.episodeDurationMinutes != null ? ['Episode Duration', `${entry.episodeDurationMinutes} min`] : null,
-          entry.genres.length > 0 ? ['Genres', entry.genres.join(', ')] : null,
-          entry.country ? ['Country', entry.country] : null,
-          entry.rewatchCount ? ['Rewatch Counter', String(entry.rewatchCount)] : null,
-        ]}
-      />
     </div>
   )
 }
 
-function PosterThumb({ entry }: { entry: MediaEntry }) {
+function getTotalEpisodes(entry: MediaEntry) {
+  const type = getEffectiveMediaType(entry)
+  return entry.totalEpisodes ?? (type === 'movie' ? 1 : null)
+}
+
+function formatNullableNumber(value: number | null | undefined) {
+  return value != null ? String(value) : '—'
+}
+
+function formatRemainingWatchHours(entry: MediaEntry) {
+  const total = getTotalEpisodes(entry)
+  const remainingEpisodes = total != null ? Math.max(0, total - getEpisodesWatched(entry)) : null
+  const remainingHours = remainingEpisodes != null && entry.episodeDurationMinutes
+    ? remainingEpisodes * entry.episodeDurationMinutes / 60
+    : null
+  return remainingHours != null ? formatWatchHours(remainingHours) : '—'
+}
+
+function PosterThumb({ entry, large }: { entry: MediaEntry; large?: boolean }) {
   const poster = getDisplayPosterUrl(entry)
   const Icon = getEffectiveMediaType(entry) === 'series' ? Tv : Film
   return (
-    <div className="relative h-16 w-11 flex-shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5">
+    <div className={`relative flex-shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5 ${large ? 'h-28 w-20' : 'h-16 w-11'}`}>
       {poster ? (
-        <TMDBPosterImage src={poster} alt={entry.title} fill sizes="44px" className="object-cover" />
+        <TMDBPosterImage src={poster} alt={entry.title} fill sizes={large ? '80px' : '44px'} className="object-cover" />
       ) : (
         <div className="flex h-full w-full items-center justify-center">
           <Icon className="h-4 w-4 text-white/25" />
