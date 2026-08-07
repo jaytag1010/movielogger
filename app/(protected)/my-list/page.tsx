@@ -468,7 +468,7 @@ function MediaList({
         {entries.map((entry, index) => (
           viewMode === 'grid' ? (
             <InfoGridCard
-              key={entry.id}
+              key={entry.id ?? entry.internalId}
               entry={entry}
               index={index}
               onView={onView}
@@ -477,7 +477,7 @@ function MediaList({
             />
           ) : (
             <MediaCard
-              key={entry.id}
+              key={entry.id ?? entry.internalId}
               entry={entry}
               index={index}
               onView={onView}

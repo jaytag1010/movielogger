@@ -234,12 +234,14 @@ export function TitleDetailsModal({
         </DialogContent>
       </Dialog>
 
-      <CompareTitlesModal
-        open={compareOpen}
-        onOpenChange={setCompareOpen}
-        primaryEntry={entry}
-        entries={entries}
-      />
+      {compareOpen && (
+        <CompareTitlesModal
+          open={compareOpen}
+          onOpenChange={setCompareOpen}
+          primaryEntry={entry}
+          entries={entries}
+        />
+      )}
     </>
   )
 }
