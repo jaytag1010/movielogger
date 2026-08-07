@@ -132,8 +132,11 @@ export function TitleDetailsModal({
                   <DialogTitle className="text-xl leading-tight sm:text-2xl">
                     {getDisplayTitle(entry)}
                   </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    Stored library details, metadata, progress, notes, and actions for {getDisplayTitle(entry)}.
+                  </DialogDescription>
                   {entry.nativeTitle && (
-                    <DialogDescription className="text-white/45">{entry.nativeTitle}</DialogDescription>
+                    <p className="text-sm text-white/45">{entry.nativeTitle}</p>
                   )}
                 </DialogHeader>
 
