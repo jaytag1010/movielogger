@@ -209,6 +209,7 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
       const updates: MediaEntryUpdate = {
         tmdbId: fullData.tmdbId,
         type: fullData.type,
+        overview: fullData.overview ?? null,
         posterUrl: fullData.posterUrl,
         backdropUrl: fullData.backdropUrl,
         country: fullData.country,

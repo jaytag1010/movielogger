@@ -179,6 +179,7 @@ export default function ImportPage() {
 
     const tmdbFields = {
       tmdbId: resolvedTmdbId,
+      overview: tmdbData?.overview ?? null,
       seasonNumber: mapped.seasonNumber ?? null,
       posterUrl: seasonMeta?.posterUrl ?? tmdbData?.posterUrl ?? mapped.posterUrl ?? null,
       backdropUrl: tmdbData?.backdropUrl ?? mapped.backdropUrl ?? null,

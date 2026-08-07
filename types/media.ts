@@ -35,6 +35,8 @@ export interface MediaEntry {
    * null when the entry has no known native-language alternative.
    */
   nativeTitle: string | null
+  /** Stored TMDB overview. Filled for TMDB-linked titles and never required for legacy entries. */
+  overview?: string | null
   /**
    * Full TMDB release/air date (e.g. "2023-05-12").
    * Used as a precise sort key for Newest/Oldest sorting when dateFinished is absent.

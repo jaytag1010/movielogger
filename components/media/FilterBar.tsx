@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Search, X, LayoutGrid, Table2 } from 'lucide-react'
+import { Search, X, LayoutGrid, List } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -21,8 +21,8 @@ import { normalizeCountry } from '@/utils/countries'
 
 interface FilterBarProps {
   entries: MediaEntry[]
-  viewMode?: 'card' | 'table'
-  onViewModeChange?: (mode: 'card' | 'table') => void
+  viewMode?: 'grid' | 'list'
+  onViewModeChange?: (mode: 'grid' | 'list') => void
 }
 
 export function FilterBar({ entries, viewMode, onViewModeChange }: FilterBarProps) {
@@ -250,11 +250,11 @@ export function FilterBar({ entries, viewMode, onViewModeChange }: FilterBarProp
           <div className="flex items-center rounded-lg border border-white/10 overflow-hidden flex-shrink-0 ml-auto">
             <button
               type="button"
-              onClick={() => onViewModeChange('card')}
-              title="Card view"
+              onClick={() => onViewModeChange('grid')}
+              title="Information Grid View"
               className={cn(
                 'h-8 w-8 flex items-center justify-center transition-colors',
-                viewMode === 'card'
+                viewMode === 'grid'
                   ? 'bg-white/15 text-white'
                   : 'text-white/40 hover:text-white/70 hover:bg-white/5'
               )}
@@ -263,16 +263,16 @@ export function FilterBar({ entries, viewMode, onViewModeChange }: FilterBarProp
             </button>
             <button
               type="button"
-              onClick={() => onViewModeChange('table')}
-              title="Table view"
+              onClick={() => onViewModeChange('list')}
+              title="Detailed List View"
               className={cn(
                 'h-8 w-8 flex items-center justify-center transition-colors border-l border-white/10',
-                viewMode === 'table'
+                viewMode === 'list'
                   ? 'bg-white/15 text-white'
                   : 'text-white/40 hover:text-white/70 hover:bg-white/5'
               )}
             >
-              <Table2 className="w-3.5 h-3.5" />
+              <List className="w-3.5 h-3.5" />
             </button>
           </div>
         )}

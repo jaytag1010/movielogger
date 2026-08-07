@@ -79,6 +79,7 @@ type TmdbChanges = {
   posterUrl: string | null
   backdropUrl: string | null
   releaseDate: string | null
+  overview: string | null
 } | null
 
 interface EditEntryModalProps {
@@ -203,7 +204,13 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
     if (d.ageRating !== null && d.ageRating !== undefined) setValue('ageRating', d.ageRating ?? '')
     if (d.genres.length > 0) setGenres(d.genres)
 
-    setTmdbChanges({ tmdbId: d.tmdbId, posterUrl: d.posterUrl, backdropUrl: d.backdropUrl, releaseDate: d.releaseDate ?? null })
+    setTmdbChanges({
+      tmdbId: d.tmdbId,
+      posterUrl: d.posterUrl,
+      backdropUrl: d.backdropUrl,
+      releaseDate: d.releaseDate ?? null,
+      overview: d.overview ?? null,
+    })
 
     // Clear any pending manual poster upload — TMDB poster becomes the active default.
     // (Existing saved manualPosterUrl is untouched; user can remove it explicitly.)
@@ -247,7 +254,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
 
   // ── Remove TMDB link ──────────────────────────────────────────────────────
   function handleTmdbRemove() {
-    setTmdbChanges({ tmdbId: null, posterUrl: null, backdropUrl: null, releaseDate: null })
+    setTmdbChanges({ tmdbId: null, posterUrl: null, backdropUrl: null, releaseDate: null, overview: null })
     setShowTmdbSearch(false)
     toast.info('TMDB link will be removed when you save')
   }
@@ -321,9 +328,15 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
       const wasTmdbLinked = entry.tmdbId != null
       const tmdbFields: Record<string, unknown> =
         tmdbChanges !== null
-          ? { tmdbId: tmdbChanges.tmdbId, posterUrl: tmdbChanges.posterUrl, backdropUrl: tmdbChanges.backdropUrl, tmdbReleaseDate: tmdbChanges.releaseDate }
+          ? {
+              tmdbId: tmdbChanges.tmdbId,
+              posterUrl: tmdbChanges.posterUrl,
+              backdropUrl: tmdbChanges.backdropUrl,
+              tmdbReleaseDate: tmdbChanges.releaseDate,
+              overview: tmdbChanges.overview,
+            }
           : typeChanged && wasTmdbLinked
-            ? { tmdbId: null, posterUrl: null, backdropUrl: null, tmdbReleaseDate: null }
+            ? { tmdbId: null, posterUrl: null, backdropUrl: null, tmdbReleaseDate: null, overview: null }
             : {}
 
       // Resolve manual poster.

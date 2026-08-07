@@ -21,12 +21,13 @@ import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 
 interface MediaCardProps {
   entry: MediaEntry
+  onView?: (entry: MediaEntry) => void
   onEdit?: (entry: MediaEntry) => void
   onDelete?: (id: string) => void
   index?: number
 }
 
-export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps) {
+export function MediaCard({ entry, onView, onEdit, onDelete, index = 0 }: MediaCardProps) {
   const [imgError, setImgError] = useState(false)
   const displayPoster = getDisplayPosterUrl(entry)
   const watchHours = calculateEntryWatchHours(entry)
@@ -43,7 +44,19 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
       transition={{ delay: index * 0.05, duration: 0.3 }}
       className="group"
     >
-      <div className="relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:border-white/20 hover:bg-white/8 transition-all duration-300 hover:shadow-glass">
+      <div
+        role={onView ? 'button' : undefined}
+        tabIndex={onView ? 0 : undefined}
+        onClick={() => onView?.(entry)}
+        onKeyDown={(event) => {
+          if (!onView) return
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onView(entry)
+          }
+        }}
+        className="relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:border-white/20 hover:bg-white/8 transition-all duration-300 hover:shadow-glass focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+      >
         <div className="flex gap-3 p-3">
           {/* Poster */}
           <div className="relative w-16 h-24 flex-shrink-0 rounded-xl overflow-hidden bg-white/5 border border-white/10">
@@ -99,11 +112,12 @@ export function MediaCard({ entry, onEdit, onDelete, index = 0 }: MediaCardProps
                     variant="ghost"
                     size="icon-sm"
                     className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    onClick={(event) => event.stopPropagation()}
                   >
                     <MoreVertical className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
                   {onEdit && (
                     <DropdownMenuItem onClick={() => onEdit(entry)}>
                       <Edit className="w-3.5 h-3.5 mr-2" />

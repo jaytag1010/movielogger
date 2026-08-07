@@ -221,6 +221,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
       await addEntry({
         title: data.title,
         nativeTitle: null,
+        overview: tmdbData?.overview ?? null,
         tmdbReleaseDate: tmdbData?.releaseDate ?? null,
         type: data.type,
         status: data.status,

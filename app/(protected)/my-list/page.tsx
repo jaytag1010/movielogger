@@ -8,7 +8,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { MediaCard } from '@/components/media/MediaCard'
-import { MediaTable } from '@/components/media/MediaTable'
+import { InfoGridCard } from '@/components/media/InfoGridCard'
+import { TitleDetailsModal } from '@/components/media/TitleDetailsModal'
 import { FilterBar } from '@/components/media/FilterBar'
 import { EditEntryModal } from '@/components/media/EditEntryModal'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
@@ -85,8 +86,8 @@ export default function MyListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
-  // Open the edit modal for a specific entry when arriving via ?entry=<id>
-  // (used by global search and the Data Quality Center).
+  // Open Title Details for a specific entry when arriving via ?entry=<id>
+  // (used by global search, dashboard drill-downs, and the Data Quality Center).
   // We track the last-opened entry ID in a ref so that Zustand store updates
   // (which fire when an entry is saved) do NOT re-call setEditingEntry while
   // the modal is already open — that would reset the modal mid-save.
@@ -98,13 +99,16 @@ export default function MyListPage() {
     const target = entries.find((e) => e.id === entryId)
     if (target) {
       openedEntryIdRef.current = entryId
-      setEditingEntry(target)
-      setEditOpen(true)
+      setDetailEntryId(target.id ?? null)
+      setDetailOpen(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, entries])
   const [editingEntry, setEditingEntry] = useState<MediaEntry | null>(null)
   const [editOpen, setEditOpen] = useState(false)
+  const [detailEntryId, setDetailEntryId] = useState<string | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [returnToDetailId, setReturnToDetailId] = useState<string | null>(null)
   // Tracks which ?entry=<id> we have already opened so store updates
   // (triggered by saves) don't re-fire setEditingEntry mid-save.
   const openedEntryIdRef = useRef<string | null>(null)
@@ -114,7 +118,7 @@ export default function MyListPage() {
   const listTopRef = useRef<HTMLDivElement>(null)
 
   const VIEW_MODE_KEY = 'movielogger-view-mode'
-  const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
 
   const resetPagination = () => {
     setPage(1)
@@ -124,10 +128,12 @@ export default function MyListPage() {
   // Initialise from localStorage on mount; write back on change
   useEffect(() => {
     const stored = localStorage.getItem(VIEW_MODE_KEY)
-    if (stored === 'table' || stored === 'card') setViewMode(stored)
+    if (stored === 'grid' || stored === 'list') setViewMode(stored)
+    if (stored === 'card') setViewMode('grid')
+    if (stored === 'table') setViewMode('list')
   }, [])
 
-  function handleViewModeChange(mode: 'card' | 'table') {
+  function handleViewModeChange(mode: 'grid' | 'list') {
     setViewMode(mode)
     localStorage.setItem(VIEW_MODE_KEY, mode)
   }
@@ -209,8 +215,19 @@ export default function MyListPage() {
     setEditOpen(true)
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Delete this entry? This cannot be undone.')) return
+  function handleView(entry: MediaEntry) {
+    setDetailEntryId(entry.id ?? null)
+    setDetailOpen(true)
+  }
+
+  function handleEditFromDetails(entry: MediaEntry) {
+    setReturnToDetailId(entry.id ?? null)
+    setDetailOpen(false)
+    handleEdit(entry)
+  }
+
+  async function handleDelete(id: string, skipConfirm = false) {
+    if (!skipConfirm && !confirm('Delete this entry? This cannot be undone.')) return
     setDeletingId(id)
     try {
       await removeEntry(id)
@@ -314,25 +331,16 @@ export default function MyListPage() {
           <div className="flex items-center justify-center py-16">
             <LoadingSpinner size="lg" text="Loading your list..." />
           </div>
-        ) : viewMode === 'table' ? (
-          <div className="mt-2">
-            <MediaTable
-              entries={paginatedEntries}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-            />
-            {paginatedEntries.length === 0 && (
-              <p className="text-center text-white/40 text-sm py-12">No titles found</p>
-            )}
-          </div>
         ) : (
           <>
             <TabsContent value="all">
               <MediaList
                 entries={paginatedEntries}
+                viewMode={viewMode}
                 emptyLabel="titles"
                 totalCount={tabEntries.length}
                 allCount={baseEntries.length}
+                onView={handleView}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />
@@ -340,9 +348,11 @@ export default function MyListPage() {
             <TabsContent value="movie">
               <MediaList
                 entries={paginatedEntries.filter((e) => getEffectiveMediaType(e) === 'movie')}
+                viewMode={viewMode}
                 emptyLabel="movies"
                 totalCount={tabEntries.filter((e) => getEffectiveMediaType(e) === 'movie').length}
                 allCount={baseEntries.filter((e) => getEffectiveMediaType(e) === 'movie').length}
+                onView={handleView}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />
@@ -350,9 +360,11 @@ export default function MyListPage() {
             <TabsContent value="series">
               <MediaList
                 entries={paginatedEntries.filter((e) => getEffectiveMediaType(e) === 'series')}
+                viewMode={viewMode}
                 emptyLabel="series"
                 totalCount={tabEntries.filter((e) => getEffectiveMediaType(e) === 'series').length}
                 allCount={baseEntries.filter((e) => getEffectiveMediaType(e) === 'series').length}
+                onView={handleView}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />
@@ -381,10 +393,29 @@ export default function MyListPage() {
         open={editOpen}
         onOpenChange={(open) => {
           setEditOpen(open)
+          if (!open && returnToDetailId) {
+            setDetailEntryId(returnToDetailId)
+            setDetailOpen(true)
+            setReturnToDetailId(null)
+          }
           // When the modal closes, clear the ref so the same ?entry=<id>
           // can be re-opened if the user navigates back to it.
           if (!open) openedEntryIdRef.current = null
         }}
+      />
+      <TitleDetailsModal
+        entry={entries.find((entry) => entry.id === detailEntryId) ?? null}
+        entries={entries}
+        open={detailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open)
+          if (!open) {
+            setDetailEntryId(null)
+            openedEntryIdRef.current = null
+          }
+        }}
+        onEdit={handleEditFromDetails}
+        onDelete={(id) => handleDelete(id, true)}
       />
     </AppLayout>
   )
@@ -392,16 +423,20 @@ export default function MyListPage() {
 
 function MediaList({
   entries,
+  viewMode,
   emptyLabel,
   totalCount,
   allCount,
+  onView,
   onEdit,
   onDelete,
 }: {
   entries: MediaEntry[]
+  viewMode: 'grid' | 'list'
   emptyLabel: string
   totalCount: number
   allCount: number
+  onView: (entry: MediaEntry) => void
   onEdit: (entry: MediaEntry) => void
   onDelete: (id: string) => void
 }) {
@@ -426,21 +461,33 @@ function MediaList({
   }
 
   return (
-    <div className="space-y-2">
+    <div className={viewMode === 'grid' ? 'grid grid-cols-2 gap-2.5 sm:gap-3' : 'space-y-2'}>
       {totalCount > entries.length && (
-        <p className="text-xs text-white/30 text-center mb-2">
+        <p className={viewMode === 'grid' ? 'col-span-2 text-xs text-white/30 text-center mb-1' : 'text-xs text-white/30 text-center mb-2'}>
           Showing {entries.length} of {totalCount}
         </p>
       )}
       <AnimatePresence>
         {entries.map((entry, index) => (
-          <MediaCard
-            key={entry.id}
-            entry={entry}
-            index={index}
-            onEdit={onEdit}
-            onDelete={onDelete}
-          />
+          viewMode === 'grid' ? (
+            <InfoGridCard
+              key={entry.id}
+              entry={entry}
+              index={index}
+              onView={onView}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ) : (
+            <MediaCard
+              key={entry.id}
+              entry={entry}
+              index={index}
+              onView={onView}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          )
         ))}
       </AnimatePresence>
     </div>

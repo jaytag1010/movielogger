@@ -597,6 +597,7 @@ export default function ProgressPage() {
       const updates: Parameters<typeof editEntry>[1] = {
         tmdbId: fullData.tmdbId,
         type: fullData.type,
+        overview: fullData.overview ?? null,
         posterUrl: fullData.posterUrl,
         backdropUrl: fullData.backdropUrl,
         country: fullData.country,
@@ -662,6 +663,7 @@ export default function ProgressPage() {
 
       if (entry.type === 'movie') {
         const data = await fetchMovieMetadata(entry.tmdbId)
+        if (!entry.overview && data.overview) updates.overview = data.overview
         if (data.posterUrl) updates.posterUrl = data.posterUrl
         if (!entry.backdropUrl && data.backdropUrl) updates.backdropUrl = data.backdropUrl
         if (!entry.yearMade && data.year) updates.yearMade = data.year
@@ -687,6 +689,7 @@ export default function ProgressPage() {
           } catch { /* non-fatal */ }
         }
         const sd = await fetchTVMetadata(entry.tmdbId)
+        if (!entry.overview && sd.overview) updates.overview = sd.overview
         if (!entry.backdropUrl && sd.backdropUrl) updates.backdropUrl = sd.backdropUrl
         if (!entry.ageRating && sd.ageRating) updates.ageRating = sd.ageRating
         if (!entry.genres?.length && sd.genres.length) updates.genres = sd.genres
@@ -737,6 +740,7 @@ export default function ProgressPage() {
 
         if (entry.type === 'movie') {
           const data = await fetchMovieMetadata(entry.tmdbId!)
+          if (!entry.overview && data.overview) updates.overview = data.overview
           if (!entry.posterUrl && !entry.manualPosterUrl && data.posterUrl) updates.posterUrl = data.posterUrl
           if (data.backdropUrl && !valuesEqual(entry.backdropUrl, data.backdropUrl)) updates.backdropUrl = data.backdropUrl
           if (data.year && !valuesEqual(entry.yearMade, data.year)) updates.yearMade = data.year
@@ -771,6 +775,7 @@ export default function ProgressPage() {
             } catch { /* non-fatal */ }
           }
           const sd = await fetchTVMetadata(entry.tmdbId!)
+          if (!entry.overview && sd.overview) updates.overview = sd.overview
           if (sd.backdropUrl && !valuesEqual(entry.backdropUrl, sd.backdropUrl)) updates.backdropUrl = sd.backdropUrl
           if (sd.ageRating && !valuesEqual(entry.ageRating, sd.ageRating)) updates.ageRating = sd.ageRating
           if (sd.genres.length && !valuesEqual(entry.genres, sd.genres)) updates.genres = sd.genres
@@ -818,6 +823,7 @@ export default function ProgressPage() {
           .map(([key, nextValue]) => ({
                 field: ({
                   posterUrl: 'Poster Added',
+                  overview: 'Overview',
                   backdropUrl: 'Backdrop',
                   yearMade: 'Release Year',
                   ageRating: 'Age Rating',
