@@ -21,6 +21,7 @@ import {
   CalendarDays,
   Wrench,
   History,
+  Loader2,
 } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { GlassCard } from '@/components/common/GlassCard'
@@ -39,10 +40,12 @@ import { useMedia } from '@/hooks/useMedia'
 import { useMediaStore } from '@/store/mediaStore'
 import { useRouter } from 'next/navigation'
 import { exportToExcel, exportToCSV } from '@/lib/export/exporter'
-import { deleteAllUserEntries, getUserProfile, updateUserProfile, UserProfile } from '@/lib/firebase/firestore'
+import { deleteAllUserEntries, getUserProfile, updateMediaEntry, updateUserProfile, UserProfile } from '@/lib/firebase/firestore'
 import { addActivity } from '@/lib/firebase/activity'
 import { validatePosterFile, uploadPoster } from '@/lib/imgbb'
 import { useActivityHistory } from '@/hooks/useActivityHistory'
+import { fetchMovieMetadata, fetchTVMetadata } from '@/lib/tmdb/api'
+import { getEffectiveMediaType } from '@/utils/formatters'
 
 const CONFIRM_PHRASE = 'CONTINUE'
 
@@ -95,6 +98,14 @@ export default function ProfilePage() {
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [confirmInput, setConfirmInput] = useState('')
   const [clearing, setClearing] = useState(false)
+  const [overviewMigration, setOverviewMigration] = useState({
+    running: false,
+    current: 0,
+    total: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+  })
 
   // ── Load profile on mount ─────────────────────────────────────────────────
   useEffect(() => {
@@ -136,6 +147,12 @@ export default function ProfilePage() {
         minute: '2-digit',
       })
     : 'Never'
+  const overviewMigrationCandidates = entries.filter(
+    (entry) => entry.id && entry.tmdbId != null && !entry.overview?.trim()
+  )
+  const overviewMigrationPercent = overviewMigration.total > 0
+    ? Math.round((overviewMigration.current / overviewMigration.total) * 100)
+    : 0
 
   const initials = effectiveDisplayName
     .split(' ')
@@ -199,6 +216,92 @@ export default function ProfilePage() {
     } finally {
       setClearing(false)
     }
+  }
+
+  async function handleOverviewMigration() {
+    const candidates = entries.filter((entry) => entry.id && entry.tmdbId != null && !entry.overview?.trim())
+    if (candidates.length === 0) {
+      toast.success('All TMDB-linked titles already have overviews')
+      setOverviewMigration({
+        running: false,
+        current: 0,
+        total: 0,
+        updated: 0,
+        skipped: 0,
+        failed: 0,
+      })
+      return
+    }
+
+    setOverviewMigration({
+      running: true,
+      current: 0,
+      total: candidates.length,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+    })
+
+    let updated = 0
+    let skipped = 0
+    let failed = 0
+
+    for (let i = 0; i < candidates.length; i++) {
+      const entry = candidates[i]
+      setOverviewMigration({
+        running: true,
+        current: i + 1,
+        total: candidates.length,
+        updated,
+        skipped,
+        failed,
+      })
+
+      try {
+        if (!entry.id || entry.tmdbId == null) {
+          skipped++
+          continue
+        }
+
+        const type = getEffectiveMediaType(entry)
+        const metadata = type === 'movie'
+          ? await fetchMovieMetadata(entry.tmdbId)
+          : await fetchTVMetadata(entry.tmdbId)
+        const overview = metadata.overview?.trim() || null
+
+        if (!overview) {
+          skipped++
+          continue
+        }
+
+        await updateMediaEntry(entry.id, { overview }, { preserveOrder: true })
+        const currentEntries = useMediaStore.getState().entries
+        setEntries(currentEntries.map((item) => item.id === entry.id ? { ...item, overview } : item))
+        updated++
+      } catch {
+        failed++
+      }
+
+      setOverviewMigration({
+        running: true,
+        current: i + 1,
+        total: candidates.length,
+        updated,
+        skipped,
+        failed,
+      })
+    }
+
+    setOverviewMigration({
+      running: false,
+      current: candidates.length,
+      total: candidates.length,
+      updated,
+      skipped,
+      failed,
+    })
+
+    toast.success(`Overview migration complete: ${updated} updated, ${skipped} skipped, ${failed} failed`)
   }
 
   /** Upload a new profile photo via ImgBB and persist the URL. */
@@ -487,6 +590,50 @@ export default function ProfilePage() {
             Library Tools
           </h3>
           <div className="space-y-2">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-500/20 flex items-center justify-center shrink-0">
+                {overviewMigration.running ? (
+                  <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
+                ) : (
+                  <Wrench className="w-4 h-4 text-amber-300" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">Temporary Overview Migration</p>
+                    <p className="text-xs text-white/40 mt-1">
+                      {overviewMigration.running
+                        ? `Migrating ${overviewMigration.current} / ${overviewMigration.total} (${overviewMigrationPercent}%)`
+                        : `${overviewMigrationCandidates.length} TMDB-linked title${overviewMigrationCandidates.length === 1 ? '' : 's'} missing overview`}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleOverviewMigration}
+                    disabled={overviewMigration.running || overviewMigrationCandidates.length === 0}
+                  >
+                    {overviewMigration.running ? 'Running...' : 'Run'}
+                  </Button>
+                </div>
+
+                {(overviewMigration.running || overviewMigration.total > 0) && (
+                  <div className="mt-3 space-y-2">
+                    <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-amber-400 transition-all"
+                        style={{ width: `${overviewMigrationPercent}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-white/40">
+                      Updated: {overviewMigration.updated} · Skipped: {overviewMigration.skipped} · Failed: {overviewMigration.failed}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
             <div className="flex items-start gap-3">
               <div className="w-9 h-9 rounded-lg bg-blue-500/15 border border-blue-500/20 flex items-center justify-center shrink-0">
