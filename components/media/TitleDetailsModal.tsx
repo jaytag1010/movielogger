@@ -441,22 +441,6 @@ function CompareTitlesModal({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {selectedEntries.map((entry) => (
-              <SelectedCompareCard
-                key={entry.id ?? entry.internalId}
-                entry={entry}
-                locked={entry.id === primaryEntry.id}
-                onRemove={() => entry.id && removeSelection(entry.id)}
-              />
-            ))}
-          </div>
-          {maxSelected && (
-            <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-              Maximum of 4 titles selected.
-            </p>
-          )}
-
           <div className="mt-4 space-y-2">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
@@ -501,7 +485,18 @@ function CompareTitlesModal({
             )}
           </div>
 
-          <CompareTable entries={selectedEntries} releaseStatuses={releaseStatuses} />
+          {maxSelected && (
+            <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              Maximum of 4 titles selected.
+            </p>
+          )}
+
+          <CompareMatrix
+            entries={selectedEntries}
+            releaseStatuses={releaseStatuses}
+            primaryEntryId={primaryEntry.id}
+            onRemove={removeSelection}
+          />
 
           <div className="mt-3 flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.035] p-3 text-xs text-white/45">
             <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-300/80" />
@@ -584,12 +579,16 @@ function CompareSearchResult({
   )
 }
 
-function CompareTable({
+function CompareMatrix({
   entries,
   releaseStatuses,
+  primaryEntryId,
+  onRemove,
 }: {
   entries: MediaEntry[]
   releaseStatuses: Record<string, { label: string; releasedEpisodes: number | null } | undefined>
+  primaryEntryId?: string
+  onRemove: (id: string) => void
 }) {
   const rows = [
     ['Status', (entry: MediaEntry) => MEDIA_STATUS_LABELS[entry.status]],
@@ -615,11 +614,30 @@ function CompareTable({
     ['Rewatch Count', (entry: MediaEntry) => String(entry.rewatchCount ?? 0)],
   ] satisfies Array<[string, (entry: MediaEntry) => string]>
 
+  const gridTemplateColumns = `150px repeat(${entries.length}, minmax(140px, 1fr))`
+
   return (
     <div className="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.025]">
       <div
-        className="min-w-[760px] text-sm"
-        style={{ display: 'grid', gridTemplateColumns: `150px repeat(${entries.length}, minmax(140px, 1fr))` }}
+        className="grid min-w-[760px] gap-3 border-b border-white/10 p-3"
+        style={{ gridTemplateColumns }}
+      >
+        <div className="flex items-end px-1 pb-1 text-xs font-semibold uppercase tracking-wider text-white/35">
+          Titles
+        </div>
+        {entries.map((entry) => (
+          <SelectedCompareCard
+            key={entry.id ?? entry.internalId}
+            entry={entry}
+            locked={entry.id === primaryEntryId}
+            onRemove={() => entry.id && onRemove(entry.id)}
+          />
+        ))}
+      </div>
+
+      <div
+        className="grid min-w-[760px] text-sm"
+        style={{ gridTemplateColumns }}
       >
         <div className="border-b border-r border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold uppercase tracking-wider text-white/35">
           Field
