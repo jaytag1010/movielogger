@@ -60,12 +60,19 @@ export function InfoGridCard({ entry, index = 0, onView, onEdit, onDelete }: Inf
   })()
 
   return (
-    <motion.button
-      type="button"
+    <motion.div
+      role="button"
+      tabIndex={0}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.025, duration: 0.25 }}
       onClick={() => onView(entry)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onView(entry)
+        }
+      }}
       className="group relative min-h-[218px] rounded-xl border border-white/10 bg-white/5 p-2.5 text-left transition-all hover:border-white/20 hover:bg-white/[0.08] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
     >
       <div className="flex gap-2.5">
@@ -166,7 +173,7 @@ export function InfoGridCard({ entry, index = 0, onView, onEdit, onDelete }: Inf
           {type === 'series' ? 'Series' : 'Movie'}
         </Badge>
       </div>
-    </motion.button>
+    </motion.div>
   )
 }
 
