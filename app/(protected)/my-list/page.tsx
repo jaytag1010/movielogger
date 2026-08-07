@@ -5,14 +5,14 @@ export const dynamic = 'force-dynamic'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import dynamicImport from 'next/dynamic'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { MediaCard } from '@/components/media/MediaCard'
 import { InfoGridCard } from '@/components/media/InfoGridCard'
 import { FilterBar } from '@/components/media/FilterBar'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useMedia } from '@/hooks/useMedia'
@@ -348,20 +348,18 @@ export default function MyListPage() {
             <LoadingSpinner size="lg" text="Loading your list..." />
           </div>
         ) : (
-          <>
-            <TabsContent value={activeTab}>
-              <MediaList
-                entries={paginatedEntries}
-                viewMode={viewMode}
-                emptyLabel={activeTab === 'all' ? 'titles' : activeTab === 'movie' ? 'movies' : 'series'}
-                totalCount={tabEntries.length}
-                allCount={baseEntries.length}
-                onView={handleView}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-              />
-            </TabsContent>
-          </>
+          <div className="mt-2">
+            <MediaList
+              entries={paginatedEntries}
+              viewMode={viewMode}
+              emptyLabel={activeTab === 'all' ? 'titles' : activeTab === 'movie' ? 'movies' : 'series'}
+              totalCount={tabEntries.length}
+              allCount={baseEntries.length}
+              onView={handleView}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          </div>
         )}
 
         {!loading && totalPages > 1 && (
@@ -464,29 +462,27 @@ function MediaList({
           Showing {entries.length} of {totalCount}
         </p>
       )}
-      <AnimatePresence>
-        {entries.map((entry, index) => (
-          viewMode === 'grid' ? (
-            <InfoGridCard
-              key={entry.id ?? entry.internalId}
-              entry={entry}
-              index={index}
-              onView={onView}
-              onEdit={onEdit}
-              onDelete={onDelete}
-            />
-          ) : (
-            <MediaCard
-              key={entry.id ?? entry.internalId}
-              entry={entry}
-              index={index}
-              onView={onView}
-              onEdit={onEdit}
-              onDelete={onDelete}
-            />
-          )
-        ))}
-      </AnimatePresence>
+      {entries.map((entry, index) => (
+        viewMode === 'grid' ? (
+          <InfoGridCard
+            key={entry.id ?? entry.internalId}
+            entry={entry}
+            index={index}
+            onView={onView}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ) : (
+          <MediaCard
+            key={entry.id ?? entry.internalId}
+            entry={entry}
+            index={index}
+            onView={onView}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        )
+      ))}
     </div>
   )
 }
