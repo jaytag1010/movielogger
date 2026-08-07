@@ -50,7 +50,17 @@ export function TitleDetailsModal({
 }: TitleDetailsModalProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
-  const releaseStatuses = useProgressReleaseStatuses(entry ? [entry] : [])
+  const detailReleaseEntries = useMemo(() => entry ? [entry] : [], [
+    entry?.id,
+    entry?.status,
+    entry?.tmdbId,
+    entry?.type,
+    entry?.seasonNumber,
+    entry?.totalEpisodes,
+    entry?.nextEpisodeToWatch,
+    entry?.tmdbReleaseDate,
+  ])
+  const releaseStatuses = useProgressReleaseStatuses(detailReleaseEntries)
 
   useEffect(() => {
     let cancelled = false

@@ -160,6 +160,11 @@ export function useProgressReleaseStatuses(entries: MediaEntry[]): Record<string
     let cancelled = false
 
     async function loadStatuses() {
+      if (trackedEntries.length === 0) {
+        setStatuses((current) => Object.keys(current).length === 0 ? current : {})
+        return
+      }
+
       const updates: Record<string, ProgressReleaseStatus> = {}
 
       await Promise.all(
@@ -183,7 +188,7 @@ export function useProgressReleaseStatuses(entries: MediaEntry[]): Record<string
     return () => {
       cancelled = true
     }
-  }, [trackedKey, trackedEntries])
+  }, [trackedKey])
 
   return statuses
 }
