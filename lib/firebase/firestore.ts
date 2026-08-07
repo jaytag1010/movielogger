@@ -21,7 +21,7 @@ import { initApp } from './config'
 import { MediaEntry, MediaEntryInput, MediaEntryUpdate } from '@/types/media'
 import { formatInternalId, generateInternalId, reserveInternalIds } from '@/utils/idGenerator'
 import { normalizeCountry } from '@/utils/countries'
-import { calculateStoredWatchHours, watchHoursDiffer } from '@/utils/watchHours'
+import { calculateStoredWatchHours } from '@/utils/watchHours'
 
 const COLLECTION = 'mediaEntries'
 
@@ -61,62 +61,12 @@ function migrationSort(a: { id: string; data: MediaEntry }, b: { id: string; dat
   return a.id.localeCompare(b.id)
 }
 
-async function migrateUserEntriesIfNeeded(userId: string, docs: { id: string; data: MediaEntry }[]): Promise<MediaEntry[]> {
-  const firestore = db()
-  const counterRef = doc(firestore, 'counters', `user_${userId}`)
-  const counterSnap = await getDoc(counterRef)
-  const counter = counterSnap.exists() ? counterSnap.data() : {}
-  const sortedForIds = [...docs].sort(migrationSort)
-  const targetInternalIds = new Map(sortedForIds.map((item, index) => [item.id, formatInternalId(index + 1)]))
-  const migratedEntries: MediaEntry[] = []
-  const pendingUpdates: { id: string; updates: Record<string, unknown> }[] = []
-
-  for (const item of docs) {
-    const entry = { ...item.data }
-    const updates: Record<string, unknown> = {}
-
-    const nextInternalId = targetInternalIds.get(item.id)!
-    if (entry.internalId !== nextInternalId) {
-      updates.internalId = nextInternalId
-      entry.internalId = nextInternalId
-    }
-
-    const normalizedCountry = normalizeCountry(entry.country)
-    if (entry.country !== normalizedCountry) {
-      updates.country = normalizedCountry
-      entry.country = normalizedCountry
-    }
-
-    const calculatedWatchHours = calculateStoredWatchHours(entry)
-    if (watchHoursDiffer(entry.watchHours, calculatedWatchHours)) {
-      updates.watchHours = calculatedWatchHours
-      entry.watchHours = calculatedWatchHours
-    }
-
-    if (Object.keys(updates).length > 0) {
-      pendingUpdates.push({ id: item.id, updates })
-    }
-
-    migratedEntries.push(entry)
+function hydrateEntryForRead(entry: MediaEntry): MediaEntry {
+  return {
+    ...entry,
+    country: normalizeCountry(entry.country),
+    watchHours: calculateStoredWatchHours(entry),
   }
-
-  if (pendingUpdates.length > 0 || counter.count !== migratedEntries.length) {
-    const CHUNK = 450
-    for (let i = 0; i < pendingUpdates.length; i += CHUNK) {
-      const batch = writeBatch(firestore)
-      pendingUpdates.slice(i, i + CHUNK).forEach((item) => {
-        batch.update(doc(firestore, COLLECTION, item.id), item.updates)
-      })
-      await batch.commit()
-    }
-
-    await setDoc(counterRef, {
-      count: migratedEntries.length,
-      compactSequentialIdsV2: true,
-    }, { merge: true })
-  }
-
-  return migratedEntries
 }
 
 export async function createMediaEntry(
@@ -225,7 +175,10 @@ export async function getUserMediaEntries(userId: string): Promise<MediaEntry[]>
   )
   const snap = await getDocs(q)
   const docs = snap.docs.map((d) => ({ id: d.id, data: { id: d.id, ...d.data() } as MediaEntry }))
-  return migrateUserEntriesIfNeeded(userId, docs)
+  // Keep reads fast. Full-library repair/migration work must not block landing
+  // on My List; write-side normalization and explicit maintenance tools handle
+  // persistence, while read hydration keeps current displays consistent.
+  return docs.map((item) => hydrateEntryForRead(item.data))
 }
 
 export async function getUserMediaEntriesPaginated(

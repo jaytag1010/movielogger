@@ -4,14 +4,13 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import dynamicImport from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { MediaCard } from '@/components/media/MediaCard'
 import { InfoGridCard } from '@/components/media/InfoGridCard'
-import { TitleDetailsModal } from '@/components/media/TitleDetailsModal'
 import { FilterBar } from '@/components/media/FilterBar'
-import { EditEntryModal } from '@/components/media/EditEntryModal'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -24,6 +23,14 @@ import { getWatchHistoryEntries } from '@/utils/watchHistory'
 import { Film, Tv, List } from 'lucide-react'
 
 const ITEMS_PER_PAGE = 20
+const EditEntryModal = dynamicImport(
+  () => import('@/components/media/EditEntryModal').then((mod) => mod.EditEntryModal),
+  { ssr: false }
+)
+const TitleDetailsModal = dynamicImport(
+  () => import('@/components/media/TitleDetailsModal').then((mod) => mod.TitleDetailsModal),
+  { ssr: false }
+)
 
 type SortByValue = 'title' | 'rating' | 'year' | 'dateFinished' | 'createdAt' | 'priority'
 
@@ -138,8 +145,15 @@ export default function MyListPage() {
     localStorage.setItem(VIEW_MODE_KEY, mode)
   }
 
-  const movieCount = entries.filter((e) => getEffectiveMediaType(e) === 'movie').length
-  const seriesCount = entries.filter((e) => getEffectiveMediaType(e) === 'series').length
+  const { movieCount, seriesCount } = useMemo(() => {
+    let movies = 0
+    let series = 0
+    entries.forEach((entry) => {
+      if (getEffectiveMediaType(entry) === 'movie') movies++
+      else series++
+    })
+    return { movieCount: movies, seriesCount: series }
+  }, [entries])
   const filteredIdsParam = searchParams.get('ids')
   const filteredLabel = searchParams.get('label')
   const filteredIdSet = useMemo(() => {
@@ -161,10 +175,12 @@ export default function MyListPage() {
 
   // For "All" tab, show all filteredEntries; otherwise filter by effective type
   const baseEntries = watchHistoryEntries ?? issueFilteredEntries ?? filteredEntries
-  const tabEntries =
-    activeTab === 'all'
+  const tabEntries = useMemo(
+    () => activeTab === 'all'
       ? baseEntries
-      : baseEntries.filter((e) => getEffectiveMediaType(e) === activeTab)
+      : baseEntries.filter((e) => getEffectiveMediaType(e) === activeTab),
+    [activeTab, baseEntries]
+  )
 
   const totalPages = Math.max(1, Math.ceil(tabEntries.length / ITEMS_PER_PAGE))
   const safePage = Math.min(page, totalPages)
@@ -333,37 +349,13 @@ export default function MyListPage() {
           </div>
         ) : (
           <>
-            <TabsContent value="all">
+            <TabsContent value={activeTab}>
               <MediaList
                 entries={paginatedEntries}
                 viewMode={viewMode}
-                emptyLabel="titles"
+                emptyLabel={activeTab === 'all' ? 'titles' : activeTab === 'movie' ? 'movies' : 'series'}
                 totalCount={tabEntries.length}
                 allCount={baseEntries.length}
-                onView={handleView}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-              />
-            </TabsContent>
-            <TabsContent value="movie">
-              <MediaList
-                entries={paginatedEntries.filter((e) => getEffectiveMediaType(e) === 'movie')}
-                viewMode={viewMode}
-                emptyLabel="movies"
-                totalCount={tabEntries.filter((e) => getEffectiveMediaType(e) === 'movie').length}
-                allCount={baseEntries.filter((e) => getEffectiveMediaType(e) === 'movie').length}
-                onView={handleView}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-              />
-            </TabsContent>
-            <TabsContent value="series">
-              <MediaList
-                entries={paginatedEntries.filter((e) => getEffectiveMediaType(e) === 'series')}
-                viewMode={viewMode}
-                emptyLabel="series"
-                totalCount={tabEntries.filter((e) => getEffectiveMediaType(e) === 'series').length}
-                allCount={baseEntries.filter((e) => getEffectiveMediaType(e) === 'series').length}
                 onView={handleView}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
