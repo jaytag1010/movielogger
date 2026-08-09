@@ -1014,17 +1014,6 @@ export default function ProgressPage() {
           </div>
 
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            {filter === 'planned' && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setWatchNextOpen(true)}
-                className="text-xs border-purple-500/25 bg-purple-500/10 text-purple-200 hover:bg-purple-500/20 hover:text-white"
-              >
-                <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-                What to Watch Next?
-              </Button>
-            )}
             <Button
               variant="outline"
               size="sm"
@@ -1142,6 +1131,22 @@ export default function ProgressPage() {
         releaseStatuses={releaseStatuses}
         onStartWatching={handleStartWatching}
       />
+
+      {filter === 'planned' && !watchNextOpen && (
+        <div
+          className="fixed left-0 right-0 z-40 flex justify-center px-4 pointer-events-none"
+          style={{ bottom: 'max(5.9rem, calc(env(safe-area-inset-bottom) + 5.25rem))' }}
+        >
+          <Button
+            type="button"
+            onClick={() => setWatchNextOpen(true)}
+            className="pointer-events-auto rounded-full border border-purple-400/30 bg-gradient-to-r from-blue-600 to-purple-600 px-5 py-3 text-sm font-semibold text-white shadow-2xl shadow-purple-950/40 hover:from-blue-500 hover:to-purple-500"
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            What to Watch Next?
+          </Button>
+        </div>
+      )}
 
       <Dialog
         open={repairOpen && linkTarget != null}
