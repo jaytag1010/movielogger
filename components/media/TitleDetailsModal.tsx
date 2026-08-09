@@ -661,13 +661,23 @@ function CompareMatrix({
               key={`${label}-${entry.id ?? entry.internalId}`}
               className={`min-w-0 border-r border-white/10 px-3 py-2 text-center text-xs text-white/72 last:border-r-0 ${index % 2 === 0 ? 'bg-white/[0.025]' : 'bg-white/[0.055]'}`}
             >
-              <span className="line-clamp-2">{getValue(entry)}</span>
+              <span className={`line-clamp-2 ${label === 'Personal Rating' ? getRatingValueClass(entry.personalRating) : ''}`}>
+                {getValue(entry)}
+              </span>
             </div>
           )),
         ])}
       </div>
     </div>
   )
+}
+
+function getRatingValueClass(rating: number | null | undefined) {
+  if (rating == null || !Number.isFinite(Number(rating))) return ''
+  const value = Number(rating)
+  if (value < 7) return 'font-semibold text-red-300'
+  if (value < 9) return 'font-semibold text-yellow-300'
+  return 'font-semibold text-emerald-300'
 }
 
 function getTotalEpisodes(entry: MediaEntry) {

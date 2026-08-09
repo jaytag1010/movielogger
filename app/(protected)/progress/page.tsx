@@ -504,6 +504,7 @@ export default function ProgressPage() {
         watchedEpisodes > 0 &&
         (finishTarget.totalEpisodes == null || watchedEpisodes > finishTarget.totalEpisodes)
       const completedTotalEpisodes = shouldUpdateTotal ? watchedEpisodes : finishTarget.totalEpisodes
+      const completedEpisodesWatched = completedTotalEpisodes ?? watchedEpisodes
       const completedWatchHours = getEffectiveMediaType(finishTarget) === 'series'
         ? completedTotalEpisodes != null
           ? Math.round((completedTotalEpisodes * details.episodeDurationMinutes / 60) * 100) / 100
@@ -518,7 +519,7 @@ export default function ProgressPage() {
         episodeDurationMinutes: details.episodeDurationMinutes,
         watchHours: completedWatchHours,
         specialNotes: details.specialNotes,
-        nextEpisodeToWatch: null,
+        nextEpisodeToWatch: completedEpisodesWatched,
         ...(shouldUpdateTotal ? { totalEpisodes: watchedEpisodes } : {}),
       })
 
@@ -530,7 +531,7 @@ export default function ProgressPage() {
         episodeDurationMinutes: details.episodeDurationMinutes,
         watchHours: completedWatchHours,
         specialNotes: details.specialNotes,
-        nextEpisodeToWatch: null,
+        nextEpisodeToWatch: completedEpisodesWatched,
         totalEpisodes: completedTotalEpisodes,
         updatedAt: Timestamp.now(),
       }

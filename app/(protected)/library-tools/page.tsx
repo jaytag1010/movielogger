@@ -8,10 +8,11 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { GlassCard } from '@/components/common/GlassCard'
 import { Button } from '@/components/ui/button'
 import { LibraryMaintenance } from '@/components/profile/LibraryMaintenance'
+import { MetadataUtilities } from '@/components/profile/MetadataUtilities'
 import { useMedia } from '@/hooks/useMedia'
 
 export default function LibraryToolsPage() {
-  const { entries, editEntry } = useMedia()
+  const { entries, editEntry, refreshEntry } = useMedia()
 
   return (
     <AppLayout title="Library Tools" subtitle="Repair and maintain your library metadata">
@@ -25,6 +26,10 @@ export default function LibraryToolsPage() {
 
         <GlassCard padding="md">
           <LibraryMaintenance entries={entries} editEntry={editEntry} />
+        </GlassCard>
+
+        <GlassCard padding="md">
+          <MetadataUtilities entries={entries} refreshEntry={refreshEntry} />
         </GlassCard>
 
         <GlassCard padding="md">
@@ -44,7 +49,13 @@ export default function LibraryToolsPage() {
             </Link>
             <FutureTool icon={SearchCheck} label="Duplicate Checker" />
             <FutureTool icon={ShieldCheck} label="Library Integrity" />
-            <FutureTool icon={Hammer} label="Metadata Utilities" />
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 flex items-center gap-2">
+              <Hammer className="w-4 h-4 text-amber-300" />
+              <div>
+                <p className="text-sm font-medium text-white">Metadata Utilities</p>
+                <p className="text-[11px] text-white/40">Fill missing TMDB overviews</p>
+              </div>
+            </div>
           </div>
         </GlassCard>
       </div>

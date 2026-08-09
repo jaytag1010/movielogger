@@ -111,8 +111,11 @@ export function getDisplayTitle(entry: {
  * missing value defaults to 0. Movies use an effective total of 1.
  */
 export function getEpisodesWatched(
-  entry: Pick<MediaEntry, 'nextEpisodeToWatch'>
+  entry: Pick<MediaEntry, 'nextEpisodeToWatch'> & Partial<Pick<MediaEntry, 'status' | 'totalEpisodes'>>
 ): number {
+  if (entry.status === 'completed' && entry.totalEpisodes != null && entry.totalEpisodes > 0) {
+    return entry.totalEpisodes
+  }
   return entry.nextEpisodeToWatch ?? 0
 }
 

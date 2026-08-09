@@ -306,7 +306,9 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
       } else {
         correctedTotal = recordedTotal
       }
-      const episodesWatched = data.status === 'completed' ? null : watched
+      const episodesWatched = data.status === 'completed'
+        ? (correctedTotal ?? watched)
+        : watched
       const priorityApplies = data.status === 'planned' || data.status === 'on_hold'
       const priority = priorityApplies
         ? (data.priority ?? 3)

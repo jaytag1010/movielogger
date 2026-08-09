@@ -207,12 +207,13 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
 
   async function onSubmit(data: FormData) {
     try {
-      // Episodes Watched: hidden (null) for completed; otherwise the entered count (default 0).
-      // Applies to both movies and series.
-      const episodesWatched = data.status === 'completed' ? null : (data.nextEpisodeToWatch ?? 0)
       // Movies use Total Episodes = 1 so progress shows out of 1.
       const resolvedTotalEpisodes =
         data.type === 'movie' ? (data.totalEpisodes ?? 1) : (data.totalEpisodes ?? null)
+      // Completed entries should not display contradictory 0 / N progress.
+      const episodesWatched = data.status === 'completed'
+        ? (resolvedTotalEpisodes ?? data.nextEpisodeToWatch ?? 0)
+        : (data.nextEpisodeToWatch ?? 0)
       const priority = data.status === 'planned' || data.status === 'on_hold'
         ? (data.priority ?? 3)
         : null

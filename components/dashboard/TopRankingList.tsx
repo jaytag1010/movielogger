@@ -7,7 +7,7 @@ import { Star, Film, Tv, ChevronRight } from 'lucide-react'
 import { MediaEntry, MediaType } from '@/types/media'
 import { GlassCard } from '@/components/common/GlassCard'
 import { getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
-import { topDenseRanked } from '@/utils/ranking'
+import { getEligibleCompletedRankedEntries, topDenseRanked } from '@/utils/ranking'
 
 interface TopRankingListProps {
   entries: MediaEntry[]
@@ -17,8 +17,9 @@ interface TopRankingListProps {
 
 export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProps) {
   const filtered = entries
-    .filter((e) => getEffectiveMediaType(e) === type && e.personalRating !== null && e.status === 'completed')
-  const ranked = topDenseRanked(filtered, limit)
+    .filter((e) => getEffectiveMediaType(e) === type)
+  const eligible = getEligibleCompletedRankedEntries(filtered)
+  const ranked = topDenseRanked(eligible, limit)
 
   const title = type === 'movie' ? 'Top Movies' : 'Top Series'
   const Icon = type === 'movie' ? Film : Tv

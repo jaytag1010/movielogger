@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   BarChart,
@@ -39,6 +39,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 
 export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
   const router = useRouter()
+  const scrollRef = useRef<HTMLDivElement>(null)
   const data = useMemo(() => {
     // Only count completed entries
     const completed = entries.filter((e) => e.status === 'completed')
@@ -74,6 +75,14 @@ export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
 
   const hasData = data.some((d) => d.count > 0)
   const maxCount = hasData ? Math.max(...data.map((d) => d.count)) : 0
+  const isScrollable = data.length > 15
+  const chartWidth = isScrollable ? Math.max(620, data.length * 42) : '100%'
+
+  useEffect(() => {
+    const element = scrollRef.current
+    if (!element || !isScrollable) return
+    element.scrollLeft = element.scrollWidth
+  }, [isScrollable, data.length])
 
   return (
     <GlassCard padding="md">
@@ -86,38 +95,54 @@ export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
       </div>
 
       {hasData ? (
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={data} barSize={18}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-            <XAxis
-              dataKey="year"
-              tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
-              tickLine={false}
-              axisLine={false}
-            />
-            <YAxis
-              allowDecimals={false}
-              tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
-              tickLine={false}
-              axisLine={false}
-              width={24}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-              {data.map((entry, index) => (
-                <Cell
-                  key={`bar-${index}`}
-                  fill={entry.count === maxCount ? '#8B5CF6' : '#3B82F6'}
-                  fillOpacity={entry.isCurrent ? 0.6 : 1}
-                  cursor={entry.count > 0 ? 'pointer' : 'default'}
-                  onClick={entry.count > 0
-                    ? () => router.push(`/my-list?watchHistoryYear=${entry.year}&sort=rating_desc&tab=all`)
-                    : undefined}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <div className="relative">
+          {isScrollable && (
+            <>
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-[#0D0D1A] to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[#0D0D1A] to-transparent" />
+            </>
+          )}
+          <div
+            ref={scrollRef}
+            className={isScrollable ? 'mx-auto max-w-[630px] overflow-x-auto overscroll-x-contain pb-1' : ''}
+          >
+            <div style={{ width: chartWidth, height: 180 }}>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={data} barSize={18}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <XAxis
+                    dataKey="year"
+                    tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={0}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={24}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {data.map((entry, index) => (
+                      <Cell
+                        key={`bar-${index}`}
+                        fill={entry.count === maxCount ? '#8B5CF6' : '#3B82F6'}
+                        fillOpacity={entry.isCurrent ? 0.6 : 1}
+                        cursor={entry.count > 0 ? 'pointer' : 'default'}
+                        onClick={entry.count > 0
+                          ? () => router.push(`/my-list?watchHistoryYear=${entry.year}&sort=rating_desc&tab=all`)
+                          : undefined}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="h-40 flex items-center justify-center">
           <p className="text-sm text-white/30">Complete entries to see your watch history</p>

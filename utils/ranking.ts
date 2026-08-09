@@ -1,6 +1,7 @@
 import { MediaEntry } from '@/types/media'
 import { getDisplayTitle } from '@/utils/formatters'
 import { parseInternalIdNumber } from '@/utils/idGenerator'
+import { normalizeCountry } from '@/utils/countries'
 
 export interface DenseRankedEntry {
   entry: MediaEntry
@@ -8,7 +9,21 @@ export interface DenseRankedEntry {
 }
 
 export function hasRankedRating(entry: MediaEntry): boolean {
-  return entry.personalRating != null && entry.personalRating > 0
+  const rating = Number(entry.personalRating)
+  return Number.isFinite(rating) && rating > 0
+}
+
+export function isEligibleForCompletionRanking(entry: MediaEntry): boolean {
+  return entry.status === 'completed' && hasRankedRating(entry)
+}
+
+export function getEligibleCompletedRankedEntries(entries: MediaEntry[]): MediaEntry[] {
+  return entries.filter(isEligibleForCompletionRanking)
+}
+
+export function sameNormalizedCountry(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false
+  return normalizeCountry(a) === normalizeCountry(b)
 }
 
 function finishedAt(entry: MediaEntry): number {
@@ -25,7 +40,7 @@ export function isSameEntry(a: MediaEntry, b: MediaEntry): boolean {
 }
 
 export function compareRankedEntries(a: MediaEntry, b: MediaEntry): number {
-  const ratingDiff = (b.personalRating ?? 0) - (a.personalRating ?? 0)
+  const ratingDiff = Number(b.personalRating ?? 0) - Number(a.personalRating ?? 0)
   if (ratingDiff !== 0) return ratingDiff
 
   const dateDiff = finishedAt(b) - finishedAt(a)

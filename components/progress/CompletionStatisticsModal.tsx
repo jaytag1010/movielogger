@@ -37,6 +37,7 @@ export function CompletionStatisticsModal({
     entry,
     overallRank,
     typeRank,
+    type,
     countryRank,
     genreRanks,
     ratingPercentile,
@@ -47,7 +48,7 @@ export function CompletionStatisticsModal({
     rewatchCount,
     achievements,
   } = statistics
-  const typeLabel = entry.type === 'movie' ? 'Movie' : 'Series'
+  const typeLabel = type === 'movie' ? 'Movie' : 'Series'
   const hasRating = entry.personalRating != null && entry.personalRating > 0
 
   return (

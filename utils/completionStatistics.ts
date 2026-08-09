@@ -1,6 +1,13 @@
 import { MediaEntry, MediaType } from '@/types/media'
 import { calculateEntryWatchHours } from '@/utils/watchTime'
-import { getDenseRankForEntry, hasRankedRating, isSameEntry } from '@/utils/ranking'
+import {
+  getDenseRankForEntry,
+  getEligibleCompletedRankedEntries,
+  hasRankedRating,
+  isSameEntry,
+  sameNormalizedCountry,
+} from '@/utils/ranking'
+import { getEffectiveMediaType } from '@/utils/formatters'
 
 export interface CompletionRank {
   rank: number
@@ -36,17 +43,18 @@ export function calculateCompletionStatistics(
   libraryEntries: MediaEntry[]
 ): CompletionStatistics {
   const completed = libraryEntries.filter((candidate) => candidate.status === 'completed')
-  const ratedCompleted = completed.filter(hasRankedRating)
-  const overallRank = rankInPool(entry, completed)
-  const sameType = completed.filter((candidate) => candidate.type === entry.type)
+  const ratedCompleted = getEligibleCompletedRankedEntries(libraryEntries)
+  const entryType = getEffectiveMediaType(entry)
+  const overallRank = rankInPool(entry, ratedCompleted)
+  const sameType = ratedCompleted.filter((candidate) => getEffectiveMediaType(candidate) === entryType)
   const typeRank = rankInPool(entry, sameType)
   const sameCountry = entry.country
-    ? completed.filter((candidate) => candidate.country === entry.country)
+    ? ratedCompleted.filter((candidate) => sameNormalizedCountry(candidate.country, entry.country))
     : []
   const countryRank = entry.country ? rankInPool(entry, sameCountry) : null
   const uniqueGenres = Array.from(new Set((entry.genres ?? []).filter(Boolean)))
   const genreRanks = uniqueGenres.flatMap((genre) => {
-    const pool = completed.filter((candidate) => candidate.genres?.includes(genre))
+    const pool = ratedCompleted.filter((candidate) => candidate.genres?.includes(genre))
     const result = rankInPool(entry, pool)
     return result ? [{ genre, ...result }] : []
   })
@@ -54,7 +62,7 @@ export function calculateCompletionStatistics(
   const ratingPercentile = hasRankedRating(entry) && ratedCompleted.length > 0
     ? Math.round(
         ratedCompleted.filter((candidate) =>
-          (candidate.personalRating ?? 0) < (entry.personalRating ?? 0)
+          Number(candidate.personalRating ?? 0) < Number(entry.personalRating ?? 0)
         ).length / ratedCompleted.length * 100
       )
     : null
@@ -69,7 +77,7 @@ export function calculateCompletionStatistics(
   const achievements = new Set<string>()
   if (overallRank?.rank === 1) achievements.add('New #1 Overall')
   if (typeRank?.rank === 1) {
-    achievements.add(entry.type === 'movie' ? 'Highest Rated Movie' : 'Highest Rated Series')
+    achievements.add(entryType === 'movie' ? 'Highest Rated Movie' : 'Highest Rated Series')
   }
   if (countryRank?.rank === 1 && entry.country) {
     achievements.add(`Highest Rated ${entry.country} Title`)
@@ -80,7 +88,7 @@ export function calculateCompletionStatistics(
   }
 
   const otherCompleted = completed.filter((candidate) => !isSameEntry(candidate, entry))
-  if (entry.type === 'series' && (entry.totalEpisodes ?? 0) > 0) {
+  if (entryType === 'series' && (entry.totalEpisodes ?? 0) > 0) {
     const longestPreviousSeries = Math.max(
       0,
       ...otherCompleted
@@ -113,7 +121,7 @@ export function calculateCompletionStatistics(
     entry,
     overallRank,
     typeRank,
-    type: entry.type,
+    type: entryType,
     countryRank,
     genreRanks,
     ratingPercentile,
