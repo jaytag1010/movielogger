@@ -77,6 +77,8 @@ export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
   const maxCount = hasData ? Math.max(...data.map((d) => d.count)) : 0
   const isScrollable = data.length > 15
   const chartWidth = isScrollable ? Math.max(620, data.length * 42) : '100%'
+  const yDomainMax = Math.max(1, maxCount)
+  const chartMargin = { top: 5, right: 8, left: 0, bottom: 5 }
 
   useEffect(() => {
     const element = scrollRef.current
@@ -95,20 +97,43 @@ export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
       </div>
 
       {hasData ? (
-        <div className="relative">
+        <div className="relative flex">
+          <div className="h-[180px] w-8 flex-shrink-0">
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={data} margin={chartMargin}>
+                <XAxis
+                  dataKey="year"
+                  tick={false}
+                  tickLine={false}
+                  axisLine={false}
+                  height={30}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  domain={[0, yDomainMax]}
+                  tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={24}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
           {isScrollable && (
             <>
-              <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-[#0D0D1A] to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 left-8 z-10 w-8 bg-gradient-to-r from-[#0D0D1A] to-transparent" />
               <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[#0D0D1A] to-transparent" />
             </>
           )}
           <div
             ref={scrollRef}
-            className={isScrollable ? 'mx-auto max-w-[630px] overflow-x-auto overscroll-x-contain pb-1' : ''}
+            className={isScrollable
+              ? 'min-w-0 flex-1 max-w-[630px] overflow-x-auto overscroll-x-contain pb-1'
+              : 'min-w-0 flex-1'}
           >
             <div style={{ width: chartWidth, height: 180 }}>
               <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={data} barSize={18}>
+                <BarChart data={data} barSize={18} margin={chartMargin}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                   <XAxis
                     dataKey="year"
@@ -118,11 +143,13 @@ export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
                     interval={0}
                   />
                   <YAxis
+                    hide
                     allowDecimals={false}
+                    domain={[0, yDomainMax]}
                     tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
                     tickLine={false}
                     axisLine={false}
-                    width={24}
+                    width={0}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar dataKey="count" radius={[4, 4, 0, 0]}>

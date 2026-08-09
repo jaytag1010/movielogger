@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { RefreshCw, TrendingUp, X } from 'lucide-react'
+import { RefreshCw, Sparkles, TrendingUp, X } from 'lucide-react'
 import { Timestamp } from 'firebase/firestore'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { GlassCard } from '@/components/common/GlassCard'
@@ -14,6 +14,7 @@ import { ProgressCard } from '@/components/progress/ProgressCard'
 import { FinishConfirmDialog } from '@/components/progress/FinishConfirmDialog'
 import { CompletionDetailsModal, CompletionDetails } from '@/components/progress/CompletionDetailsModal'
 import { CompletionStatisticsModal } from '@/components/progress/CompletionStatisticsModal'
+import { WatchNextModal } from '@/components/progress/WatchNextModal'
 import { TMDBLinkDialog } from '@/components/progress/TMDBLinkDialog'
 import { EditEntryModal } from '@/components/media/EditEntryModal'
 import { TMDBSearch } from '@/components/media/TMDBSearch'
@@ -341,6 +342,7 @@ export default function ProgressPage() {
   const [searchKey, setSearchKey] = useState(0)
   const [linking, setLinking] = useState(false)
   const [repairOpen, setRepairOpen] = useState(false)
+  const [watchNextOpen, setWatchNextOpen] = useState(false)
 
   // ── Derived lists ─────────────────────────────────────────────────────────
 
@@ -364,6 +366,10 @@ export default function ProgressPage() {
   }, [filteredIdSet, progressEntries])
 
   const releaseStatuses = useProgressReleaseStatuses(progressEntries)
+  const plannedEntries = useMemo(
+    () => progressEntries.filter((entry) => entry.status === 'planned'),
+    [progressEntries]
+  )
 
   function compareBySort(a: MediaEntry, b: MediaEntry, sortBy: ProgressSort): number {
     switch (sortBy) {
@@ -479,6 +485,20 @@ export default function ProgressPage() {
       }
     } catch {
       toast.error('Failed to update episode')
+    }
+  }
+
+  async function handleStartWatching(entry: MediaEntry) {
+    if (!entry.id) return
+    try {
+      await editEntry(entry.id, {
+        status: 'watching',
+        nextEpisodeToWatch: entry.nextEpisodeToWatch ?? 0,
+      })
+      toast.success(`Started watching "${getDisplayTitle(entry)}"`)
+    } catch {
+      toast.error('Failed to start watching')
+      throw new Error('Failed to start watching')
     }
   }
 
@@ -993,16 +1013,29 @@ export default function ProgressPage() {
             </div>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleBulkRefresh}
-            disabled={refreshing || progressEntries.filter((e) => e.tmdbId != null).length === 0}
-            className="shrink-0 text-xs border-white/10 text-white/50 hover:text-white hover:bg-white/10"
-          >
-            <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', refreshing && 'animate-spin')} />
-            {refreshing ? `Refreshing ${refreshProgress.current} / ${refreshProgress.total}` : 'Refresh All'}
-          </Button>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            {filter === 'planned' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setWatchNextOpen(true)}
+                className="text-xs border-purple-500/25 bg-purple-500/10 text-purple-200 hover:bg-purple-500/20 hover:text-white"
+              >
+                <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                What to Watch Next?
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBulkRefresh}
+              disabled={refreshing || progressEntries.filter((e) => e.tmdbId != null).length === 0}
+              className="text-xs border-white/10 text-white/50 hover:text-white hover:bg-white/10"
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', refreshing && 'animate-spin')} />
+              {refreshing ? `Refreshing ${refreshProgress.current} / ${refreshProgress.total}` : 'Refresh All'}
+            </Button>
+          </div>
         </div>
 
         {notificationEntries && (
@@ -1100,6 +1133,14 @@ export default function ProgressPage() {
       <CompletionStatisticsModal
         statistics={completionStatistics}
         onClose={() => setCompletionStatistics(null)}
+      />
+
+      <WatchNextModal
+        open={watchNextOpen}
+        onOpenChange={setWatchNextOpen}
+        plannedEntries={plannedEntries}
+        releaseStatuses={releaseStatuses}
+        onStartWatching={handleStartWatching}
       />
 
       <Dialog
