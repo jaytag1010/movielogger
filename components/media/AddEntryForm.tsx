@@ -33,6 +33,11 @@ import { MediaStatus, MEDIA_STATUS_LABELS } from '@/types/media'
 import { useMedia } from '@/hooks/useMedia'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import { calculateStoredWatchHours } from '@/utils/watchHours'
+import { CompletionStatisticsModal } from '@/components/progress/CompletionStatisticsModal'
+import {
+  calculateCompletionStatistics,
+  CompletionStatistics,
+} from '@/utils/completionStatistics'
 
 const COMMON_GENRES = [
   'Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary',
@@ -87,6 +92,8 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
   const [genreInput, setGenreInput] = useState('')
   const [showDiscard, setShowDiscard] = useState(false)
   const [submitMode, setSubmitMode] = useState<'exit' | 'another'>('exit')
+  const [completionStatistics, setCompletionStatistics] = useState<CompletionStatistics | null>(null)
+  const [afterCompletionCloseAction, setAfterCompletionCloseAction] = useState<'exit' | 'stay'>('stay')
   const { fetchDetails, loading: tmdbLoading } = useTMDBDetails()
   const { fetchSeason, loading: seasonLoading } = useTMDBSeasonDetails()
   const { addEntry, entries } = useMedia()
@@ -219,7 +226,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         : null
       const priorityUpdatedAt = priority != null ? Timestamp.now() : null
 
-      await addEntry({
+      const savedEntry = await addEntry({
         title: data.title,
         nativeTitle: null,
         overview: tmdbData?.overview ?? null,
@@ -253,6 +260,11 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         manualPosterUrl: null,
         legacyId: null,
       })
+      const shouldShowCompletionStats = savedEntry.status === 'completed'
+      if (shouldShowCompletionStats) {
+        setCompletionStatistics(calculateCompletionStatistics(savedEntry, [savedEntry, ...entries]))
+        setAfterCompletionCloseAction(submitMode === 'exit' ? 'exit' : 'stay')
+      }
       toast.success(submitMode === 'another' ? 'Added to Library' : `"${data.title}" added to your list!`)
       reset({
         type: data.type,
@@ -266,7 +278,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
       setGenreInput('')
       if (submitMode === 'another') {
         setTimeout(() => setFocus('title'), 0)
-      } else {
+      } else if (!shouldShowCompletionStats) {
         onSuccess?.()
       }
     } catch (err) {
@@ -710,6 +722,17 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         </Button>
       </div>
     </motion.form>
+    <CompletionStatisticsModal
+      statistics={completionStatistics}
+      onClose={() => {
+        setCompletionStatistics(null)
+        if (afterCompletionCloseAction === 'exit') {
+          onSuccess?.()
+        } else {
+          setTimeout(() => setFocus('title'), 0)
+        }
+      }}
+    />
     </>
   )
 }

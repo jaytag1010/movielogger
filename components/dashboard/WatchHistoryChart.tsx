@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   BarChart,
@@ -39,7 +39,9 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 
 export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
   const router = useRouter()
+  const containerRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [containerWidth, setContainerWidth] = useState(0)
   const data = useMemo(() => {
     // Only count completed entries
     const completed = entries.filter((e) => e.status === 'completed')
@@ -75,16 +77,39 @@ export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
 
   const hasData = data.some((d) => d.count > 0)
   const maxCount = hasData ? Math.max(...data.map((d) => d.count)) : 0
-  const isScrollable = data.length > 15
-  const chartWidth = isScrollable ? Math.max(620, data.length * 42) : '100%'
+  const yAxisWidth = 40
+  const minYearWidth = 42
+  const availablePlotWidth = Math.max(0, containerWidth - yAxisWidth)
+  const requiredChartWidth = data.length * minYearWidth
+  const isScrollable = hasData && availablePlotWidth > 0 && requiredChartWidth > availablePlotWidth
+  const chartWidth = isScrollable ? requiredChartWidth : '100%'
   const yDomainMax = Math.max(1, maxCount)
   const chartMargin = { top: 5, right: 8, left: 0, bottom: 5 }
+
+  useEffect(() => {
+    const element = containerRef.current
+    if (!element) return
+
+    const updateWidth = () => setContainerWidth(element.getBoundingClientRect().width)
+    updateWidth()
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateWidth)
+      return () => window.removeEventListener('resize', updateWidth)
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      setContainerWidth(entry.contentRect.width)
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const element = scrollRef.current
     if (!element || !isScrollable) return
     element.scrollLeft = element.scrollWidth
-  }, [isScrollable, data.length])
+  }, [isScrollable, data.length, containerWidth])
 
   return (
     <GlassCard padding="md">
@@ -97,8 +122,8 @@ export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
       </div>
 
       {hasData ? (
-        <div className="relative flex">
-          <div className="h-[180px] w-8 flex-shrink-0">
+        <div ref={containerRef} className="relative flex">
+          <div className="h-[180px] flex-shrink-0" style={{ width: yAxisWidth }}>
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data} margin={chartMargin}>
                 <XAxis
@@ -114,21 +139,24 @@ export function WatchHistoryChart({ entries }: WatchHistoryChartProps) {
                   tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
-                  width={24}
+                  width={yAxisWidth - 8}
                 />
               </BarChart>
             </ResponsiveContainer>
           </div>
           {isScrollable && (
             <>
-              <div className="pointer-events-none absolute inset-y-0 left-8 z-10 w-8 bg-gradient-to-r from-[#0D0D1A] to-transparent" />
+              <div
+                className="pointer-events-none absolute inset-y-0 z-10 w-8 bg-gradient-to-r from-[#0D0D1A] to-transparent"
+                style={{ left: yAxisWidth }}
+              />
               <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[#0D0D1A] to-transparent" />
             </>
           )}
           <div
             ref={scrollRef}
             className={isScrollable
-              ? 'min-w-0 flex-1 max-w-[630px] overflow-x-auto overscroll-x-contain pb-1'
+              ? 'min-w-0 flex-1 overflow-x-auto overscroll-x-contain pb-1 [touch-action:pan-x_pan-y]'
               : 'min-w-0 flex-1'}
           >
             <div style={{ width: chartWidth, height: 180 }}>
