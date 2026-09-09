@@ -17,7 +17,7 @@ import { TMDBSearch } from '@/components/media/TMDBSearch'
 import { CountrySelect } from '@/components/media/CountrySelect'
 import { ImportPreviewRow, ReviewCardEdits } from '@/types/import'
 import { NormalizedTMDBResult } from '@/types/tmdb'
-import { MediaStatus, MEDIA_STATUS_LABELS } from '@/types/media'
+import { MediaStatus, MEDIA_STATUS_LABELS, MediaType } from '@/types/media'
 import { fetchMovieMetadata, fetchTVMetadata } from '@/lib/tmdb/api'
 import { parseEpisodeDurationRange } from '@/utils/episodeDuration'
 
@@ -53,9 +53,9 @@ export function ReviewCard({
   // Type defaults by episode-count heuristic when no explicit type is given:
   // imported totalEpisodes > 1 → series, otherwise movie. This ensures titles
   // with imported episode data are recognised as series in Needs Review.
-  const [type, setType] = useState<'movie' | 'series'>(
+  const [type, setType] = useState<MediaType>(
     edits?.type ??
-    (mapped.type as 'movie' | 'series') ??
+    (mapped.type as MediaType) ??
     ((mapped.totalEpisodes != null && mapped.totalEpisodes > 1) ? 'series' : 'movie')
   )
   const [status, setStatus] = useState<MediaStatus>(
@@ -78,7 +78,7 @@ export function ReviewCard({
   )
 
   // For series: watch hours are always auto-calculated from episodes × duration
-  const isSeries = type === 'series'
+  const isSeries = type === 'series' || type === 'shorts'
   const calculatedSeriesHours: string = (() => {
     const eps = totalEpisodes ? parseFloat(totalEpisodes) : null
     const dur = episodeDuration ? parseFloat(episodeDuration) : (mapped.episodeAverageDuration ?? null)
@@ -188,7 +188,7 @@ export function ReviewCard({
     <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap text-[11px] text-white/40">
       {yearMade && <span>{yearMade}</span>}
       {country && <span>{country}</span>}
-      {type && <span className={type === 'series' ? 'text-blue-400/60' : 'text-purple-400/60'}>{type === 'series' ? 'Series' : 'Movie'}</span>}
+      {type && <span className={type === 'series' ? 'text-blue-400/60' : type === 'shorts' ? 'text-cyan-300/70' : 'text-purple-400/60'}>{type === 'series' ? 'Series' : type === 'shorts' ? 'Shorts' : 'Movie'}</span>}
       {totalEpisodes && <span>{totalEpisodes} eps</span>}
       {episodeDuration && <span>{episodeDuration} min/ep</span>}
       {watchHours && <span>{watchHours} hrs</span>}
@@ -367,13 +367,14 @@ export function ReviewCard({
 
             <div>
               <label className="text-xs text-white/40 mb-1 block">Type</label>
-              <Select value={type} onValueChange={(v) => setType(v as 'movie' | 'series')}>
+              <Select value={type} onValueChange={(v) => setType(v as MediaType)}>
                 <SelectTrigger className="h-8 text-sm bg-white/5 border-white/10">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="movie">Movie</SelectItem>
                   <SelectItem value="series">Series</SelectItem>
+                  <SelectItem value="shorts">Shorts</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -414,7 +415,7 @@ export function ReviewCard({
               />
             </div>
 
-            {type === 'series' && (
+            {(type === 'series' || type === 'shorts') && (
               <>
                 <div>
                   <label className="text-xs text-white/40 mb-1 block">Total Episodes</label>

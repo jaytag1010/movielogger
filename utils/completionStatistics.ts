@@ -77,7 +77,13 @@ export function calculateCompletionStatistics(
   const achievements = new Set<string>()
   if (overallRank?.rank === 1) achievements.add('New #1 Overall')
   if (typeRank?.rank === 1) {
-    achievements.add(entryType === 'movie' ? 'Highest Rated Movie' : 'Highest Rated Series')
+    achievements.add(
+      entryType === 'movie'
+        ? 'Highest Rated Movie'
+        : entryType === 'shorts'
+          ? 'Highest Rated Shorts'
+          : 'Highest Rated Series'
+    )
   }
   if (countryRank?.rank === 1 && entry.country) {
     achievements.add(`Highest Rated ${entry.country} Title`)

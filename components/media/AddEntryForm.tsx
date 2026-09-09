@@ -6,7 +6,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Loader2, X, Plus, Film, Tv, Star, ChevronUp, ChevronDown } from 'lucide-react'
+import { Loader2, X, Plus, Film, Tv, Star, ChevronUp, ChevronDown, Clapperboard } from 'lucide-react'
 import { Timestamp } from 'firebase/firestore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,6 +33,7 @@ import { MediaStatus, MEDIA_STATUS_LABELS } from '@/types/media'
 import { useMedia } from '@/hooks/useMedia'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import { calculateStoredWatchHours } from '@/utils/watchHours'
+import { isEpisodicMediaType } from '@/utils/formatters'
 import { CompletionStatisticsModal } from '@/components/progress/CompletionStatisticsModal'
 import {
   calculateCompletionStatistics,
@@ -52,7 +53,7 @@ const optionalPositiveNumber = z.preprocess(
 
 const schema = z.object({
   title: z.string().min(1, 'Title is required'),
-  type: z.enum(['movie', 'series']),
+  type: z.enum(['movie', 'series', 'shorts']),
   status: z.enum(['completed', 'watching', 'planned', 'dropped', 'on_hold']),
   // Blank or empty → null (treated as Season 1 on save). Non-blank must be ≥ 1.
   seasonNumber: z.preprocess(
@@ -121,6 +122,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
   const watchRewatchCount = watch('rewatchCount')
   const watchTotalEpisodes = watch('totalEpisodes')
   const watchEpDuration = watch('episodeDurationMinutes')
+  const isEpisodicType = watchType === 'series' || watchType === 'shorts'
   const calculatedWatchHours = calculateStoredWatchHours({
     totalEpisodes: watchType === 'movie' ? (watchTotalEpisodes ?? 1) : watchTotalEpisodes,
     episodeDurationMinutes: watchEpDuration,
@@ -162,6 +164,9 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
     if (data.totalEpisodes) setValue('totalEpisodes', data.totalEpisodes)
     if (data.ageRating) setValue('ageRating', data.ageRating)
     if (data.genres.length > 0) setGenres(data.genres)
+    if (data.type === 'series' && data.runtime != null && data.runtime < 15) {
+      toast.info('This looks like a Shorts candidate. You can choose Shorts as the type if that fits.')
+    }
 
     // If a season number is already filled in, auto-fetch season metadata now
     if (data.type === 'series' && watchSeasonNumber) {
@@ -234,9 +239,11 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         type: data.type,
         status: data.status,
         // Default season to 1 for series when left blank (Improvement 05).
-        seasonNumber: data.type === 'series' ? (data.seasonNumber ?? 1) : null,
+        seasonNumber: isEpisodicMediaType(data.type) ? (data.seasonNumber ?? 1) : null,
         nextEpisodeToWatch: episodesWatched,
         tmdbId: tmdbData?.tmdbId ?? null,
+        tmdbRating: tmdbData?.tmdbRating ?? null,
+        tmdbVoteCount: tmdbData?.tmdbVoteCount ?? null,
         yearMade: data.yearMade ?? null,
         totalEpisodes: resolvedTotalEpisodes,
         episodeDurationMinutes: data.episodeDurationMinutes ?? null,
@@ -393,6 +400,9 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
                   <SelectItem value="series">
                     <span className="flex items-center gap-2"><Tv className="w-3.5 h-3.5" />Series</span>
                   </SelectItem>
+                  <SelectItem value="shorts">
+                    <span className="flex items-center gap-2"><Clapperboard className="w-3.5 h-3.5" />Shorts</span>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -496,7 +506,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
       </div>}
 
       {/* Series-specific fields */}
-      {watchType === 'series' && (
+      {isEpisodicType && (
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -578,7 +588,7 @@ export function AddEntryForm({ onSuccess, onCancel, tmdbPreload }: AddEntryFormP
         </div>
       )}
 
-      {showCompletionFields && watchType !== 'series' && (
+      {showCompletionFields && !isEpisodicType && (
         <div className="space-y-1.5">
           <Label>Rewatch Counter</Label>
           <div className="flex items-center gap-1.5">

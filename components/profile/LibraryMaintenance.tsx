@@ -208,8 +208,10 @@ export function LibraryMaintenance({ entries, editEntry }: LibraryMaintenancePro
 
       const updates: MediaEntryUpdate = {
         tmdbId: fullData.tmdbId,
-        type: fullData.type,
+        type: entry.type === 'shorts' && fullData.type === 'series' ? 'shorts' : fullData.type,
         overview: fullData.overview ?? null,
+        tmdbRating: fullData.tmdbRating ?? null,
+        tmdbVoteCount: fullData.tmdbVoteCount ?? null,
         posterUrl: fullData.posterUrl,
         backdropUrl: fullData.backdropUrl,
         country: fullData.country,

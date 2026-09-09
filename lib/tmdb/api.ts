@@ -176,6 +176,8 @@ export async function fetchMovieMetadata(tmdbId: number): Promise<NormalizedTMDB
     totalEpisodes: null,
     ageRating,
     overview: movie.overview,
+    tmdbRating: movie.vote_average ?? null,
+    tmdbVoteCount: movie.vote_count ?? null,
   }
 }
 
@@ -205,6 +207,8 @@ export async function fetchTVMetadata(tmdbId: number): Promise<NormalizedTMDBRes
     totalEpisodes: series.number_of_episodes || null,
     ageRating,
     overview: series.overview,
+    tmdbRating: series.vote_average ?? null,
+    tmdbVoteCount: series.vote_count ?? null,
   }
 }
 
@@ -352,6 +356,8 @@ export async function normalizeMovieResult(movie: TMDBMovie): Promise<Normalized
     totalEpisodes: null,
     ageRating: null,
     overview: movie.overview,
+    tmdbRating: movie.vote_average ?? null,
+    tmdbVoteCount: movie.vote_count ?? null,
   }
 }
 
@@ -370,5 +376,7 @@ export async function normalizeSeriesResult(series: TMDBSeries): Promise<Normali
     totalEpisodes: null,
     ageRating: null,
     overview: series.overview,
+    tmdbRating: series.vote_average ?? null,
+    tmdbVoteCount: series.vote_count ?? null,
   }
 }

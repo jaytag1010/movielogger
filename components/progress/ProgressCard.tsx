@@ -2,7 +2,7 @@
 
 import { Minus, Plus, CheckCircle, Film, MoreVertical, Pencil, Search, RefreshCw } from 'lucide-react'
 import { MediaEntry, MEDIA_STATUS_COLORS } from '@/types/media'
-import { getDisplayTitle, getEffectiveMediaType, getEpisodesWatched, getDisplayPosterUrl } from '@/utils/formatters'
+import { getDisplayTitle, getEffectiveMediaType, getEpisodesWatched, getDisplayPosterUrl, isEpisodicMediaType } from '@/utils/formatters'
 import { cn } from '@/utils/cn'
 import { getPriorityDisplay } from '@/utils/priority'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
@@ -21,6 +21,7 @@ interface ProgressCardProps {
   onIncrement: (entry: MediaEntry) => void
   onFinish: (entry: MediaEntry) => void
   onEdit: (entry: MediaEntry) => void
+  onView?: (entry: MediaEntry) => void
   onSearchTMDB: (entry: MediaEntry) => void
   onRefreshMetadata: (entry: MediaEntry) => void
   /** Shows a spinner on the Refresh Metadata item while refreshing this entry. */
@@ -34,6 +35,7 @@ export function ProgressCard({
   onIncrement,
   onFinish,
   onEdit,
+  onView,
   onSearchTMDB,
   onRefreshMetadata,
   refreshing = false,
@@ -60,7 +62,7 @@ export function ProgressCard({
   //   Series: unlimited (may exceed recorded totalEpisodes; corrected on finish).
   //   Movies: capped at the effective total of 1 (0/1 → 1/1, then mark Finished).
   const canIncrement =
-    effectiveType === 'series' ? true : currentProgress < (effectiveTotal ?? 1)
+    isEpisodicMediaType(effectiveType) ? true : currentProgress < (effectiveTotal ?? 1)
 
   const statusColor = MEDIA_STATUS_COLORS[entry.status]
   const showPriority = entry.status === 'planned' || entry.status === 'on_hold'
@@ -75,7 +77,19 @@ export function ProgressCard({
           : 'text-white/35'
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 bg-white/[0.03] border border-white/8 rounded-xl hover:bg-white/[0.05] transition-colors">
+    <div
+      role={onView ? 'button' : undefined}
+      tabIndex={onView ? 0 : undefined}
+      onClick={() => onView?.(entry)}
+      onKeyDown={(event) => {
+        if (!onView) return
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onView(entry)
+        }
+      }}
+      className="flex items-center gap-3 px-3 py-2.5 bg-white/[0.03] border border-white/8 rounded-xl hover:bg-white/[0.05] transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+    >
 
       {/* Poster */}
       <div className="relative w-10 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-white/5">
@@ -125,7 +139,7 @@ export function ProgressCard({
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => onDecrement(entry)}
+              onClick={(event) => { event.stopPropagation(); onDecrement(entry) }}
               disabled={!canDecrement}
               className={cn(
                 'w-6 h-6 rounded-lg border flex items-center justify-center transition-all',
@@ -145,7 +159,7 @@ export function ProgressCard({
 
             <button
               type="button"
-              onClick={() => onIncrement(entry)}
+              onClick={(event) => { event.stopPropagation(); onIncrement(entry) }}
               disabled={!canIncrement}
               className={cn(
                 'w-6 h-6 rounded-lg border flex items-center justify-center transition-all',
@@ -162,7 +176,7 @@ export function ProgressCard({
           {/* Finished button */}
           <button
             type="button"
-            onClick={() => onFinish(entry)}
+            onClick={(event) => { event.stopPropagation(); onFinish(entry) }}
             className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full px-2.5 py-0.5 transition-all ml-auto"
           >
             <CheckCircle className="w-3 h-3" />
@@ -182,24 +196,25 @@ export function ProgressCard({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
+            onClick={(event) => event.stopPropagation()}
             className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-white/30 hover:text-white/60 hover:bg-white/10 transition-all"
             aria-label="Card options"
           >
             <MoreVertical className="w-4 h-4" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44">
-          <DropdownMenuItem onClick={() => onEdit(entry)}>
+        <DropdownMenuContent align="end" className="w-44" onClick={(event) => event.stopPropagation()}>
+          <DropdownMenuItem onClick={(event) => { event.stopPropagation(); onEdit(entry) }}>
             <Pencil className="w-3.5 h-3.5 mr-2 text-white/50" />
             Edit
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onSearchTMDB(entry)}>
+          <DropdownMenuItem onClick={(event) => { event.stopPropagation(); onSearchTMDB(entry) }}>
             <Search className="w-3.5 h-3.5 mr-2 text-blue-400/70" />
             Search TMDB
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={() => onRefreshMetadata(entry)}
+            onClick={(event) => { event.stopPropagation(); onRefreshMetadata(entry) }}
             disabled={!entry.tmdbId || refreshing}
           >
             <RefreshCw className={cn('w-3.5 h-3.5 mr-2 text-white/50', refreshing && 'animate-spin')} />

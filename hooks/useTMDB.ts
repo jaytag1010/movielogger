@@ -92,7 +92,7 @@ export function useTMDBSearch(mediaType: MediaType | 'all' = 'all') {
               const normalized = await Promise.all(movies.map(normalizeMovieResult))
               items.push(...normalized)
             }
-            if (mediaType === 'series') {
+            if (mediaType === 'series' || mediaType === 'shorts') {
               const series = await searchTVSeries(titleQuery, year ?? undefined)
               const normalized = await Promise.all(series.map(normalizeSeriesResult))
               items.push(...normalized)

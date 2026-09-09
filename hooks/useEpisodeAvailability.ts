@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { MediaEntry } from '@/types/media'
 import { fetchTVAvailabilityInfo } from '@/lib/tmdb/api'
-import { getEpisodesWatched } from '@/utils/formatters'
+import { getEffectiveMediaType, getEpisodesWatched, isEpisodicMediaType } from '@/utils/formatters'
 
 export interface NewEpisodeInfo {
   entry: MediaEntry
@@ -44,14 +44,14 @@ export function useEpisodeAvailability(entries: MediaEntry[]): EpisodeAvailabili
 
     // Candidates for "new episodes available" — watching series with a TMDB ID
     const watchingCandidates = entries
-      .filter((e) => e.type === 'series' && e.tmdbId != null && e.status === 'watching')
+      .filter((e) => isEpisodicMediaType(getEffectiveMediaType(e)) && e.tmdbId != null && e.status === 'watching')
       .slice(0, MAX_CANDIDATES)
 
     // Candidates for "ready to binge" — planned/on_hold series with a TMDB ID
     const bingeCandidates = entries
       .filter(
         (e) =>
-          e.type === 'series' &&
+          isEpisodicMediaType(getEffectiveMediaType(e)) &&
           e.tmdbId != null &&
           (e.status === 'planned' || e.status === 'on_hold')
       )

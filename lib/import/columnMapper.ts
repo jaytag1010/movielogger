@@ -144,6 +144,14 @@ function parseType(value: string | number | null | undefined): MappedRow['type']
     'mini series': 'series',
     miniseries: 'series',
     'tv mini series': 'series',
+    shorts: 'shorts',
+    short: 'shorts',
+    microdrama: 'shorts',
+    microdramas: 'shorts',
+    'vertical drama': 'shorts',
+    'vertical dramas': 'shorts',
+    'vertical short': 'shorts',
+    'vertical shorts': 'shorts',
   }
 
   return typeMap[str] || undefined

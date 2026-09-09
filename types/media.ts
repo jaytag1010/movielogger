@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase/firestore'
 
-export type MediaType = 'movie' | 'series'
+export type MediaType = 'movie' | 'series' | 'shorts'
 
 export type MediaStatus =
   | 'completed'
@@ -15,12 +15,12 @@ export interface MediaEntry {
   /** Preserved from the source Excel/CSV ID column during import. Never used as primary key. */
   legacyId?: string | null
   /**
-   * Season number for TV series tracked per-season (e.g. 1, 2, 3).
+   * Season number for episodic titles tracked per-season (e.g. 1, 2, 3).
    * null means the entry covers the entire series or the season is unknown.
    */
   seasonNumber: number | null
   /**
-   * For series in progress: the next episode the user should watch.
+   * For episodic titles in progress: the next episode the user should watch.
    * nextEpisodeToWatch = N means episodes 1…N-1 have been watched.
    * null = position unknown (imported "Watching" with no episode data).
    * Clamped to [1, totalEpisodes] when totalEpisodes is known.
@@ -28,6 +28,10 @@ export interface MediaEntry {
    */
   nextEpisodeToWatch: number | null
   tmdbId: number | null
+  /** TMDB community rating (vote_average), when available. Kept separate from personalRating. */
+  tmdbRating?: number | null
+  /** TMDB vote count, when available. Used only as optional confidence metadata. */
+  tmdbVoteCount?: number | null
   title: string
   /**
    * Original non-Latin title from the import source (e.g. Japanese, Korean).

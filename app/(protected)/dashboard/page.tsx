@@ -100,10 +100,11 @@ export default function DashboardPage() {
           <motion.div
             variants={itemVariants}
             id="top-rankings"
-            className="grid grid-cols-1 sm:grid-cols-2 gap-4 scroll-mt-20"
+            className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 scroll-mt-20"
           >
             <TopRankingList entries={entries} type="movie" />
             <TopRankingList entries={entries} type="series" />
+            <TopRankingList entries={entries} type="shorts" />
           </motion.div>
 
           {/* Country Analytics — placed above Genre Distribution */}

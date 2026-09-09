@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Calendar, Clock, Eye, Film, MoreVertical, Star, Tv } from 'lucide-react'
+import { Calendar, Clock, Eye, Film, MoreVertical, Star, Tv, Clapperboard } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { MediaEntry } from '@/types/media'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +19,7 @@ import {
   formatDate,
   formatGenres,
   formatWatchHours,
+  getMediaTypeLabel,
   getDisplayPosterUrl,
   getDisplayTitle,
   getEffectiveMediaType,
@@ -38,7 +39,7 @@ export function InfoGridCard({ entry, index = 0, onView, onEdit, onDelete }: Inf
   const [imgError, setImgError] = useState(false)
   const poster = getDisplayPosterUrl(entry)
   const type = getEffectiveMediaType(entry)
-  const Icon = type === 'series' ? Tv : Film
+  const Icon = type === 'movie' ? Film : type === 'shorts' ? Clapperboard : Tv
   const watched = getEpisodesWatched(entry)
   const total = entry.totalEpisodes ?? (type === 'movie' ? 1 : null)
   const remaining = total != null ? Math.max(0, total - watched) : null
@@ -100,7 +101,7 @@ export function InfoGridCard({ entry, index = 0, onView, onEdit, onDelete }: Inf
                 {getDisplayTitle(entry)}
               </h3>
               <p className="mt-0.5 truncate text-[11px] text-white/40">
-                {[entry.yearMade, entry.country].filter(Boolean).join(' / ') || (type === 'series' ? 'Series' : 'Movie')}
+                {[entry.yearMade, entry.country].filter(Boolean).join(' / ') || getMediaTypeLabel(type)}
               </p>
             </div>
             <DropdownMenu>
@@ -170,7 +171,7 @@ export function InfoGridCard({ entry, index = 0, onView, onEdit, onDelete }: Inf
       <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between">
         <span className="font-mono text-[9px] text-white/20">{entry.internalId}</span>
         <Badge variant="outline" className="px-1.5 py-0 text-[9px] text-white/35">
-          {type === 'series' ? 'Series' : 'Movie'}
+          {getMediaTypeLabel(type)}
         </Badge>
       </div>
     </motion.div>

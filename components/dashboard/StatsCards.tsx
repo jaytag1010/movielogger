@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
-import { Film, Tv, Clock, Star, TrendingUp } from 'lucide-react'
+import { Film, Tv, Clock, Star, TrendingUp, Clapperboard } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { calculateTotalWatchHours } from '@/utils/watchTime'
 import { formatWatchTime, getEffectiveMediaType } from '@/utils/formatters'
@@ -21,6 +21,7 @@ export function StatsCards({ entries }: StatsCardsProps) {
   const completed = entries.filter((e) => e.status === 'completed')
   const movies = entries.filter((e) => getEffectiveMediaType(e) === 'movie')
   const series = entries.filter((e) => getEffectiveMediaType(e) === 'series')
+  const shorts = entries.filter((e) => getEffectiveMediaType(e) === 'shorts')
   const totalHours = calculateTotalWatchHours(completed)
 
   const ratedEntries = entries.filter((e) => e.personalRating !== null)
@@ -55,6 +56,14 @@ export function StatsCards({ entries }: StatsCardsProps) {
       onClick: () => router.push('/my-list?tab=series&sort=title_asc'),
     },
     {
+      label: 'Shorts',
+      value: shorts.length.toString(),
+      icon: Clapperboard,
+      gradient: 'from-cyan-600 to-blue-600',
+      glow: 'shadow-glow',
+      onClick: () => router.push('/my-list?tab=shorts&sort=title_asc'),
+    },
+    {
       label: 'Watch Time',
       value: formatWatchTime(totalHours),
       icon: Clock,
@@ -73,7 +82,7 @@ export function StatsCards({ entries }: StatsCardsProps) {
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       {stats.map((stat, i) => (
         <motion.div
           key={stat.label}

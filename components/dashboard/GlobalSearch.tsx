@@ -3,9 +3,9 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
-import { Search, Film, Tv, X, Loader2, Plus, Check } from 'lucide-react'
+import { Search, Film, Tv, X, Loader2, Plus, Check, Clapperboard } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
-import { getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
+import { getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl, getMediaTypeLabel } from '@/utils/formatters'
 import { useTMDBSearch } from '@/hooks/useTMDB'
 import { NormalizedTMDBResult } from '@/types/tmdb'
 
@@ -122,7 +122,7 @@ export function GlobalSearch({ entries }: GlobalSearchProps) {
               </div>
               {libraryResults.map((entry) => {
                 const type = getEffectiveMediaType(entry)
-                const Icon = type === 'series' ? Tv : Film
+                const Icon = type === 'movie' ? Film : type === 'shorts' ? Clapperboard : Tv
                 return (
                   <button
                     key={entry.id}
@@ -149,7 +149,7 @@ export function GlobalSearch({ entries }: GlobalSearchProps) {
                         {getDisplayTitle(entry)}
                       </p>
                       <p className="text-xs text-white/40">
-                        {type === 'series' ? 'Series' : 'Movie'}
+                        {getMediaTypeLabel(type)}
                         {entry.yearMade ? ` · ${entry.yearMade}` : ''}
                         {entry.country  ? ` · ${entry.country}`  : ''}
                       </p>

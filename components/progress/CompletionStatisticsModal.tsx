@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { CompletionRank, CompletionStatistics } from '@/utils/completionStatistics'
-import { formatWatchTime, getDisplayTitle } from '@/utils/formatters'
+import { formatWatchTime, getDisplayTitle, getMediaTypeLabel } from '@/utils/formatters'
 
 interface CompletionStatisticsModalProps {
   statistics: CompletionStatistics | null
@@ -48,7 +48,7 @@ export function CompletionStatisticsModal({
     rewatchCount,
     achievements,
   } = statistics
-  const typeLabel = type === 'movie' ? 'Movie' : 'Series'
+  const typeLabel = getMediaTypeLabel(type)
   const hasRating = entry.personalRating != null && entry.personalRating > 0
 
   return (

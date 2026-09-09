@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { MediaEntry } from '@/types/media'
 import { DuplicateGroup } from '@/lib/dataQuality'
-import { getDisplayTitle, getEffectiveMediaType } from '@/utils/formatters'
+import { getDisplayTitle, getEffectiveMediaType, getMediaTypeLabel } from '@/utils/formatters'
 import { useMedia } from '@/hooks/useMedia'
 import { useDataQuality } from '@/hooks/useDataQuality'
 import { useEpisodeAvailability, NewEpisodeInfo } from '@/hooks/useEpisodeAvailability'
@@ -431,7 +431,7 @@ function DuplicateRow({
           >
             <span className="text-xs text-white/80 truncate">{getDisplayTitle(e)}</span>
             <span className="text-[10px] text-white/30 flex-shrink-0">
-              {getEffectiveMediaType(e) === 'series' ? 'Series' : 'Movie'}
+              {getMediaTypeLabel(getEffectiveMediaType(e))}
             </span>
           </button>
         ))}

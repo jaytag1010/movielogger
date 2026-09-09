@@ -1,10 +1,11 @@
 'use client'
 
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
-import { Film, Tv, ArrowLeft } from 'lucide-react'
+import { Film, Tv, ArrowLeft, Clapperboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ImportPreviewRow } from '@/types/import'
+import { getMediaTypeLabel } from '@/utils/formatters'
 
 export interface MatchedTitlesViewProps {
   rows: ImportPreviewRow[]
@@ -31,7 +32,7 @@ export function MatchedTitlesView({ rows, onBack, onAddAll, loading, progress }:
           const result = row.tmdbMatch.result
           const title = result?.title ?? row.mapped.title ?? '—'
           const year = result?.year
-          const type = result?.type ?? row.mapped.type
+          const type = (row.mapped.type === 'shorts' ? 'shorts' : result?.type ?? row.mapped.type) as 'movie' | 'series' | 'shorts' | undefined
           const posterUrl = result?.posterUrl ?? null
 
           return (
@@ -51,6 +52,8 @@ export function MatchedTitlesView({ rows, onBack, onAddAll, loading, progress }:
                   />
                 ) : type === 'series' ? (
                   <Tv className="w-4 h-4 text-white/30" />
+                ) : type === 'shorts' ? (
+                  <Clapperboard className="w-4 h-4 text-white/30" />
                 ) : (
                   <Film className="w-4 h-4 text-white/30" />
                 )}
@@ -68,10 +71,12 @@ export function MatchedTitlesView({ rows, onBack, onAddAll, loading, progress }:
                 className={
                   type === 'series'
                     ? 'text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0 flex-shrink-0'
+                    : type === 'shorts'
+                      ? 'text-cyan-300 border-cyan-500/30 text-[10px] px-1.5 py-0 flex-shrink-0'
                     : 'text-purple-400 border-purple-500/30 text-[10px] px-1.5 py-0 flex-shrink-0'
                 }
               >
-                {type === 'series' ? 'Series' : 'Movie'}
+                {type ? getMediaTypeLabel(type) : 'Movie'}
               </Badge>
             </div>
           )

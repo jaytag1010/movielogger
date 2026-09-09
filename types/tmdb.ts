@@ -7,6 +7,7 @@ export interface TMDBMovie {
   backdrop_path: string | null
   release_date: string
   vote_average: number
+  vote_count?: number
   genre_ids: number[]
   genres?: TMDBGenre[]
   runtime?: number
@@ -24,6 +25,7 @@ export interface TMDBSeries {
   backdrop_path: string | null
   first_air_date: string
   vote_average: number
+  vote_count?: number
   genre_ids: number[]
   genres?: TMDBGenre[]
   number_of_episodes?: number
@@ -124,4 +126,6 @@ export interface NormalizedTMDBResult {
   totalEpisodes: number | null
   ageRating: string | null
   overview: string
+  tmdbRating: number | null
+  tmdbVoteCount: number | null
 }

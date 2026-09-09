@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Clock, Film, Play, Shuffle, Sparkles, Tv } from 'lucide-react'
+import { Clock, Film, Play, Shuffle, Sparkles, Tv, Clapperboard, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -24,6 +24,8 @@ import {
   getDisplayPosterUrl,
   getDisplayTitle,
   getEffectiveMediaType,
+  getMediaTypeLabel,
+  isEpisodicMediaType,
 } from '@/utils/formatters'
 import { compareDateAdded, compareDateAddedDesc } from '@/utils/internalIdSort'
 import { getPriorityDisplay, normalizePriority } from '@/utils/priority'
@@ -35,6 +37,7 @@ type RecommendationMode =
   | 'quick'
   | 'short'
   | 'ready'
+  | 'highlyRated'
   | 'recent'
   | 'waiting'
   | 'surprise'
@@ -60,6 +63,7 @@ const MODE_OPTIONS: { value: RecommendationMode; label: string }[] = [
   { value: 'quick', label: 'Quick Watch' },
   { value: 'short', label: 'Short Series / Movie' },
   { value: 'ready', label: 'Ready to Binge' },
+  { value: 'highlyRated', label: 'Highly Rated' },
   { value: 'recent', label: 'Recently Added' },
   { value: 'waiting', label: 'Longest Waiting' },
   { value: 'surprise', label: 'Surprise Me' },
@@ -76,6 +80,11 @@ const TIME_OPTIONS: { value: TimeFilter; label: string }[] = [
 function watchHours(entry: MediaEntry): number | null {
   const hours = calculateEntryWatchHours(entry)
   return hours > 0 ? hours : null
+}
+
+function tmdbRating(entry: MediaEntry): number | null {
+  const rating = Number(entry.tmdbRating ?? NaN)
+  return Number.isFinite(rating) && rating > 0 ? rating : null
 }
 
 function fitsTimeFilter(entry: MediaEntry, filter: TimeFilter): boolean {
@@ -121,7 +130,7 @@ function avoidShown(entries: MediaEntry[], shownIds: Set<string>): MediaEntry[] 
 
 function shortestValue(entry: MediaEntry): number | null {
   const type = getEffectiveMediaType(entry)
-  if (type === 'series') return entry.totalEpisodes != null && entry.totalEpisodes > 0 ? entry.totalEpisodes : null
+  if (isEpisodicMediaType(type)) return entry.totalEpisodes != null && entry.totalEpisodes > 0 ? entry.totalEpisodes : null
   return watchHours(entry)
 }
 
@@ -148,6 +157,18 @@ function buildRecommendation(
     return entry ? { entry, why: 'All episodes or the movie release are already available.' } : null
   }
 
+  if (mode === 'highlyRated') {
+    const rated = pool.filter((entry) => tmdbRating(entry) != null)
+    if (rated.length === 0) return null
+    rated.sort((a, b) => {
+      const ratingDiff = (tmdbRating(b) ?? 0) - (tmdbRating(a) ?? 0)
+      if (ratingDiff !== 0) return ratingDiff
+      return normalizePriority(b.priority) - normalizePriority(a.priority)
+    })
+    const entry = randomFrom(rated.slice(0, Math.min(4, rated.length)))
+    return entry ? { entry, why: `Highly rated on TMDB at ${tmdbRating(entry)!.toFixed(1)}/10.` } : null
+  }
+
   if (mode === 'priority') {
     const maxPriority = Math.max(...pool.map((entry) => normalizePriority(entry.priority)))
     const top = pool.filter((entry) => normalizePriority(entry.priority) === maxPriority)
@@ -169,8 +190,8 @@ function buildRecommendation(
     const entry = randomFrom(known.slice(0, Math.min(4, known.length)))
     if (!entry) return null
     const type = getEffectiveMediaType(entry)
-    const why = type === 'series'
-      ? `One of the shortest series options at ${entry.totalEpisodes} episode${entry.totalEpisodes === 1 ? '' : 's'}.`
+    const why = isEpisodicMediaType(type)
+      ? `One of the shortest ${getMediaTypeLabel(type).toLowerCase()} options at ${entry.totalEpisodes} episode${entry.totalEpisodes === 1 ? '' : 's'}.`
       : `One of the shortest movie options at ${formatWatchHours(watchHours(entry))}.`
     return { entry, why }
   }
@@ -205,6 +226,8 @@ function buildRecommendation(
     } else if (timeFilter !== 'any') {
       score -= 3
     }
+    const rating = tmdbRating(entry)
+    if (rating != null) score += Math.max(0, rating - 6) * 2
     score += Math.random() * 4
     return { entry, score }
   }).sort((a, b) => b.score - a.score)
@@ -215,6 +238,8 @@ function buildRecommendation(
 
   const reasons = [`Priority ${normalizePriority(picked.entry.priority)}`]
   if (isReady(picked.entry, statuses)) reasons.push('ready to binge')
+  const pickedTmdbRating = tmdbRating(picked.entry)
+  if (pickedTmdbRating != null && pickedTmdbRating >= 8) reasons.push(`TMDB ${pickedTmdbRating.toFixed(1)}/10`)
   if (monthsWaiting(picked.entry) >= 1) reasons.push(`waiting ${waitingText(picked.entry).replace(' in Planned', '')}`)
   const hours = watchHours(picked.entry)
   if (hours != null && timeFilter !== 'any') reasons.push(`fits ${TIME_OPTIONS.find((option) => option.value === timeFilter)?.label}`)
@@ -291,8 +316,10 @@ export function WatchNextModal({
   const priority = entry ? getPriorityDisplay(entry.priority) : null
   const releaseStatus = entry?.id ? releaseStatuses[entry.id] : undefined
   const poster = entry ? getDisplayPosterUrl(entry) : null
-  const TypeIcon = entry && getEffectiveMediaType(entry) === 'series' ? Tv : Film
+  const effectiveType = entry ? getEffectiveMediaType(entry) : null
+  const TypeIcon = effectiveType === 'series' ? Tv : effectiveType === 'shorts' ? Clapperboard : Film
   const hours = entry ? watchHours(entry) : null
+  const rating = entry ? tmdbRating(entry) : null
   const why = recommendation?.why ?? ''
 
   useEffect(() => {
@@ -358,6 +385,8 @@ export function WatchNextModal({
               <EmptyState
                 message={mode === 'ready'
                   ? 'No Planned titles are currently ready to binge.'
+                  : mode === 'highlyRated'
+                    ? 'No Planned titles currently have a TMDB rating available.'
                   : eligibleCount === 0
                     ? 'No Planned titles match the selected watch time.'
                     : 'No recommendation is available for the selected mode.'}
@@ -382,7 +411,7 @@ export function WatchNextModal({
                 <div className="min-w-0 flex-1">
                   <h3 className="text-base font-semibold leading-tight text-white">{getDisplayTitle(entry)}</h3>
                   <p className="mt-1 text-xs text-white/45">
-                    {[getEffectiveMediaType(entry) === 'series' ? 'Series' : 'Movie', entry.yearMade, entry.country].filter(Boolean).join(' · ')}
+                    {[effectiveType ? getMediaTypeLabel(effectiveType) : null, entry.yearMade, entry.country].filter(Boolean).join(' · ')}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {priority && (
@@ -393,6 +422,12 @@ export function WatchNextModal({
                     {releaseStatus && (
                       <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/55">
                         {releaseStatus.label}
+                      </span>
+                    )}
+                    {rating != null && (
+                      <span className="inline-flex items-center rounded-full border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-200">
+                        <Star className="mr-1 h-3 w-3" />
+                        TMDB {rating.toFixed(1)}/10
                       </span>
                     )}
                   </div>

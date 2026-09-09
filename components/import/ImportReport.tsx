@@ -73,7 +73,7 @@ function getSuggestedFix(reason: string): string | null {
     return 'Add a title in the Title column for this row.'
   }
   if (r.includes('type') && (r.includes('must be') || r.includes('invalid'))) {
-    return 'Set the Type column to either "movie" or "series".'
+    return 'Set the Type column to "movie", "series", or "shorts".'
   }
   if (r.includes('rating')) {
     return 'Enter a number between 0 and 10 in the Rating column.'

@@ -112,7 +112,7 @@ export interface ImportPreviewRow {
 /** User edits made inside a review card. Merged on top of mapped data before TMDB overrides. */
 export interface ReviewCardEdits {
   title?: string
-  type?: 'movie' | 'series'
+  type?: 'movie' | 'series' | 'shorts'
   status?: import('./media').MediaStatus
   yearMade?: number | null
   country?: string | null

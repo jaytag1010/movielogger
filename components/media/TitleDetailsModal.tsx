@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
-import { Film, GitCompare, Info, Search, Star, Trash2, Tv, X } from 'lucide-react'
+import { Film, GitCompare, Info, Search, Star, Trash2, Tv, X, Clapperboard } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,6 +27,7 @@ import {
   getDisplayTitle,
   getEffectiveMediaType,
   getEpisodesWatched,
+  getMediaTypeLabel,
 } from '@/utils/formatters'
 import { calculateEntryWatchHours } from '@/utils/watchTime'
 import { MEDIA_STATUS_LABELS } from '@/types/media'
@@ -142,8 +143,8 @@ export function TitleDetailsModal({
 
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/50">
                   {entry.yearMade && <span>{entry.yearMade}</span>}
-                  <span>{type === 'series' ? 'TV Series' : 'Movie'}</span>
-                  {entry.seasonNumber != null && type === 'series' && <span>Season {entry.seasonNumber}</span>}
+                  <span>{getMediaTypeLabel(type)}</span>
+                  {entry.seasonNumber != null && type !== 'movie' && <span>Season {entry.seasonNumber}</span>}
                   {entry.genres.slice(0, 2).map((genre) => (
                     <span key={genre}>{genre}</span>
                   ))}
@@ -152,7 +153,7 @@ export function TitleDetailsModal({
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <StatusBadge status={entry.status} />
                   <Badge variant="outline" className="border-white/10 bg-white/5 text-white/55">
-                    {type === 'series' ? 'Series' : 'Movie'}
+                    {getMediaTypeLabel(type)}
                   </Badge>
                   {entry.country && <span className="text-xs text-white/45">{entry.country}</span>}
                   {entry.personalRating != null && (
@@ -191,6 +192,7 @@ export function TitleDetailsModal({
                       entry.country ? ['Country', entry.country] : null,
                       entry.id && releaseStatuses[entry.id] ? ['Release Status', releaseStatuses[entry.id].label] : null,
                       entry.tmdbId != null ? ['TMDB ID', String(entry.tmdbId)] : null,
+                      entry.tmdbRating != null ? ['TMDB Rating', `${entry.tmdbRating.toFixed(1)}/10`] : null,
                       entry.genres.length > 0 ? ['Genres', entry.genres.join(', ')] : null,
                       entry.ageRating ? ['Age Rating', entry.ageRating] : null,
                     ]}
@@ -293,7 +295,7 @@ export function TitleDetailsModal({
 function PosterBlock({ entry }: { entry: MediaEntry }) {
   const poster = getDisplayPosterUrl(entry)
   const type = getEffectiveMediaType(entry)
-  const Icon = type === 'series' ? Tv : Film
+  const Icon = type === 'movie' ? Film : type === 'shorts' ? Clapperboard : Tv
 
   return (
     <div className="relative h-36 w-24 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5 sm:h-44 sm:w-28">
@@ -562,7 +564,7 @@ function CompareSearchResult({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-white">{getDisplayTitle(entry)}</p>
         <p className="mt-0.5 truncate text-xs text-white/40">
-          {[entry.yearMade, entry.country, type === 'series' ? 'Series' : 'Movie'].filter(Boolean).join(' / ')}
+          {[entry.yearMade, entry.country, getMediaTypeLabel(type)].filter(Boolean).join(' / ')}
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           <StatusBadge status={entry.status} />
@@ -591,6 +593,7 @@ function CompareMatrix({
   onRemove: (id: string) => void
 }) {
   const rows = [
+    ['Media Type', (entry: MediaEntry) => getMediaTypeLabel(getEffectiveMediaType(entry))],
     ['Status', (entry: MediaEntry) => MEDIA_STATUS_LABELS[entry.status]],
     ['Episodes Watched', (entry: MediaEntry) => String(getEpisodesWatched(entry))],
     ['Total Episodes', (entry: MediaEntry) => formatNullableNumber(getTotalEpisodes(entry))],
@@ -604,6 +607,7 @@ function CompareMatrix({
     }],
     ['Release Status', (entry: MediaEntry) => entry.id ? releaseStatuses[entry.id]?.label ?? '—' : '—'],
     ['Personal Rating', (entry: MediaEntry) => entry.personalRating != null ? entry.personalRating.toFixed(2) : '—'],
+    ['TMDB Rating', (entry: MediaEntry) => entry.tmdbRating != null ? `${entry.tmdbRating.toFixed(1)}/10` : '—'],
     ['Priority', (entry: MediaEntry) => entry.priority != null ? String(entry.priority) : '—'],
     ['Total Watch Hours', (entry: MediaEntry) => formatWatchHours(calculateEntryWatchHours(entry))],
     ['Remaining Watch Hours', (entry: MediaEntry) => formatRemainingWatchHours(entry)],
@@ -700,7 +704,8 @@ function formatRemainingWatchHours(entry: MediaEntry) {
 
 function PosterThumb({ entry, large }: { entry: MediaEntry; large?: boolean }) {
   const poster = getDisplayPosterUrl(entry)
-  const Icon = getEffectiveMediaType(entry) === 'series' ? Tv : Film
+  const type = getEffectiveMediaType(entry)
+  const Icon = type === 'movie' ? Film : type === 'shorts' ? Clapperboard : Tv
   return (
     <div className={`relative flex-shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5 ${large ? 'h-28 w-20' : 'h-16 w-11'}`}>
       {poster ? (

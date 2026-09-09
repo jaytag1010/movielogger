@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Star, Clock, Calendar, MoreVertical, Edit, Trash2, Film, Tv } from 'lucide-react'
+import { Star, Clock, Calendar, MoreVertical, Edit, Trash2, Film, Tv, Clapperboard } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { StatusBadge } from './StatusBadge'
 import { Badge } from '@/components/ui/badge'
@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
-import { formatDate, formatWatchHours, formatGenres, truncateText, getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
+import { formatDate, formatWatchHours, formatGenres, getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
 import { calculateEntryWatchHours } from '@/utils/watchTime'
 import { getPriorityDisplay } from '@/utils/priority'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
@@ -32,7 +32,7 @@ export function MediaCard({ entry, onView, onEdit, onDelete, index = 0 }: MediaC
   const displayPoster = getDisplayPosterUrl(entry)
   const watchHours = calculateEntryWatchHours(entry)
   const effectiveType = getEffectiveMediaType(entry)
-  const Icon = effectiveType === 'movie' ? Film : Tv
+  const Icon = effectiveType === 'movie' ? Film : effectiveType === 'shorts' ? Clapperboard : Tv
   const showPriority = entry.status === 'planned' || entry.status === 'on_hold'
   const priorityDisplay = getPriorityDisplay(entry.priority)
   const rewatchCount = Math.max(0, entry.rewatchCount ?? 0)

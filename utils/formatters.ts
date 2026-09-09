@@ -69,6 +69,16 @@ export function formatGenres(genres: string[]): string {
   return genres.slice(0, 3).join(', ')
 }
 
+export function getMediaTypeLabel(type: MediaType): string {
+  if (type === 'movie') return 'Movie'
+  if (type === 'shorts') return 'Shorts'
+  return 'Series'
+}
+
+export function isEpisodicMediaType(type: MediaType): boolean {
+  return type === 'series' || type === 'shorts'
+}
+
 /**
  * Returns the human-readable display title for a media entry.
  *
@@ -122,6 +132,9 @@ export function getEpisodesWatched(
 export function getEffectiveMediaType(
   entry: Pick<MediaEntry, 'tmdbId' | 'type' | 'totalEpisodes'>
 ): MediaType {
+  // Shorts is MovieLogger-specific and intentionally overrides TMDB's TV label
+  // when the user explicitly chooses it.
+  if (entry.type === 'shorts') return 'shorts'
   // TMDB-linked: type was set by TMDB — highest authority
   if (entry.tmdbId != null) {
     return entry.type

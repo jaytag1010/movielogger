@@ -32,7 +32,7 @@ import { fetchTVMetadata } from '@/lib/tmdb/api'
 import { CountrySelect } from './CountrySelect'
 import { TMDBSearch } from './TMDBSearch'
 import { uploadPoster, deletePoster, validatePosterFile } from '@/lib/imgbb'
-import { getDisplayPosterUrl } from '@/utils/formatters'
+import { getDisplayPosterUrl, isEpisodicMediaType } from '@/utils/formatters'
 import { format } from 'date-fns'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import { calculateStoredWatchHours } from '@/utils/watchHours'
@@ -50,7 +50,7 @@ const optionalPositiveNumber = z.preprocess(
 
 const schema = z.object({
   title: z.string().min(1, 'Title is required'),
-  type: z.enum(['movie', 'series']),
+  type: z.enum(['movie', 'series', 'shorts']),
   status: z.enum(['completed', 'watching', 'planned', 'dropped', 'on_hold']),
   // Blank or empty → null (treated as Season 1 on save). Non-blank must be ≥ 1.
   seasonNumber: z.preprocess(
@@ -80,6 +80,8 @@ type TmdbChanges = {
   backdropUrl: string | null
   releaseDate: string | null
   overview: string | null
+  tmdbRating: number | null
+  tmdbVoteCount: number | null
 } | null
 
 interface EditEntryModalProps {
@@ -107,9 +109,9 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
   const showPersonalRating = watchStatus === 'completed' || watchStatus === 'dropped'
   const showCompletionFields = watchStatus === 'completed'
 
-  const isSeriesType = watchType === 'series'
+  const isEpisodicType = watchType === 'series' || watchType === 'shorts'
   const calculatedWatchHours = calculateStoredWatchHours({
-    totalEpisodes: isSeriesType ? watchTotalEpisodes : (watchTotalEpisodes ?? 1),
+    totalEpisodes: isEpisodicType ? watchTotalEpisodes : (watchTotalEpisodes ?? 1),
     episodeDurationMinutes: watchEpDuration,
   })
 
@@ -189,7 +191,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
   async function handleTmdbSelect(r: NormalizedTMDBResult) {
     // Fetch full TMDB data so Country, Age Rating, and other sparse fields
     // that search results return as null are properly populated.
-    const fullData = await fetchDetails(r.tmdbId, r.type as 'movie' | 'series')
+      const fullData = await fetchDetails(r.tmdbId, r.type as 'movie' | 'series')
     const d = fullData ?? r   // fall back to sparse search result if fetch fails
 
     // Overwrite TMDB-authoritative fields unconditionally (no null guards).
@@ -203,6 +205,9 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
     if (d.country  !== null && d.country  !== undefined) setValue('country',  d.country  ?? '')
     if (d.ageRating !== null && d.ageRating !== undefined) setValue('ageRating', d.ageRating ?? '')
     if (d.genres.length > 0) setGenres(d.genres)
+    if (d.type === 'series' && d.runtime != null && d.runtime < 15) {
+      toast.info('This looks like a Shorts candidate. You can choose Shorts as the type if that fits.')
+    }
 
     setTmdbChanges({
       tmdbId: d.tmdbId,
@@ -210,6 +215,8 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
       backdropUrl: d.backdropUrl,
       releaseDate: d.releaseDate ?? null,
       overview: d.overview ?? null,
+      tmdbRating: d.tmdbRating ?? null,
+      tmdbVoteCount: d.tmdbVoteCount ?? null,
     })
 
     // Clear any pending manual poster upload — TMDB poster becomes the active default.
@@ -254,7 +261,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
 
   // ── Remove TMDB link ──────────────────────────────────────────────────────
   function handleTmdbRemove() {
-    setTmdbChanges({ tmdbId: null, posterUrl: null, backdropUrl: null, releaseDate: null, overview: null })
+    setTmdbChanges({ tmdbId: null, posterUrl: null, backdropUrl: null, releaseDate: null, overview: null, tmdbRating: null, tmdbVoteCount: null })
     setShowTmdbSearch(false)
     toast.info('TMDB link will be removed when you save')
   }
@@ -324,10 +331,13 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
 
       // Resolve metadata link fields.
       //   • metadataChanges set        → honour explicit user action (rematch or removal)
-      //   • type changed + was linked  → auto-clear to avoid stale link conflict
+      //   • TMDB media family changed  → auto-clear to avoid stale link conflict
       //   • otherwise                  → no change (leave Firestore fields as-is)
       const typeChanged = data.type !== entry.type
       const wasTmdbLinked = entry.tmdbId != null
+      const tmdbTypeIncompatible = wasTmdbLinked && (
+        (data.type === 'movie') !== (entry.type === 'movie')
+      )
       const tmdbFields: Record<string, unknown> =
         tmdbChanges !== null
           ? {
@@ -336,9 +346,11 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
               backdropUrl: tmdbChanges.backdropUrl,
               tmdbReleaseDate: tmdbChanges.releaseDate,
               overview: tmdbChanges.overview,
+              tmdbRating: tmdbChanges.tmdbRating,
+              tmdbVoteCount: tmdbChanges.tmdbVoteCount,
             }
-          : typeChanged && wasTmdbLinked
-            ? { tmdbId: null, posterUrl: null, backdropUrl: null, tmdbReleaseDate: null, overview: null }
+          : tmdbTypeIncompatible
+            ? { tmdbId: null, posterUrl: null, backdropUrl: null, tmdbReleaseDate: null, overview: null, tmdbRating: null, tmdbVoteCount: null }
             : {}
 
       // Resolve manual poster.
@@ -356,7 +368,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
         type:                   data.type,
         status:                 data.status,
         // Default season to 1 for series when left blank (Improvement 05).
-        seasonNumber:           data.type === 'series' ? (data.seasonNumber ?? 1) : null,
+        seasonNumber:           isEpisodicMediaType(data.type) ? (data.seasonNumber ?? 1) : null,
         nextEpisodeToWatch:     episodesWatched,
         yearMade:               data.yearMade               ?? null,
         totalEpisodes:          correctedTotal,
@@ -385,7 +397,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
         toast.success('Entry updated with new TMDB match')
       } else if (tmdbChanges?.tmdbId === null) {
         toast.success('Entry updated — TMDB link removed')
-      } else if (typeChanged && wasTmdbLinked) {
+      } else if (typeChanged && tmdbTypeIncompatible) {
         toast.success('Type updated — TMDB link removed. Use "Search TMDB" to relink.')
       } else {
         toast.success('Entry updated')
@@ -456,7 +468,9 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
               </div>
             </div>
             {/* Type-change auto-clear warning */}
-            {watchType !== entry?.type && entry?.tmdbId != null && tmdbChanges === null && (
+            {entry?.tmdbId != null && tmdbChanges === null && (
+              (watchType === 'movie') !== (entry.type === 'movie')
+            ) && (
               <p className="text-[10px] text-amber-400/80 leading-tight">
                 ⚠️ Changing type will remove the TMDB link. Use "Search TMDB" above to relink first.
               </p>
@@ -479,6 +493,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
                   <SelectContent>
                     <SelectItem value="movie">Movie</SelectItem>
                     <SelectItem value="series">Series</SelectItem>
+                    <SelectItem value="shorts">Shorts</SelectItem>
                   </SelectContent>
                 </Select>
               )} />
@@ -548,7 +563,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
           </div>
 
           {/* ── Series-only fields ── */}
-          {watchType === 'series' && (
+          {isEpisodicType && (
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -632,7 +647,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
             </div>
           )}
 
-          {showCompletionFields && watchType !== 'series' && (
+          {showCompletionFields && !isEpisodicType && (
             <div className="space-y-1.5">
               <Label>Rewatch Counter</Label>
               <div className="flex items-center gap-1.5">

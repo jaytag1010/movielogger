@@ -20,7 +20,7 @@ import { useMediaStore } from '@/store/mediaStore'
 import { MediaEntry } from '@/types/media'
 import { getEffectiveMediaType } from '@/utils/formatters'
 import { getWatchHistoryEntries } from '@/utils/watchHistory'
-import { Film, Tv, List } from 'lucide-react'
+import { Film, Tv, List, Clapperboard } from 'lucide-react'
 
 const ITEMS_PER_PAGE = 20
 const EditEntryModal = dynamicImport(
@@ -45,11 +45,11 @@ export default function MyListPage() {
     : null
 
   // Apply navigation intent from URL params (e.g. dashboard stat cards / See All).
-  // ?tab=all|movie|series  ·  ?sort=title_asc|rating_desc|year_desc|createdAt_desc
+  // ?tab=all|movie|series|shorts  ·  ?sort=title_asc|rating_desc|year_desc|createdAt_desc
   // ?country=South+Korea   ·  (from Country Chart drill-down)
   useEffect(() => {
     const tab = searchParams.get('tab')
-    if (tab === 'all' || tab === 'movie' || tab === 'series') {
+    if (tab === 'all' || tab === 'movie' || tab === 'series' || tab === 'shorts') {
       setActiveTab(tab)
     }
     const sort = searchParams.get('sort')
@@ -145,14 +145,17 @@ export default function MyListPage() {
     localStorage.setItem(VIEW_MODE_KEY, mode)
   }
 
-  const { movieCount, seriesCount } = useMemo(() => {
+  const { movieCount, seriesCount, shortsCount } = useMemo(() => {
     let movies = 0
     let series = 0
+    let shorts = 0
     entries.forEach((entry) => {
-      if (getEffectiveMediaType(entry) === 'movie') movies++
+      const type = getEffectiveMediaType(entry)
+      if (type === 'movie') movies++
+      else if (type === 'shorts') shorts++
       else series++
     })
-    return { movieCount: movies, seriesCount: series }
+    return { movieCount: movies, seriesCount: series, shortsCount: shorts }
   }, [entries])
   const filteredIdsParam = searchParams.get('ids')
   const filteredLabel = searchParams.get('label')
@@ -260,7 +263,7 @@ export default function MyListPage() {
       <Tabs
         value={activeTab}
         onValueChange={(v) => {
-          setActiveTab(v as 'all' | 'movie' | 'series')
+          setActiveTab(v as 'all' | 'movie' | 'series' | 'shorts')
           resetPagination()
         }}
       >
@@ -279,6 +282,11 @@ export default function MyListPage() {
             <Tv className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
             <span>Series</span>
             <Badge variant="secondary" className="ml-0.5 sm:ml-1 px-1 sm:px-1.5 text-[10px] sm:text-xs tabular-nums flex-shrink-0">{seriesCount}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="shorts" className="flex-1 min-w-0 gap-1 sm:gap-2 text-[11px] sm:text-sm px-2 sm:px-4">
+            <Clapperboard className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
+            <span>Shorts</span>
+            <Badge variant="secondary" className="ml-0.5 sm:ml-1 px-1 sm:px-1.5 text-[10px] sm:text-xs tabular-nums flex-shrink-0">{shortsCount}</Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -352,7 +360,7 @@ export default function MyListPage() {
             <MediaList
               entries={paginatedEntries}
               viewMode={viewMode}
-              emptyLabel={activeTab === 'all' ? 'titles' : activeTab === 'movie' ? 'movies' : 'series'}
+              emptyLabel={activeTab === 'all' ? 'titles' : activeTab === 'movie' ? 'movies' : activeTab === 'shorts' ? 'shorts' : 'series'}
               totalCount={tabEntries.length}
               allCount={baseEntries.length}
               onView={handleView}

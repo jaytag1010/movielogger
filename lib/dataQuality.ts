@@ -1,4 +1,5 @@
 import { MediaEntry } from '@/types/media'
+import { getEffectiveMediaType, isEpisodicMediaType } from '@/utils/formatters'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ export function hasMissingGenres(entry: MediaEntry): boolean {
 
 /** In-progress (watching) series with no episode progress recorded. */
 export function hasMissingEpisodeProgress(entry: MediaEntry): boolean {
-  return entry.status === 'watching' && entry.type === 'series' && entry.nextEpisodeToWatch == null
+  return entry.status === 'watching' && isEpisodicMediaType(getEffectiveMediaType(entry)) && entry.nextEpisodeToWatch == null
 }
 
 // ── Engine ─────────────────────────────────────────────────────────────────
@@ -131,7 +132,7 @@ export function computeDataQuality(
     const country = (e.country ?? '').toLowerCase().trim()
     const year    = e.yearMade != null ? String(e.yearMade) : ''
     // Series: include season so Season 1 ≠ Season 2; movies get no season token
-    const season  = e.type === 'series' ? String(e.seasonNumber ?? 1) : ''
+    const season  = isEpisodicMediaType(getEffectiveMediaType(e)) ? String(e.seasonNumber ?? 1) : ''
     const key = `title:${norm}|${country}|${year}|${season}`
     const arr = byTitle.get(key) ?? []
     arr.push(e)

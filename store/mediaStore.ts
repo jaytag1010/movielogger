@@ -6,7 +6,7 @@ interface MediaState {
   entries: MediaEntry[]
   loading: boolean
   filters: MediaFilters
-  activeTab: 'all' | 'movie' | 'series'
+  activeTab: 'all' | 'movie' | 'series' | 'shorts'
   setEntries: (entries: MediaEntry[]) => void
   addEntry: (entry: MediaEntry) => void
   updateEntry: (id: string, updates: Partial<MediaEntry>) => void
@@ -14,7 +14,7 @@ interface MediaState {
   setLoading: (loading: boolean) => void
   setFilters: (filters: Partial<MediaFilters>) => void
   resetFilters: () => void
-  setActiveTab: (tab: 'all' | 'movie' | 'series') => void
+  setActiveTab: (tab: 'all' | 'movie' | 'series' | 'shorts') => void
 }
 
 export const useMediaStore = create<MediaState>((set) => ({

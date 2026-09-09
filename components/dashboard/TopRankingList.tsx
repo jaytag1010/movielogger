@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
 import Link from 'next/link'
-import { Star, Film, Tv, ChevronRight } from 'lucide-react'
+import { Star, Film, Tv, ChevronRight, Clapperboard } from 'lucide-react'
 import { MediaEntry, MediaType } from '@/types/media'
 import { GlassCard } from '@/components/common/GlassCard'
 import { getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
@@ -21,8 +21,8 @@ export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProp
   const eligible = getEligibleCompletedRankedEntries(filtered)
   const ranked = topDenseRanked(eligible, limit)
 
-  const title = type === 'movie' ? 'Top Movies' : 'Top Series'
-  const Icon = type === 'movie' ? Film : Tv
+  const title = type === 'movie' ? 'Top Movies' : type === 'shorts' ? 'Top Shorts' : 'Top Series'
+  const Icon = type === 'movie' ? Film : type === 'shorts' ? Clapperboard : Tv
   const maxRating = 10
   const seeAllHref = `/my-list?tab=${type}&sort=rating_desc`
 
@@ -34,7 +34,7 @@ export function TopRankingList({ entries, type, limit = 10 }: TopRankingListProp
           <h3 className="text-base font-semibold text-white">{title}</h3>
         </div>
         <p className="text-sm text-white/40 text-center py-6">
-          No rated {type === 'movie' ? 'movies' : 'series'} yet
+          No rated {type === 'movie' ? 'movies' : type === 'shorts' ? 'shorts' : 'series'} yet
         </p>
       </GlassCard>
     )

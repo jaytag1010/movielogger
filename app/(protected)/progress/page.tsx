@@ -17,6 +17,7 @@ import { CompletionStatisticsModal } from '@/components/progress/CompletionStati
 import { WatchNextModal } from '@/components/progress/WatchNextModal'
 import { TMDBLinkDialog } from '@/components/progress/TMDBLinkDialog'
 import { EditEntryModal } from '@/components/media/EditEntryModal'
+import { TitleDetailsModal } from '@/components/media/TitleDetailsModal'
 import { TMDBSearch } from '@/components/media/TMDBSearch'
 import { Button } from '@/components/ui/button'
 import {
@@ -38,7 +39,7 @@ import { addActivity } from '@/lib/firebase/activity'
 import { useProgressReleaseStatuses } from '@/hooks/useProgressReleaseStatuses'
 import { MediaEntry, MediaStatus } from '@/types/media'
 import { NormalizedTMDBResult } from '@/types/tmdb'
-import { getDisplayTitle, getEffectiveMediaType, getEpisodesWatched } from '@/utils/formatters'
+import { getDisplayTitle, getEffectiveMediaType, getEpisodesWatched, isEpisodicMediaType } from '@/utils/formatters'
 import { comparePriorityAscThenCreatedDesc, comparePriorityDescThenCreatedDesc } from '@/utils/priority'
 import {
   fetchMovieMetadata,
@@ -251,7 +252,7 @@ type RefreshSummary = {
 }
 
 export default function ProgressPage() {
-  const { entries, editEntry, refreshEntry } = useMedia()
+  const { entries, editEntry, refreshEntry, removeEntry } = useMedia()
   const { user } = useAuthStore()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -331,6 +332,9 @@ export default function ProgressPage() {
   // ── Edit modal ────────────────────────────────────────────────────────────
   const [editTarget, setEditTarget] = useState<MediaEntry | null>(null)
   const [editOpen, setEditOpen] = useState(false)
+  const [detailEntryId, setDetailEntryId] = useState<string | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [returnToDetailId, setReturnToDetailId] = useState<string | null>(null)
 
   // ── TMDB search & link ────────────────────────────────────────────────────
   // linkTarget: the library entry the user wants to link a TMDB result to.
@@ -520,12 +524,12 @@ export default function ProgressPage() {
       // reduce it.
       const watchedEpisodes = getEpisodesWatched(finishTarget)
       const shouldUpdateTotal =
-        getEffectiveMediaType(finishTarget) === 'series' &&
+        isEpisodicMediaType(getEffectiveMediaType(finishTarget)) &&
         watchedEpisodes > 0 &&
         (finishTarget.totalEpisodes == null || watchedEpisodes > finishTarget.totalEpisodes)
       const completedTotalEpisodes = shouldUpdateTotal ? watchedEpisodes : finishTarget.totalEpisodes
       const completedEpisodesWatched = completedTotalEpisodes ?? watchedEpisodes
-      const completedWatchHours = getEffectiveMediaType(finishTarget) === 'series'
+      const completedWatchHours = isEpisodicMediaType(getEffectiveMediaType(finishTarget))
         ? completedTotalEpisodes != null
           ? Math.round((completedTotalEpisodes * details.episodeDurationMinutes / 60) * 100) / 100
           : null
@@ -577,6 +581,26 @@ export default function ProgressPage() {
     setEditOpen(true)
   }
 
+  function handleView(entry: MediaEntry) {
+    setDetailEntryId(entry.id ?? null)
+    setDetailOpen(true)
+  }
+
+  function handleEditFromDetails(entry: MediaEntry) {
+    setReturnToDetailId(entry.id ?? null)
+    setDetailOpen(false)
+    handleEdit(entry)
+  }
+
+  async function handleDeleteFromDetails(id: string) {
+    try {
+      await removeEntry(id)
+      toast.success('Entry deleted')
+    } catch {
+      toast.error('Failed to delete entry')
+    }
+  }
+
   // ── TMDB Search + Link ────────────────────────────────────────────────────
 
   /** Called from a card's ⋮ → Search TMDB. Pre-seeds the search bar. */
@@ -617,8 +641,10 @@ export default function ProgressPage() {
       // Build the TMDB-authoritative update — never touch user-owned fields
       const updates: Parameters<typeof editEntry>[1] = {
         tmdbId: fullData.tmdbId,
-        type: fullData.type,
+        type: linkTarget.type === 'shorts' && fullData.type === 'series' ? 'shorts' : fullData.type,
         overview: fullData.overview ?? null,
+        tmdbRating: fullData.tmdbRating ?? null,
+        tmdbVoteCount: fullData.tmdbVoteCount ?? null,
         posterUrl: fullData.posterUrl,
         backdropUrl: fullData.backdropUrl,
         country: fullData.country,
@@ -689,6 +715,8 @@ export default function ProgressPage() {
         if (!entry.backdropUrl && data.backdropUrl) updates.backdropUrl = data.backdropUrl
         if (!entry.yearMade && data.year) updates.yearMade = data.year
         if (!entry.ageRating && data.ageRating) updates.ageRating = data.ageRating
+        if (data.tmdbRating != null && !valuesEqual(entry.tmdbRating, data.tmdbRating)) updates.tmdbRating = data.tmdbRating
+        if (data.tmdbVoteCount != null && !valuesEqual(entry.tmdbVoteCount, data.tmdbVoteCount)) updates.tmdbVoteCount = data.tmdbVoteCount
         if (!entry.genres?.length && data.genres.length) updates.genres = data.genres
         if (!entry.country && data.country) updates.country = data.country
         if (!entry.episodeDurationMinutes && data.runtime) updates.episodeDurationMinutes = data.runtime
@@ -713,6 +741,8 @@ export default function ProgressPage() {
         if (!entry.overview && sd.overview) updates.overview = sd.overview
         if (!entry.backdropUrl && sd.backdropUrl) updates.backdropUrl = sd.backdropUrl
         if (!entry.ageRating && sd.ageRating) updates.ageRating = sd.ageRating
+        if (sd.tmdbRating != null && !valuesEqual(entry.tmdbRating, sd.tmdbRating)) updates.tmdbRating = sd.tmdbRating
+        if (sd.tmdbVoteCount != null && !valuesEqual(entry.tmdbVoteCount, sd.tmdbVoteCount)) updates.tmdbVoteCount = sd.tmdbVoteCount
         if (!entry.genres?.length && sd.genres.length) updates.genres = sd.genres
         if (!entry.country && sd.country) updates.country = sd.country
         if (!updates.posterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
@@ -766,6 +796,8 @@ export default function ProgressPage() {
           if (data.backdropUrl && !valuesEqual(entry.backdropUrl, data.backdropUrl)) updates.backdropUrl = data.backdropUrl
           if (data.year && !valuesEqual(entry.yearMade, data.year)) updates.yearMade = data.year
           if (data.ageRating && !valuesEqual(entry.ageRating, data.ageRating)) updates.ageRating = data.ageRating
+          if (data.tmdbRating != null && !valuesEqual(entry.tmdbRating, data.tmdbRating)) updates.tmdbRating = data.tmdbRating
+          if (data.tmdbVoteCount != null && !valuesEqual(entry.tmdbVoteCount, data.tmdbVoteCount)) updates.tmdbVoteCount = data.tmdbVoteCount
           if (data.genres.length && !valuesEqual(entry.genres, data.genres)) updates.genres = data.genres
           if (data.country && !valuesEqual(entry.country, data.country)) updates.country = data.country
           if (data.runtime && !valuesEqual(entry.episodeDurationMinutes, data.runtime)) updates.episodeDurationMinutes = data.runtime
@@ -799,6 +831,8 @@ export default function ProgressPage() {
           if (!entry.overview && sd.overview) updates.overview = sd.overview
           if (sd.backdropUrl && !valuesEqual(entry.backdropUrl, sd.backdropUrl)) updates.backdropUrl = sd.backdropUrl
           if (sd.ageRating && !valuesEqual(entry.ageRating, sd.ageRating)) updates.ageRating = sd.ageRating
+          if (sd.tmdbRating != null && !valuesEqual(entry.tmdbRating, sd.tmdbRating)) updates.tmdbRating = sd.tmdbRating
+          if (sd.tmdbVoteCount != null && !valuesEqual(entry.tmdbVoteCount, sd.tmdbVoteCount)) updates.tmdbVoteCount = sd.tmdbVoteCount
           if (sd.genres.length && !valuesEqual(entry.genres, sd.genres)) updates.genres = sd.genres
           if (sd.country && !valuesEqual(entry.country, sd.country)) updates.country = sd.country
           if (!entry.posterUrl && !entry.manualPosterUrl && !updates.posterUrl && sd.posterUrl) updates.posterUrl = sd.posterUrl
@@ -848,6 +882,8 @@ export default function ProgressPage() {
                   backdropUrl: 'Backdrop',
                   yearMade: 'Release Year',
                   ageRating: 'Age Rating',
+                  tmdbRating: 'TMDB Rating',
+                  tmdbVoteCount: 'TMDB Vote Count',
                   genres: 'Genres',
                   country: 'Country',
                   episodeDurationMinutes: 'Runtime',
@@ -1086,6 +1122,7 @@ export default function ProgressPage() {
                       onIncrement={handleIncrement}
                       onFinish={(e) => setFinishTarget(e)}
                       onEdit={handleEdit}
+                      onView={handleView}
                       onSearchTMDB={handleSearchTMDB}
                       onRefreshMetadata={handleRefreshMetadata}
                       refreshing={singleRefreshingId === entry.id}
@@ -1256,8 +1293,24 @@ export default function ProgressPage() {
         open={editOpen}
         onOpenChange={(open) => {
           setEditOpen(open)
+          if (!open && returnToDetailId) {
+            setDetailEntryId(returnToDetailId)
+            setDetailOpen(true)
+            setReturnToDetailId(null)
+          }
           if (!open) setEditTarget(null)
         }}
+      />
+      <TitleDetailsModal
+        entry={entries.find((entry) => entry.id === detailEntryId) ?? null}
+        entries={entries}
+        open={detailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open)
+          if (!open) setDetailEntryId(null)
+        }}
+        onEdit={handleEditFromDetails}
+        onDelete={handleDeleteFromDetails}
       />
     </AppLayout>
   )

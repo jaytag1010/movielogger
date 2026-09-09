@@ -17,7 +17,7 @@ function entryToRow(entry: MediaEntry) {
     'Legacy ID': entry.legacyId ?? '',
     'TMDB ID': entry.tmdbId ?? '',
     Title: entry.title,
-    Type: entry.type,
+    Type: getEffectiveMediaType(entry),
     'Season Number': entry.seasonNumber ?? '',
     'Next Episode': entry.nextEpisodeToWatch ?? '',
     Status: entry.status,
@@ -118,12 +118,14 @@ function mediaTypeTable(entries: MediaEntry[]): TableRow[] {
   return [
     ['Movies', entries.filter((entry) => getEffectiveMediaType(entry) === 'movie').length],
     ['Series', entries.filter((entry) => getEffectiveMediaType(entry) === 'series').length],
+    ['Shorts', entries.filter((entry) => getEffectiveMediaType(entry) === 'shorts').length],
   ]
 }
 
 function summaryMetrics(entries: MediaEntry[]): [string, string | number][] {
   const movies = entries.filter((entry) => getEffectiveMediaType(entry) === 'movie')
   const series = entries.filter((entry) => getEffectiveMediaType(entry) === 'series')
+  const shorts = entries.filter((entry) => getEffectiveMediaType(entry) === 'shorts')
   const rated = entries.filter((entry) => entry.personalRating != null)
   const avgRating = rated.length > 0
     ? rated.reduce((sum, entry) => sum + (entry.personalRating ?? 0), 0) / rated.length
@@ -134,6 +136,7 @@ function summaryMetrics(entries: MediaEntry[]): [string, string | number][] {
     ['Total Titles', entries.length],
     ['Total Movies', movies.length],
     ['Total Series', series.length],
+    ['Total Shorts', shorts.length],
     ['Average Rating', avgRating == null ? '' : Number(avgRating.toFixed(2))],
     ['Total Watch Hours', Number(calculateTotalWatchHours(entries).toFixed(2))],
   ]

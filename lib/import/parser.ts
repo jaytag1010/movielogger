@@ -102,9 +102,9 @@ export function validateMappedRow(
   if (
     mapped.type !== undefined &&
     mapped.type !== null &&
-    !['movie', 'series'].includes(mapped.type as string)
+    !['movie', 'series', 'shorts'].includes(mapped.type as string)
   ) {
-    errors.push({ row: rowIndex, field: 'type', message: 'Type must be "movie" or "series"' })
+    errors.push({ row: rowIndex, field: 'type', message: 'Type must be "movie", "series", or "shorts"' })
   }
 
   if (
@@ -319,7 +319,7 @@ async function findTMDBMatch(mapped: MappedRow): Promise<TMDBMatchResult> {
     const synthetic: NormalizedTMDBResult = {
       tmdbId:        mapped.tmdbId,
       title:         mapped.title,
-      type:          (mapped.type === 'series' ? 'series' : 'movie') as 'movie' | 'series',
+      type:          (mapped.type === 'series' || mapped.type === 'shorts' ? 'series' : 'movie') as 'movie' | 'series',
       year:          mapped.yearMade          ?? null,
       releaseDate:   null,
       posterUrl:     mapped.posterUrl         ?? null,
@@ -330,6 +330,8 @@ async function findTMDBMatch(mapped: MappedRow): Promise<TMDBMatchResult> {
       totalEpisodes: mapped.totalEpisodes     ?? null,
       ageRating:     mapped.ageRating         ?? null,
       overview:      '',
+      tmdbRating:    null,
+      tmdbVoteCount: null,
     }
     return { status: 'matched', result: synthetic, confidence: 1.0 }
   }

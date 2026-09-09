@@ -29,7 +29,7 @@ import { Timestamp } from 'firebase/firestore'
 import { MediaEntryInput, MediaType, MediaStatus } from '@/types/media'
 import { NormalizedTMDBResult, SeasonMetadata } from '@/types/tmdb'
 import { Progress } from '@/components/ui/progress'
-import { getDisplayTitle } from '@/utils/formatters'
+import { getDisplayTitle, isEpisodicMediaType } from '@/utils/formatters'
 import { parseEpisodeDurationRange } from '@/utils/episodeDuration'
 
 type ImportStep =
@@ -118,7 +118,7 @@ export default function ImportPage() {
         const matchType = effectiveTmdbMatch?.type
         const type =
           matchType === 'series' ||
-          (edits?.type ?? mapped.type ?? row.existingEntry?.type) === 'series'
+          ['series', 'shorts'].includes(edits?.type ?? mapped.type ?? row.existingEntry?.type ?? '')
             ? 'series'
             : 'movie'
         tmdbData = type === 'movie'
@@ -130,13 +130,15 @@ export default function ImportPage() {
       }
     }
 
-    // Classification authority: TMDB type > explicit type column > episode count > default 'movie'
-    const explicitType = edits?.type ?? tmdbData?.type ?? effectiveTmdbMatch?.type ?? mapped.type
+    // Classification authority: explicit MovieLogger type (including Shorts)
+    // can refine TMDB TV metadata; otherwise use TMDB type > episode count.
+    const explicitMovieLoggerType = edits?.type ?? mapped.type
+    const explicitType = explicitMovieLoggerType ?? tmdbData?.type ?? effectiveTmdbMatch?.type
     const episodeBasedType: MediaType | null =
       (mapped.totalEpisodes != null && mapped.totalEpisodes > 1) ? 'series' : null
     const resolvedType: MediaType = (explicitType ?? episodeBasedType ?? 'movie') as MediaType
 
-    if (resolvedTmdbId && resolvedType === 'series' && mapped.seasonNumber) {
+    if (resolvedTmdbId && isEpisodicMediaType(resolvedType) && mapped.seasonNumber) {
       try {
         seasonMeta = await fetchSeasonMetadata(resolvedTmdbId, mapped.seasonNumber)
       } catch {
@@ -160,7 +162,7 @@ export default function ImportPage() {
     // Movies: TMDB runtime > imported duration > spreadsheet Watch Hour > null
     const round2 = (n: number) => Math.round(n * 100) / 100
     const watchHours: number | null = (() => {
-      if (resolvedType === 'series' || (totalEpisodes != null && totalEpisodes > 1)) {
+      if (isEpisodicMediaType(resolvedType) || (totalEpisodes != null && totalEpisodes > 1)) {
         // Series — always derived from episodes × duration
         if (seasonMeta && seasonMeta.episodeCount > 0 && seasonMeta.avgRuntime) {
           return round2(seasonMeta.episodeCount * seasonMeta.avgRuntime / 60)
@@ -180,6 +182,8 @@ export default function ImportPage() {
     const tmdbFields = {
       tmdbId: resolvedTmdbId,
       overview: tmdbData?.overview ?? null,
+      tmdbRating: tmdbData?.tmdbRating ?? effectiveTmdbMatch?.tmdbRating ?? null,
+      tmdbVoteCount: tmdbData?.tmdbVoteCount ?? effectiveTmdbMatch?.tmdbVoteCount ?? null,
       seasonNumber: mapped.seasonNumber ?? null,
       posterUrl: seasonMeta?.posterUrl ?? tmdbData?.posterUrl ?? mapped.posterUrl ?? null,
       backdropUrl: tmdbData?.backdropUrl ?? mapped.backdropUrl ?? null,
@@ -197,7 +201,7 @@ export default function ImportPage() {
     // "Episodes Watched" (stored in nextEpisodeToWatch). Hidden for completed;
     // otherwise the imported value or 0. Applies to movies and series.
     const nextEpisodeToWatch: number | null = (() => {
-      if (userFields.status === 'completed') return null
+      if (userFields.status === 'completed') return totalEpisodes ?? null
       if (mapped.nextEpisodeToWatch != null) return mapped.nextEpisodeToWatch
       return 0
     })()

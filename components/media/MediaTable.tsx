@@ -1,11 +1,11 @@
 'use client'
 
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
-import { Pencil, Trash2, Film, Tv } from 'lucide-react'
+import { Pencil, Trash2, Film, Tv, Clapperboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { MediaEntry, MEDIA_STATUS_LABELS, MEDIA_STATUS_COLORS } from '@/types/media'
-import { formatWatchHours, getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl } from '@/utils/formatters'
+import { formatWatchHours, getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl, getMediaTypeLabel, isEpisodicMediaType } from '@/utils/formatters'
 import { cn } from '@/utils/cn'
 import { calculateEntryWatchHours } from '@/utils/watchTime'
 
@@ -67,6 +67,8 @@ export function MediaTable({ entries, onEdit, onDelete }: MediaTableProps) {
                       />
                     ) : type === 'series' ? (
                       <Tv className="w-3.5 h-3.5 text-white/30" />
+                    ) : type === 'shorts' ? (
+                      <Clapperboard className="w-3.5 h-3.5 text-white/30" />
                     ) : (
                       <Film className="w-3.5 h-3.5 text-white/30" />
                     )}
@@ -86,10 +88,12 @@ export function MediaTable({ entries, onEdit, onDelete }: MediaTableProps) {
                       'text-[10px] px-1.5 py-0',
                       type === 'series'
                         ? 'text-blue-400 border-blue-500/30'
+                        : type === 'shorts'
+                          ? 'text-cyan-300 border-cyan-500/30'
                         : 'text-purple-400 border-purple-500/30'
                     )}
                   >
-                    {type === 'series' ? 'Series' : 'Movie'}
+                    {getMediaTypeLabel(type)}
                   </Badge>
                 </td>
 
@@ -110,7 +114,7 @@ export function MediaTable({ entries, onEdit, onDelete }: MediaTableProps) {
 
                 {/* Episodes */}
                 <td className="px-3 py-2 text-right text-white/60 text-xs tabular-nums">
-                  {type === 'series' ? (entry.totalEpisodes ?? '?') : '—'}
+                  {isEpisodicMediaType(type) ? (entry.totalEpisodes ?? '?') : '—'}
                 </td>
 
                 {/* Rating */}
