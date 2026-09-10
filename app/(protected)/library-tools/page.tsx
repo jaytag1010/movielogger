@@ -29,7 +29,7 @@ export default function LibraryToolsPage() {
         </GlassCard>
 
         <GlassCard padding="md">
-          <MetadataUtilities entries={entries} refreshEntry={refreshEntry} />
+          <MetadataUtilities entries={entries} editEntry={editEntry} refreshEntry={refreshEntry} />
         </GlassCard>
 
         <GlassCard padding="md">
