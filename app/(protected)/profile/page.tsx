@@ -79,11 +79,12 @@ export default function ProfilePage() {
     displayName: null,
     profilePhotoUrl: null,
     bio: '',
-    publicProfileEnabled: false,
+    publicProfileEnabled: true,
     publicUsername: null,
     showPublicStats: false,
     publicVisibility: DEFAULT_PUBLIC_VISIBILITY,
     systemLists: {},
+    publicSharingVersion: 2,
   })
   const [profileLoading, setProfileLoading] = useState(true)
 
@@ -284,12 +285,10 @@ export default function ProfilePage() {
   async function persistUnifiedProfile(next: UserProfile): Promise<UserProfile> {
     if (!user) throw new Error('Not authenticated')
     const username = usernameInput.trim().toLocaleLowerCase()
-    if (next.publicProfileEnabled && !username) throw new Error('Choose a public username before enabling your Public Profile.')
     if (username) {
       const validation = validatePublicUsername(username)
       if (validation) throw new Error(validation)
       return savePublicProfileSettings(user.uid, entries, {
-        publicProfileEnabled: next.publicProfileEnabled,
         publicUsername: username,
         displayName: next.displayName,
         profilePhotoUrl: next.profilePhotoUrl,
@@ -301,10 +300,11 @@ export default function ProfilePage() {
     await updateUserProfile(user.uid, {
       displayName: next.displayName,
       bio: next.bio,
-      publicProfileEnabled: false,
+      publicProfileEnabled: true,
       showPublicStats: next.showPublicStats,
+      publicSharingVersion: 2,
     })
-    return { ...next, publicProfileEnabled: false, publicUsername: null }
+    return { ...next, publicProfileEnabled: true, publicUsername: null, publicSharingVersion: 2 }
   }
 
   async function handleSaveUnifiedProfile() {
@@ -529,9 +529,9 @@ export default function ProfilePage() {
         </GlassCard>
 
         <GlassCard padding="md">
-          <div className="flex items-start justify-between gap-4"><div><h3 className="text-xs font-semibold uppercase tracking-wider text-white/40">Public Sharing</h3><p className="mt-1 text-xs text-white/35">Your account profile is also your public identity. Email and account controls are never shared.</p></div><button disabled={savingSharing} onClick={() => handleSharingChange({ publicProfileEnabled: !profile.publicProfileEnabled })} className={`relative h-6 w-11 shrink-0 rounded-full transition ${profile.publicProfileEnabled ? 'bg-emerald-500' : 'bg-white/15'}`} aria-label="Toggle public profile"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${profile.publicProfileEnabled ? 'left-6' : 'left-1'}`} /></button></div>
-          <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.025] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium text-white">Show Overall Summary</p><p className="mt-0.5 text-xs text-white/35">Calculated only from titles available through your Public folders.</p></div><button disabled={savingSharing} onClick={() => handleSharingChange({ showPublicStats: !profile.showPublicStats })} className={`relative h-6 w-11 shrink-0 rounded-full transition ${profile.showPublicStats ? 'bg-blue-500' : 'bg-white/15'}`} aria-label="Toggle public summary"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${profile.showPublicStats ? 'left-6' : 'left-1'}`} /></button></div></div>
-          {profile.publicUsername ? <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center"><div className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/15 px-3 py-2 text-xs text-white/45"><span className="truncate">{typeof window !== 'undefined' ? window.location.origin : ''}/u/{profile.publicUsername}</span></div><Button size="sm" variant="outline" onClick={copyPublicUrl}><Copy className="mr-1.5 h-3.5 w-3.5" />Copy</Button>{profile.publicProfileEnabled && <Button size="sm" asChild><a href={`/u/${profile.publicUsername}`} target="_blank" rel="noreferrer"><ExternalLink className="mr-1.5 h-3.5 w-3.5" />View Public Profile</a></Button>}</div> : <p className="mt-3 text-xs text-amber-200/75">Save a Public Username above to create your public URL.</p>}
+          <div><h3 className="text-xs font-semibold uppercase tracking-wider text-white/40">Public Profile Settings</h3><p className="mt-1 text-xs text-white/35">Your profile identity is publicly viewable. You control library sharing through Overall Summary and Folder visibility.</p></div>
+          <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.025] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium text-white">Overall Summary Visibility</p><p className="mt-0.5 text-xs text-white/35">Public uses aggregated statistics from your complete library without exposing private titles.</p></div><button disabled={savingSharing} onClick={() => handleSharingChange({ showPublicStats: !profile.showPublicStats })} className={`relative h-6 w-11 shrink-0 rounded-full transition ${profile.showPublicStats ? 'bg-blue-500' : 'bg-white/15'}`} aria-label="Toggle public summary"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${profile.showPublicStats ? 'left-6' : 'left-1'}`} /></button></div><p className={`mt-2 text-xs font-medium ${profile.showPublicStats ? 'text-blue-300' : 'text-white/40'}`}>{profile.showPublicStats ? 'Public' : 'Private'}</p></div>
+          {profile.publicUsername ? <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center"><div className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/15 px-3 py-2 text-xs text-white/45"><span className="truncate">{typeof window !== 'undefined' ? window.location.origin : ''}/u/{profile.publicUsername}</span></div><Button size="sm" variant="outline" onClick={copyPublicUrl}><Copy className="mr-1.5 h-3.5 w-3.5" />Copy</Button><Button size="sm" asChild><a href={`/u/${profile.publicUsername}`} target="_blank" rel="noreferrer"><ExternalLink className="mr-1.5 h-3.5 w-3.5" />View Public Profile</a></Button></div> : <p className="mt-3 text-xs text-amber-200/75">Save a Public Username above to create your public URL.</p>}
         </GlassCard>
 
         <GlassCard padding="md">

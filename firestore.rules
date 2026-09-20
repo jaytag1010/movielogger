@@ -8,9 +8,6 @@ service cloud.firestore {
       return signedIn()
         && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.publicUsername == username;
     }
-    function publicProfileEnabled(username) {
-      return get(/databases/$(database)/documents/publicProfiles/$(username)).data.enabled == true;
-    }
 
     match /users/{userId} {
       allow read, create, update, delete: if ownsUser(userId);
@@ -54,17 +51,19 @@ service cloud.firestore {
     // Sanitized public mirror. No UID, email, private document ID, ML ID,
     // activity history, notification, or import/export data is stored here.
     match /publicProfiles/{username} {
-      allow read: if resource.data.enabled == true || ownsPublicUsername(username);
+      // Profile identity and aggregated summary are public by default. The
+      // document contains no private account fields.
+      allow read: if true;
       allow create, update, delete: if ownsPublicUsername(username);
 
       match /titles/{publicTitleId} {
         allow read: if ownsPublicUsername(username)
-          || publicProfileEnabled(username);
+          || resource.data.folderVisible == true;
         allow create, update, delete: if ownsPublicUsername(username);
       }
       match /lists/{listSlug} {
         allow read: if ownsPublicUsername(username)
-          || (publicProfileEnabled(username) && resource.data.visibility == 'public');
+          || resource.data.visibility == 'public';
         allow create, update, delete: if ownsPublicUsername(username);
       }
     }

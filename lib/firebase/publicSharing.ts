@@ -1,20 +1,16 @@
 import {
-  QueryDocumentSnapshot,
   Timestamp,
   collection,
   deleteDoc,
   doc,
-  documentId,
   getDoc,
   getDocs,
   getFirestore,
-  limit,
   orderBy,
   query,
   runTransaction,
   serverTimestamp,
   setDoc,
-  startAfter,
   updateDoc,
   where,
   writeBatch,
@@ -136,7 +132,9 @@ function publicProfilePayload(profile: UserProfile, stats: ReturnType<typeof cal
     displayName: profile.displayName?.trim() || profile.publicUsername!,
     profilePhotoUrl: profile.profilePhotoUrl ?? null,
     bio: profile.bio?.trim() ?? '',
-    enabled: profile.publicProfileEnabled,
+    // Kept for document compatibility. Profile identity is public by default
+    // in Version 5.2; summary and folder visibility are independent controls.
+    enabled: true,
     showStats: profile.showPublicStats,
     stats,
     updatedAt: Timestamp.now(),
@@ -211,7 +209,8 @@ export async function rebuildPublicLibrary(
   userId: string,
   sourceEntries: MediaEntry[],
   profileOverride?: UserProfile,
-  changedEntryId?: string
+  changedEntryId?: string,
+  forceTitleRewrite = false
 ): Promise<{ published: number; private: number }> {
   const profile = profileOverride ?? await getUserProfile(userId)
   if (!profile.publicUsername) return { published: 0, private: sourceEntries.length }
@@ -230,7 +229,7 @@ export async function rebuildPublicLibrary(
     if (!keep.has(id)) writes.push({ kind: 'delete', ref: doc(titlesRef, id) })
   })
   publicEntries.forEach((entry) => {
-    if (existingIds.has(entry.publicId!) && entry.id !== changedEntryId) return
+    if (!forceTitleRewrite && existingIds.has(entry.publicId!) && entry.id !== changedEntryId) return
     writes.push({
       kind: 'set',
       ref: doc(firestore, 'publicProfiles', profile.publicUsername!, 'titles', entry.publicId!),
@@ -254,7 +253,7 @@ export async function rebuildPublicLibrary(
 
   await setDoc(
     doc(firestore, 'publicProfiles', profile.publicUsername),
-    { ...publicProfilePayload(profile, calculatePublicStats(publicEntries)), updatedAt: serverTimestamp() },
+    { ...publicProfilePayload(profile, calculatePublicStats(entries)), updatedAt: serverTimestamp() },
     { merge: true }
   )
   return { published: publicEntries.length, private: entries.length - publicEntries.length }
@@ -264,7 +263,6 @@ export async function savePublicProfileSettings(
   userId: string,
   entries: MediaEntry[],
   settings: {
-    publicProfileEnabled: boolean
     publicUsername: string
     displayName: string | null
     profilePhotoUrl: string | null
@@ -281,19 +279,39 @@ export async function savePublicProfileSettings(
   const username = await claimPublicUsername(userId, settings.publicUsername, previousUsername)
   const profile: UserProfile = {
     ...settings,
+    publicProfileEnabled: true,
     publicUsername: username,
     publicVisibility: normalizePublicVisibility(settings.publicVisibility),
     systemLists: currentProfile.systemLists ?? {},
+    publicSharingVersion: 2,
   }
   await updateUserProfile(userId, profile)
-  // Close the public read gate while rebuilding the sanitized folder mirror.
-  await setDoc(doc(db(), 'publicProfiles', username), {
-    username,
-    enabled: false,
-    updatedAt: serverTimestamp(),
-  }, { merge: true })
-  await rebuildPublicLibrary(userId, entries, profile)
+  await rebuildPublicLibrary(userId, entries, profile, undefined, (currentProfile.publicSharingVersion ?? 1) < 2)
   return profile
+}
+
+/** One-time compatibility migration from the Version 5.1 master-toggle model. */
+const sharingMigrations = new Map<string, Promise<void>>()
+
+export function migratePublicSharingV2(userId: string, entries: MediaEntry[]): Promise<void> {
+  const active = sharingMigrations.get(userId)
+  if (active) return active
+  const migration = (async () => {
+    const profile = await getUserProfile(userId)
+    if (!profile.publicUsername || (profile.publicSharingVersion ?? 1) >= 2) return
+    const migrated: UserProfile = {
+      ...profile,
+      publicProfileEnabled: true,
+      publicSharingVersion: 2,
+    }
+    await rebuildPublicLibrary(userId, entries, migrated, undefined, true)
+    await updateUserProfile(userId, {
+      publicProfileEnabled: true,
+      publicSharingVersion: 2,
+    })
+  })().finally(() => sharingMigrations.delete(userId))
+  sharingMigrations.set(userId, migration)
+  return migration
 }
 
 export async function syncPublicEntry(
@@ -327,47 +345,6 @@ export async function getPublicProfile(username: string): Promise<PublicProfileD
   const normalized = normalizePublicUsername(username)
   const snap = await getDoc(doc(db(), 'publicProfiles', normalized))
   return snap.exists() ? snap.data() as PublicProfileDocument : null
-}
-
-export interface PublicTitleQueryOptions {
-  type?: 'all' | 'movie' | 'series' | 'shorts'
-  status?: 'all' | 'completed' | 'watching' | 'planned' | 'on_hold' | 'dropped'
-  search?: string
-  pageSize?: number
-  cursor?: QueryDocumentSnapshot | null
-  sort?: 'newest' | 'title' | 'rating'
-}
-
-export async function getPublicTitles(
-  username: string,
-  options: PublicTitleQueryOptions = {}
-): Promise<{ titles: PublicTitleDocument[]; cursor: QueryDocumentSnapshot | null; hasMore: boolean }> {
-  const pageSize = options.pageSize ?? 24
-  const constraints: Parameters<typeof query>[1][] = []
-  if (options.type && options.type !== 'all') constraints.push(where('type', '==', options.type))
-  if (options.status && options.status !== 'all') constraints.push(where('status', '==', options.status))
-  const search = options.search?.trim().toLocaleLowerCase()
-  if (search) {
-    constraints.push(where('titleLower', '>=', search), where('titleLower', '<=', `${search}\uf8ff`), orderBy('titleLower', 'asc'))
-  } else if (options.sort === 'title') {
-    constraints.push(orderBy('titleLower', 'asc'))
-  } else if (options.sort === 'rating') {
-    constraints.push(orderBy('personalRating', 'desc'))
-  } else {
-    constraints.push(orderBy('createdAt', 'desc'))
-  }
-  if (options.cursor) constraints.push(startAfter(options.cursor))
-  constraints.push(limit(pageSize + 1))
-  const snap = await getDocs(query(
-    collection(db(), 'publicProfiles', normalizePublicUsername(username), 'titles'),
-    ...constraints
-  ))
-  const visible = snap.docs.slice(0, pageSize)
-  return {
-    titles: visible.map((item) => item.data() as PublicTitleDocument),
-    cursor: visible.at(-1) ?? null,
-    hasMore: snap.docs.length > pageSize,
-  }
 }
 
 export async function getPublicLists(username: string): Promise<PublicListDocument[]> {
@@ -461,26 +438,20 @@ export async function getPublicList(username: string, slug: string): Promise<Pub
 
 export async function getPublicTitlesByIds(username: string, ids: string[]): Promise<PublicTitleDocument[]> {
   if (ids.length === 0) return []
-  const results: PublicTitleDocument[] = []
-  for (let i = 0; i < ids.length; i += 10) {
-    const chunk = ids.slice(i, i + 10)
-    const snap = await getDocs(query(
-      collection(db(), 'publicProfiles', normalizePublicUsername(username), 'titles'),
-      where(documentId(), 'in', chunk)
-    ))
-    results.push(...snap.docs.map((item) => item.data() as PublicTitleDocument))
+  const byId = new Map<string, PublicTitleDocument>()
+  for (let i = 0; i < ids.length; i += 25) {
+    const chunk = ids.slice(i, i + 25)
+    const results = await Promise.all(chunk.map(async (id) => {
+      try {
+        const snap = await getDoc(doc(db(), 'publicProfiles', normalizePublicUsername(username), 'titles', id))
+        return snap.exists() ? snap.data() as PublicTitleDocument : null
+      } catch {
+        // Legacy documents without the public-folder marker are intentionally
+        // denied by Firestore until the owner's one-time migration runs.
+        return null
+      }
+    }))
+    results.forEach((title) => { if (title) byId.set(title.publicId, title) })
   }
-  const byId = new Map(results.map((item) => [item.publicId, item]))
   return ids.map((id) => byId.get(id)).filter(Boolean) as PublicTitleDocument[]
-}
-
-export async function getAllPublicTitles(username: string): Promise<PublicTitleDocument[]> {
-  const titles: PublicTitleDocument[] = []
-  let cursor: QueryDocumentSnapshot | null = null
-  do {
-    const page = await getPublicTitles(username, { pageSize: 100, cursor, sort: 'newest' })
-    titles.push(...page.titles)
-    cursor = page.hasMore ? page.cursor : null
-  } while (cursor)
-  return titles
 }

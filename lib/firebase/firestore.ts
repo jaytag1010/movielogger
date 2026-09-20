@@ -334,6 +334,8 @@ export interface UserProfile {
   showPublicStats: boolean
   publicVisibility: PublicVisibilitySettings
   systemLists?: Partial<Record<SystemListType, SystemListConfig>>
+  /** Internal migration marker. The legacy master toggle is ignored in v2. */
+  publicSharingVersion?: number
 }
 
 /** Fetch the user's customization profile. Returns defaults if no doc exists. */
@@ -343,18 +345,21 @@ export async function getUserProfile(userId: string): Promise<UserProfile> {
     displayName: null,
     profilePhotoUrl: null,
     bio: '',
-    publicProfileEnabled: false,
+    publicProfileEnabled: true,
     publicUsername: null,
     showPublicStats: false,
     publicVisibility: DEFAULT_PUBLIC_VISIBILITY,
     systemLists: {},
+    publicSharingVersion: 2,
   }
   const data = snap.data()
   return {
     displayName: data.displayName ?? null,
     profilePhotoUrl: data.profilePhotoUrl ?? null,
     bio: data.bio ?? '',
-    publicProfileEnabled: data.publicProfileEnabled === true,
+    // Legacy field retained for compatibility; Version 5.2 profiles are
+    // publicly viewable whenever a public username exists.
+    publicProfileEnabled: true,
     publicUsername: data.publicUsername ?? null,
     showPublicStats: data.showPublicStats === true,
     publicVisibility: {
@@ -362,6 +367,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile> {
       types: { ...DEFAULT_PUBLIC_VISIBILITY.types, ...(data.publicVisibility?.types ?? {}) },
     },
     systemLists: data.systemLists ?? {},
+    publicSharingVersion: Number(data.publicSharingVersion) || 1,
   }
 }
 

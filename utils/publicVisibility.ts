@@ -17,18 +17,6 @@ export function normalizePublicVisibility(
   }
 }
 
-export function isEntryPublic(
-  entry: MediaEntry,
-  profileEnabled: boolean,
-  visibility: PublicVisibilitySettings
-): boolean {
-  if (!profileEnabled) return false
-  if (entry.publicVisibility === 'private') return false
-  if (entry.publicVisibility === 'public') return true
-  const type = getEffectiveMediaType(entry)
-  return Boolean(visibility.statuses[entry.status] && visibility.types[type])
-}
-
 export function toPublicTitle(entry: MediaEntry, publicId: string): PublicTitleDocument {
   const type = getEffectiveMediaType(entry)
   return {
@@ -59,6 +47,7 @@ export function toPublicTitle(entry: MediaEntry, publicId: string): PublicTitleD
     rewatchCount: entry.rewatchCount ?? 0,
     priority: entry.priority ?? null,
     createdAt: entry.createdAt ?? null,
+    folderVisible: true,
     isPublic: true,
   }
 }
@@ -76,7 +65,12 @@ export function calculatePublicStats(entries: MediaEntry[]): PublicStats {
     shorts: types.filter((type) => type === 'shorts').length,
     completed: entries.filter((entry) => entry.status === 'completed').length,
     watching: entries.filter((entry) => entry.status === 'watching').length,
-    watchHours: entries.reduce((sum, entry) => sum + calculateEntryWatchHours(entry), 0),
+    planned: entries.filter((entry) => entry.status === 'planned').length,
+    onHold: entries.filter((entry) => entry.status === 'on_hold').length,
+    dropped: entries.filter((entry) => entry.status === 'dropped').length,
+    watchHours: entries
+      .filter((entry) => entry.status === 'completed')
+      .reduce((sum, entry) => sum + calculateEntryWatchHours(entry), 0),
     averageRating: ratings.length > 0
       ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
       : null,

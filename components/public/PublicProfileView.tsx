@@ -15,16 +15,16 @@ export function PublicProfileView({ username }: { username: string }) {
   const [profile, setProfile] = useState<PublicProfileDocument | null>(null)
   const [folders, setFolders] = useState<PublicListDocument[]>([])
   const [loading, setLoading] = useState(true)
-  const [privateProfile, setPrivateProfile] = useState(false)
+  const [unavailableProfile, setUnavailableProfile] = useState(false)
 
   useEffect(() => {
     Promise.all([getPublicProfile(username), getPublicLists(username)])
       .then(([nextProfile, nextFolders]) => {
-        if (!nextProfile?.enabled) { setPrivateProfile(true); return }
+        if (!nextProfile) { setUnavailableProfile(true); return }
         setProfile(nextProfile)
         setFolders(nextFolders)
       })
-      .catch(() => setPrivateProfile(true))
+      .catch(() => setUnavailableProfile(true))
       .finally(() => setLoading(false))
   }, [username])
 
@@ -35,20 +35,20 @@ export function PublicProfileView({ username }: { username: string }) {
   }
 
   if (loading) return <PublicShell><div className="py-28 text-center text-white/45">Loading public profile…</div></PublicShell>
-  if (privateProfile || !profile) return <PublicShell><div className="mx-auto mt-24 max-w-md rounded-xl border border-white/10 bg-white/5 p-8 text-center"><Globe2 className="mx-auto h-9 w-9 text-white/25" /><h1 className="mt-4 text-xl font-semibold text-white">This MovieLogger profile is private.</h1><p className="mt-2 text-sm text-white/40">The owner has not made this profile available publicly.</p></div></PublicShell>
+  if (unavailableProfile || !profile) return <PublicShell><div className="mx-auto mt-24 max-w-md rounded-xl border border-white/10 bg-white/5 p-8 text-center"><Globe2 className="mx-auto h-9 w-9 text-white/25" /><h1 className="mt-4 text-xl font-semibold text-white">This MovieLogger profile is unavailable.</h1><p className="mt-2 text-sm text-white/40">Check the username and try again.</p></div></PublicShell>
 
   return <PublicShell>
     <header className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-7">
       <div className="flex items-start gap-4"><div className="h-20 w-20 shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/5">{profile.profilePhotoUrl ? <TMDBPosterImage src={profile.profilePhotoUrl} alt={profile.displayName} width={80} height={80} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-2xl font-bold text-white/40">{profile.displayName.slice(0, 2).toUpperCase()}</div>}</div><div className="min-w-0 flex-1"><h1 className="truncate text-2xl font-bold text-white">{profile.displayName}</h1><p className="text-sm text-blue-300">@{profile.username}</p>{profile.bio && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/55">{profile.bio}</p>}</div><Button size="icon" variant="outline" onClick={share} title="Share public profile"><Share2 className="h-4 w-4" /></Button></div>
       {profile.showStats && <PublicSummary profile={profile} />}
     </header>
-    <section className="mt-6"><h2 className="mb-3 text-lg font-semibold text-white">Public Folders</h2>{folders.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{folders.map((folder) => { const count = folder.titleCount ?? folder.titleIds.length; return <Link key={folder.slug} href={`/u/${profile.username}/lists/${folder.slug}`} className="rounded-xl border border-white/10 bg-white/[0.035] p-4 transition hover:border-blue-500/30 hover:bg-white/[0.06]"><div className="flex items-center gap-2"><Folder className="h-4 w-4 text-blue-300" /><p className="font-semibold text-white">{folder.name}</p></div>{folder.description && <p className="mt-2 line-clamp-2 text-xs text-white/40">{folder.description}</p>}<p className="mt-2 text-xs text-blue-300">{count} title{count === 1 ? '' : 's'}</p></Link> })}</div> : <p className="rounded-xl border border-dashed border-white/10 py-14 text-center text-sm text-white/35">No folders are currently public.</p>}</section>
+    {folders.length > 0 && <section className="mt-6"><h2 className="mb-3 text-lg font-semibold text-white">Public Folders</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{folders.map((folder) => { const count = folder.titleCount ?? folder.titleIds.length; return <Link key={folder.slug} href={`/u/${profile.username}/lists/${folder.slug}`} className="rounded-xl border border-white/10 bg-white/[0.035] p-4 transition hover:border-blue-500/30 hover:bg-white/[0.06]"><div className="flex items-center gap-2"><Folder className="h-4 w-4 text-blue-300" /><p className="font-semibold text-white">{folder.name}</p></div>{folder.description && <p className="mt-2 line-clamp-2 text-xs text-white/40">{folder.description}</p>}<p className="mt-2 text-xs text-blue-300">{count} title{count === 1 ? '' : 's'}</p></Link> })}</div></section>}
   </PublicShell>
 }
 
 function PublicSummary({ profile }: { profile: PublicProfileDocument }) {
   const stats = profile.stats
-  const items = [['Total Titles', stats.publicTitles], ['Movies', stats.movies], ['Series', stats.series], ['Shorts', stats.shorts], ['Watch Time', `${stats.watchHours.toFixed(2)} h`], ['Avg. Rating', stats.averageRating?.toFixed(1) ?? '—']]
+  const items = [['Total Titles', stats.publicTitles ?? 0], ['Movies', stats.movies ?? 0], ['Series', stats.series ?? 0], ['Shorts', stats.shorts ?? 0], ['Completed', stats.completed ?? 0], ['Watching', stats.watching ?? 0], ['Planned', stats.planned ?? 0], ['On Hold', stats.onHold ?? 0], ['Dropped', stats.dropped ?? 0], ['Watch Time', `${Number(stats.watchHours ?? 0).toFixed(2)} h`], ['Avg. Rating', stats.averageRating?.toFixed(1) ?? '—']]
   return <div className="mt-5 grid grid-cols-2 gap-2 border-t border-white/10 pt-4 sm:grid-cols-3 lg:grid-cols-6">{items.map(([label, value]) => <div key={label} className="rounded-lg bg-white/[0.035] px-3 py-2"><p className="text-lg font-semibold text-white">{value}</p><p className="text-[10px] uppercase text-white/35">{label}</p></div>)}</div>
 }
 

@@ -30,6 +30,9 @@ export interface PublicStats {
   shorts: number
   completed: number
   watching: number
+  planned: number
+  onHold: number
+  dropped: number
   watchHours: number
   averageRating: number | null
   completedThisYear: number
@@ -74,6 +77,8 @@ export interface PublicTitleDocument {
   rewatchCount: number
   priority: number | null
   createdAt: Timestamp | null
+  /** Security-rule marker: the title belongs to at least one public folder. */
+  folderVisible: true
   isPublic: true
 }
 
