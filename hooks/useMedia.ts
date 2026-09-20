@@ -24,6 +24,7 @@ import {
   buildTitleDeletedActivity,
   buildUpdateActivities,
 } from '@/utils/activity'
+import { removePublicEntry, syncPublicEntry } from '@/lib/firebase/publicSharing'
 
 export function useMedia() {
   const { entries, loading, filters, activeTab } = useMediaStore()
@@ -54,6 +55,9 @@ export function useMedia() {
       if (!user) throw new Error('Not authenticated')
       const entry = await createMediaEntry(user.uid, input)
       useMediaStore.getState().addEntry(entry)
+      await syncPublicEntry(user.uid, entry, useMediaStore.getState().entries).catch((err) => {
+        console.warn('Failed to synchronize public title', err)
+      })
       await addActivity(user.uid, buildTitleAddedActivity(entry)).catch((err) => {
         console.warn('Failed to record title-added activity', err)
       })
@@ -81,6 +85,12 @@ export function useMedia() {
     }
     useMediaStore.getState().updateEntry(id, normalizedUpdates)
     if (user && current) {
+      const synced = { ...current, ...normalizedUpdates } as MediaEntry
+      await syncPublicEntry(user.uid, synced, useMediaStore.getState().entries).catch((err) => {
+        console.warn('Failed to synchronize public title', err)
+      })
+    }
+    if (user && current) {
       const activities = buildUpdateActivities(current, normalizedUpdates as MediaEntryUpdate)
       activities.forEach((activity) => addActivity(user.uid, activity).catch(() => {}))
     }
@@ -107,10 +117,20 @@ export function useMedia() {
         }
       })
     )
-  }, [])
+    if (user) {
+      const refreshed = useMediaStore.getState().entries.find((entry) => entry.id === id)
+      if (refreshed) await syncPublicEntry(user.uid, refreshed, useMediaStore.getState().entries).catch(() => {})
+    }
+  }, [user])
 
   const removeEntry = useCallback(async (id: string) => {
     const current = useMediaStore.getState().entries.find((entry) => entry.id === id)
+    if (user && current) {
+      const remaining = useMediaStore.getState().entries.filter((entry) => entry.id !== id)
+      // Remove the sanitized public copy first so a failed private deletion can
+      // never leave a deleted title or its Notes publicly accessible.
+      await removePublicEntry(user.uid, current, remaining)
+    }
     await deleteMediaEntry(id)
     if (user && current) {
       addActivity(user.uid, buildTitleDeletedActivity(current)).catch(() => {})

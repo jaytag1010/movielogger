@@ -21,6 +21,7 @@ import {
   CalendarDays,
   Wrench,
   History,
+  Globe2,
 } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { GlassCard } from '@/components/common/GlassCard'
@@ -43,6 +44,7 @@ import { deleteAllUserEntries, getUserProfile, updateUserProfile, UserProfile } 
 import { addActivity } from '@/lib/firebase/activity'
 import { validatePosterFile, uploadPoster } from '@/lib/imgbb'
 import { useActivityHistory } from '@/hooks/useActivityHistory'
+import { DEFAULT_PUBLIC_VISIBILITY } from '@/types/public'
 
 const CONFIRM_PHRASE = 'CONTINUE'
 
@@ -78,7 +80,15 @@ export default function ProfilePage() {
   const router = useRouter()
 
   // ── Profile customization state ──────────────────────────────────────────
-  const [profile, setProfile] = useState<UserProfile>({ displayName: null, profilePhotoUrl: null })
+  const [profile, setProfile] = useState<UserProfile>({
+    displayName: null,
+    profilePhotoUrl: null,
+    bio: '',
+    publicProfileEnabled: false,
+    publicUsername: null,
+    showPublicStats: false,
+    publicVisibility: DEFAULT_PUBLIC_VISIBILITY,
+  })
   const [profileLoading, setProfileLoading] = useState(true)
 
   // Display name editing
@@ -478,6 +488,18 @@ export default function ProfilePage() {
                 <span className="ml-2 text-red-400/60">({entries.length})</span>
               )}
             </Button>
+          </div>
+        </GlassCard>
+
+        {/* ── Section 3: Library Tools ── */}
+        <GlassCard padding="md">
+          <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">Privacy &amp; Sharing</h3>
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0"><Globe2 className="w-4 h-4 text-emerald-300" /></div>
+              <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-white">Public Profile &amp; Lists</p><p className="text-xs text-white/40 mt-1">Private by default. Choose exactly what visitors may see.</p></div>
+              <Button size="sm" asChild><Link href="/public-profile">Manage</Link></Button>
+            </div>
           </div>
         </GlassCard>
 

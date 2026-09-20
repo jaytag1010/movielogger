@@ -2,10 +2,72 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    function signedIn() { return request.auth != null; }
+    function ownsUser(userId) { return signedIn() && request.auth.uid == userId; }
+    function ownsPublicUsername(username) {
+      return signedIn()
+        && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.publicUsername == username;
+    }
+    function publicProfileEnabled(username) {
+      return get(/databases/$(database)/documents/publicProfiles/$(username)).data.enabled == true;
     }
 
+    match /users/{userId} {
+      allow read, create, update, delete: if ownsUser(userId);
+    }
+    match /userProfiles/{userId} {
+      allow read, create, update, delete: if ownsUser(userId);
+    }
+    match /mediaEntries/{entryId} {
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+    }
+    match /counters/{counterId} {
+      allow read, create, update, delete: if signedIn() && counterId == 'user_' + request.auth.uid;
+    }
+    match /activityHistory/{activityId} {
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+    match /activityStates/{userId} {
+      allow read, create, update, delete: if ownsUser(userId);
+    }
+
+    // Username reservations are private. A denied transaction is reported to
+    // the claimant as an unavailable username without revealing its owner UID.
+    match /publicUsernames/{username} {
+      allow get: if signedIn() && (!exists(/databases/$(database)/documents/publicUsernames/$(username))
+        || resource.data.ownerUid == request.auth.uid);
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && !exists(/databases/$(database)/documents/publicUsernames/$(username));
+      allow update, delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // Sanitized public mirror. No UID, email, private document ID, ML ID,
+    // activity history, notification, or import/export data is stored here.
+    match /publicProfiles/{username} {
+      allow read: if resource.data.enabled == true || ownsPublicUsername(username);
+      allow create, update, delete: if ownsPublicUsername(username);
+
+      match /titles/{publicTitleId} {
+        allow read: if ownsPublicUsername(username)
+          || publicProfileEnabled(username);
+        allow create, update, delete: if ownsPublicUsername(username);
+      }
+      match /lists/{listSlug} {
+        allow read: if ownsPublicUsername(username)
+          || (publicProfileEnabled(username) && resource.data.visibility == 'public');
+        allow create, update, delete: if ownsPublicUsername(username);
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }

@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase/firestore'
+import type { PublicTitleVisibility } from './public'
 
 export type MediaType = 'movie' | 'series' | 'shorts'
 
@@ -11,6 +12,10 @@ export type MediaStatus =
 
 export interface MediaEntry {
   id?: string
+  /** Stable identifier used only in the sanitized public-library mirror. */
+  publicId?: string | null
+  /** Per-title public visibility. Existing entries inherit the library setting. */
+  publicVisibility?: PublicTitleVisibility
   internalId: string
   /** Preserved from the source Excel/CSV ID column during import. Never used as primary key. */
   legacyId?: string | null

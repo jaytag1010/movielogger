@@ -16,6 +16,8 @@ import { GlassCard } from '@/components/common/GlassCard'
 import { parseImportFile, buildImportPreview } from '@/lib/import/parser'
 import { fetchMovieMetadata, fetchTVMetadata, fetchSeasonMetadata } from '@/lib/tmdb/api'
 import { batchCreateMediaEntries } from '@/lib/firebase/firestore'
+import { rebuildPublicLibrary } from '@/lib/firebase/publicSharing'
+import { useMediaStore } from '@/store/mediaStore'
 import { addActivity } from '@/lib/firebase/activity'
 import { useMedia } from '@/hooks/useMedia'
 import { useAuthStore } from '@/store/authStore'
@@ -276,7 +278,9 @@ export default function ImportPage() {
     }
     setStep('report')
     // Non-blocking: refresh My List store so "Go to My List" shows new entries
-    loadEntries().catch(() => {})
+    loadEntries()
+      .then(() => user && rebuildPublicLibrary(user.uid, useMediaStore.getState().entries))
+      .catch(() => {})
   }
 
   // ---------------------------------------------------------------------------

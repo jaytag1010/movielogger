@@ -75,6 +75,27 @@ async function createUserProfile(user: User): Promise<void> {
       updatedAt: serverTimestamp(),
     })
   }
+
+  // Public sharing is always opt-in. Creating this explicit default keeps new
+  // accounts private even before they ever open Privacy & Sharing.
+  const customizationRef = doc(firestore, 'userProfiles', user.uid)
+  const customizationSnap = await getDoc(customizationRef)
+  if (!customizationSnap.exists()) {
+    await setDoc(customizationRef, {
+      displayName: user.displayName ?? null,
+      profilePhotoUrl: user.photoURL ?? null,
+      bio: '',
+      publicProfileEnabled: false,
+      publicUsername: null,
+      showPublicStats: false,
+      publicVisibility: {
+        statuses: { completed: false, watching: false, planned: false, on_hold: false, dropped: false },
+        types: { movie: false, series: false, shorts: false },
+      },
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  }
 }
 
 export function onAuthChange(callback: (user: User | null) => void) {

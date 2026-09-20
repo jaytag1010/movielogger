@@ -65,6 +65,7 @@ const schema = z.object({
   rewatchCount: z.coerce.number().int().min(0).nullable().optional(),
   personalRating: z.coerce.number().min(0).max(10).nullable().optional(),
   priority: z.coerce.number().int().min(1).max(5).nullable().optional(),
+  publicVisibility: z.enum(['inherit', 'public', 'private']).optional(),
   ageRating: z.string().nullable().optional(),
   country: z.string().nullable().optional(),
   dateFinished: z.string().nullable().optional(),
@@ -160,6 +161,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
         rewatchCount:           entry.rewatchCount           ?? 0,
         personalRating:         entry.personalRating         ?? undefined,
         priority:               entry.priority               ?? 3,
+        publicVisibility:       entry.publicVisibility       ?? 'inherit',
         ageRating:              entry.ageRating              ?? '',
         country:                entry.country                ?? '',
         dateFinished:           entry.dateFinished
@@ -381,6 +383,7 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
         personalRating:         data.personalRating         ?? null,
         priority,
         priorityUpdatedAt,
+        publicVisibility:       data.publicVisibility ?? 'inherit',
         ageRating:              data.ageRating              || null,
         genres,
         country:                data.country                || null,
@@ -825,6 +828,22 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
               className="hidden"
               onChange={handlePosterFileSelect}
             />
+          </div>
+
+          {/* ── Privacy ── */}
+          <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <Label>Public Visibility</Label>
+            <Controller name="publicVisibility" control={control} render={({ field }) => (
+              <Select value={field.value ?? 'inherit'} onValueChange={field.onChange}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inherit">Use Library Setting</SelectItem>
+                  <SelectItem value="public">Public</SelectItem>
+                  <SelectItem value="private">Private</SelectItem>
+                </SelectContent>
+              </Select>
+            )} />
+            <p className="text-xs text-white/35">Notes for public titles may be visible on your public profile. The Public Profile master switch always takes precedence.</p>
           </div>
 
           {/* ── Notes ── */}

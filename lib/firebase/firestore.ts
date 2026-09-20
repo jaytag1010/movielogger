@@ -22,6 +22,7 @@ import { MediaEntry, MediaEntryInput, MediaEntryUpdate } from '@/types/media'
 import { formatInternalId, generateInternalId, reserveInternalIds } from '@/utils/idGenerator'
 import { normalizeCountry } from '@/utils/countries'
 import { calculateStoredWatchHours } from '@/utils/watchHours'
+import { DEFAULT_PUBLIC_VISIBILITY, PublicVisibilitySettings } from '@/types/public'
 
 const COLLECTION = 'mediaEntries'
 
@@ -81,6 +82,8 @@ export async function createMediaEntry(
     ...normalizedInput,
     userId,
     internalId,
+    publicId: crypto.randomUUID(),
+    publicVisibility: normalizedInput.publicVisibility ?? 'inherit',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     watchingActivityAt: normalizedInput.status === 'watching' ? serverTimestamp() : null,
@@ -238,6 +241,8 @@ export async function batchCreateMediaEntries(
         ...normalizedInput,
         userId,
         internalId: ids[i + j],
+        publicId: crypto.randomUUID(),
+        publicVisibility: normalizedInput.publicVisibility ?? 'inherit',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         watchingActivityAt: normalizedInput.status === 'watching' ? serverTimestamp() : null,
@@ -323,16 +328,37 @@ const PROFILES_COLLECTION = 'userProfiles'
 export interface UserProfile {
   displayName: string | null
   profilePhotoUrl: string | null
+  bio: string
+  publicProfileEnabled: boolean
+  publicUsername: string | null
+  showPublicStats: boolean
+  publicVisibility: PublicVisibilitySettings
 }
 
 /** Fetch the user's customization profile. Returns defaults if no doc exists. */
 export async function getUserProfile(userId: string): Promise<UserProfile> {
   const snap = await getDoc(doc(db(), PROFILES_COLLECTION, userId))
-  if (!snap.exists()) return { displayName: null, profilePhotoUrl: null }
+  if (!snap.exists()) return {
+    displayName: null,
+    profilePhotoUrl: null,
+    bio: '',
+    publicProfileEnabled: false,
+    publicUsername: null,
+    showPublicStats: false,
+    publicVisibility: DEFAULT_PUBLIC_VISIBILITY,
+  }
   const data = snap.data()
   return {
     displayName: data.displayName ?? null,
     profilePhotoUrl: data.profilePhotoUrl ?? null,
+    bio: data.bio ?? '',
+    publicProfileEnabled: data.publicProfileEnabled === true,
+    publicUsername: data.publicUsername ?? null,
+    showPublicStats: data.showPublicStats === true,
+    publicVisibility: {
+      statuses: { ...DEFAULT_PUBLIC_VISIBILITY.statuses, ...(data.publicVisibility?.statuses ?? {}) },
+      types: { ...DEFAULT_PUBLIC_VISIBILITY.types, ...(data.publicVisibility?.types ?? {}) },
+    },
   }
 }
 
@@ -341,5 +367,21 @@ export async function updateUserProfile(
   userId: string,
   updates: Partial<UserProfile>
 ): Promise<void> {
-  await setDoc(doc(db(), PROFILES_COLLECTION, userId), updates, { merge: true })
+  const firestore = db()
+  await setDoc(doc(firestore, PROFILES_COLLECTION, userId), { ...updates, updatedAt: serverTimestamp() }, { merge: true })
+
+  // Keep the small public identity document current without exposing the
+  // private profile document. Library/stat updates remain in publicSharing.ts.
+  if ('displayName' in updates || 'profilePhotoUrl' in updates || 'bio' in updates) {
+    const snap = await getDoc(doc(firestore, PROFILES_COLLECTION, userId))
+    const data = snap.data()
+    if (data?.publicUsername) {
+      await setDoc(doc(firestore, 'publicProfiles', data.publicUsername), {
+        ...(data.displayName !== undefined ? { displayName: data.displayName || data.publicUsername } : {}),
+        ...(data.profilePhotoUrl !== undefined ? { profilePhotoUrl: data.profilePhotoUrl ?? null } : {}),
+        ...(data.bio !== undefined ? { bio: data.bio ?? '' } : {}),
+        updatedAt: serverTimestamp(),
+      }, { merge: true }).catch(() => {})
+    }
+  }
 }

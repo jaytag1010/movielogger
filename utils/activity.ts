@@ -25,6 +25,7 @@ const FIELD_LABELS: Partial<Record<keyof MediaEntry, string>> = {
   posterUrl: 'Poster',
   backdropUrl: 'Backdrop',
   specialNotes: 'Notes',
+  publicVisibility: 'Public Visibility',
 }
 
 const IGNORED_FIELDS = new Set<keyof MediaEntry>([
