@@ -18,6 +18,9 @@ service cloud.firestore {
     match /userProfiles/{userId} {
       allow read, create, update, delete: if ownsUser(userId);
     }
+    match /userLists/{userId}/lists/{listSlug} {
+      allow read, create, update, delete: if ownsUser(userId);
+    }
     match /mediaEntries/{entryId} {
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
       allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;

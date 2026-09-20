@@ -45,6 +45,8 @@ import { addActivity } from '@/lib/firebase/activity'
 import { validatePosterFile, uploadPoster } from '@/lib/imgbb'
 import { useActivityHistory } from '@/hooks/useActivityHistory'
 import { DEFAULT_PUBLIC_VISIBILITY } from '@/types/public'
+import { OverallSummary } from '@/components/profile/OverallSummary'
+import { MyLists } from '@/components/profile/MyLists'
 
 const CONFIRM_PHRASE = 'CONTINUE'
 
@@ -74,7 +76,7 @@ function formatMemberSince(creationTime: string | undefined): string | null {
 export default function ProfilePage() {
   const { user } = useAuthStore()
   const { logOut } = useAuthActions()
-  const { entries } = useMedia()
+  const { entries, loading: mediaLoading } = useMedia()
   const { activities } = useActivityHistory()
   const { setEntries } = useMediaStore()
   const router = useRouter()
@@ -88,6 +90,7 @@ export default function ProfilePage() {
     publicUsername: null,
     showPublicStats: false,
     publicVisibility: DEFAULT_PUBLIC_VISIBILITY,
+    systemLists: {},
   })
   const [profileLoading, setProfileLoading] = useState(true)
 
@@ -98,6 +101,7 @@ export default function ProfilePage() {
 
   // Photo upload
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [avatarVersion, setAvatarVersion] = useState(0)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
   // ── Existing state ────────────────────────────────────────────────────────
@@ -122,7 +126,10 @@ export default function ProfilePage() {
 
   // ── Derived values ────────────────────────────────────────────────────────
   const effectiveDisplayName = profile.displayName || user?.displayName || 'Anonymous User'
-  const effectivePhotoUrl    = profile.profilePhotoUrl || user?.photoURL || ''
+  const rawPhotoUrl          = profile.profilePhotoUrl || user?.photoURL || ''
+  const effectivePhotoUrl    = rawPhotoUrl && avatarVersion > 0
+    ? `${rawPhotoUrl}${rawPhotoUrl.includes('?') ? '&' : '?'}mlv=${avatarVersion}`
+    : rawPhotoUrl
   const maskedEmail          = user?.email ? maskEmail(user.email) : ''
   const memberSince          = formatMemberSince(user?.metadata?.creationTime)
   const unmatchedCount       = entries.filter((entry) => entry.tmdbId == null && !entry.tmdbUnmatchedDismissedAt).length
@@ -222,8 +229,18 @@ export default function ProfilePage() {
     try {
       validatePosterFile(file)
       const url = await uploadPoster(file)
+      if (!/^https:\/\//i.test(url)) throw new Error('Image host returned an invalid URL.')
+      await new Promise<void>((resolve, reject) => {
+        const image = new Image()
+        image.onload = () => resolve()
+        image.onerror = () => reject(new Error('The uploaded image could not be loaded.'))
+        image.src = url
+      })
       await updateUserProfile(user.uid, { profilePhotoUrl: url })
-      setProfile((prev) => ({ ...prev, profilePhotoUrl: url }))
+      const persisted = await getUserProfile(user.uid)
+      if (persisted.profilePhotoUrl !== url) throw new Error('Profile photo could not be verified after saving.')
+      setProfile(persisted)
+      setAvatarVersion(Date.now())
       toast.success('Profile photo updated')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Photo upload failed')
@@ -237,7 +254,10 @@ export default function ProfilePage() {
     if (!user) return
     try {
       await updateUserProfile(user.uid, { profilePhotoUrl: null })
-      setProfile((prev) => ({ ...prev, profilePhotoUrl: null }))
+      const persisted = await getUserProfile(user.uid)
+      if (persisted.profilePhotoUrl) throw new Error('Profile photo removal could not be verified.')
+      setProfile(persisted)
+      setAvatarVersion(Date.now())
       toast.success('Profile photo removed')
     } catch {
       toast.error('Failed to remove photo')
@@ -433,6 +453,14 @@ export default function ProfilePage() {
             <LogOut className="w-4 h-4 mr-2" />
             {loggingOut ? 'Signing out…' : 'Sign Out'}
           </Button>
+        </GlassCard>
+
+        <GlassCard padding="md">
+          <OverallSummary entries={entries} />
+        </GlassCard>
+
+        <GlassCard padding="md">
+          <MyLists entries={entries} loading={mediaLoading} profile={profile} onProfileChange={setProfile} />
         </GlassCard>
 
         {/* ── Section 2: Data Management ── */}

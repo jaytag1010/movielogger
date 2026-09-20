@@ -22,7 +22,7 @@ import { MediaEntry, MediaEntryInput, MediaEntryUpdate } from '@/types/media'
 import { formatInternalId, generateInternalId, reserveInternalIds } from '@/utils/idGenerator'
 import { normalizeCountry } from '@/utils/countries'
 import { calculateStoredWatchHours } from '@/utils/watchHours'
-import { DEFAULT_PUBLIC_VISIBILITY, PublicVisibilitySettings } from '@/types/public'
+import { DEFAULT_PUBLIC_VISIBILITY, PublicVisibilitySettings, SystemListConfig, SystemListType } from '@/types/public'
 
 const COLLECTION = 'mediaEntries'
 
@@ -333,6 +333,7 @@ export interface UserProfile {
   publicUsername: string | null
   showPublicStats: boolean
   publicVisibility: PublicVisibilitySettings
+  systemLists?: Partial<Record<SystemListType, SystemListConfig>>
 }
 
 /** Fetch the user's customization profile. Returns defaults if no doc exists. */
@@ -346,6 +347,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile> {
     publicUsername: null,
     showPublicStats: false,
     publicVisibility: DEFAULT_PUBLIC_VISIBILITY,
+    systemLists: {},
   }
   const data = snap.data()
   return {
@@ -359,6 +361,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile> {
       statuses: { ...DEFAULT_PUBLIC_VISIBILITY.statuses, ...(data.publicVisibility?.statuses ?? {}) },
       types: { ...DEFAULT_PUBLIC_VISIBILITY.types, ...(data.publicVisibility?.types ?? {}) },
     },
+    systemLists: data.systemLists ?? {},
   }
 }
 
@@ -368,20 +371,28 @@ export async function updateUserProfile(
   updates: Partial<UserProfile>
 ): Promise<void> {
   const firestore = db()
-  await setDoc(doc(firestore, PROFILES_COLLECTION, userId), { ...updates, updatedAt: serverTimestamp() }, { merge: true })
-
-  // Keep the small public identity document current without exposing the
-  // private profile document. Library/stat updates remain in publicSharing.ts.
-  if ('displayName' in updates || 'profilePhotoUrl' in updates || 'bio' in updates) {
-    const snap = await getDoc(doc(firestore, PROFILES_COLLECTION, userId))
-    const data = snap.data()
-    if (data?.publicUsername) {
-      await setDoc(doc(firestore, 'publicProfiles', data.publicUsername), {
-        ...(data.displayName !== undefined ? { displayName: data.displayName || data.publicUsername } : {}),
-        ...(data.profilePhotoUrl !== undefined ? { profilePhotoUrl: data.profilePhotoUrl ?? null } : {}),
-        ...(data.bio !== undefined ? { bio: data.bio ?? '' } : {}),
-        updatedAt: serverTimestamp(),
-      }, { merge: true }).catch(() => {})
-    }
+  const profileRef = doc(firestore, PROFILES_COLLECTION, userId)
+  const identityChanged = 'displayName' in updates || 'profilePhotoUrl' in updates || 'bio' in updates
+  if (!identityChanged) {
+    await setDoc(profileRef, { ...updates, updatedAt: serverTimestamp() }, { merge: true })
+    return
   }
+
+  // Persist the private profile and sanitized public identity atomically so
+  // photo success can never be reported while the public avatar is stale.
+  const existing = await getDoc(profileRef)
+  const current = existing.data() ?? {}
+  const username = updates.publicUsername ?? current.publicUsername
+  const next = { ...current, ...updates }
+  const batch = writeBatch(firestore)
+  batch.set(profileRef, { ...updates, updatedAt: serverTimestamp() }, { merge: true })
+  if (username) {
+    batch.set(doc(firestore, 'publicProfiles', username), {
+      displayName: next.displayName || username,
+      profilePhotoUrl: next.profilePhotoUrl ?? null,
+      bio: next.bio ?? '',
+      updatedAt: serverTimestamp(),
+    }, { merge: true })
+  }
+  await batch.commit()
 }

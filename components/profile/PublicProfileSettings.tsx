@@ -12,14 +12,14 @@ import { useAuthStore } from '@/store/authStore'
 import { useMedia } from '@/hooks/useMedia'
 import { getUserProfile, UserProfile } from '@/lib/firebase/firestore'
 import {
-  deletePublicList,
+  deleteOwnerList,
   getOwnerLists,
-  savePublicList,
+  saveOwnerList,
   savePublicProfileSettings,
   validatePublicUsername,
 } from '@/lib/firebase/publicSharing'
 import { addActivity } from '@/lib/firebase/activity'
-import { DEFAULT_PUBLIC_VISIBILITY, PublicListDocument, PublicVisibilitySettings } from '@/types/public'
+import { DEFAULT_PUBLIC_VISIBILITY, OwnerListDocument, PublicVisibilitySettings } from '@/types/public'
 import { MEDIA_STATUS_LABELS, MediaEntry, MediaStatus, MediaType } from '@/types/media'
 import { getDisplayTitle, getEffectiveMediaType, getMediaTypeLabel } from '@/utils/formatters'
 import { isEntryPublic, normalizePublicVisibility } from '@/utils/publicVisibility'
@@ -35,28 +35,29 @@ const EMPTY_PROFILE: UserProfile = {
   publicUsername: null,
   showPublicStats: false,
   publicVisibility: DEFAULT_PUBLIC_VISIBILITY,
+  systemLists: {},
 }
 
 export function PublicProfileSettings() {
   const { user } = useAuthStore()
-  const { entries, loadEntries } = useMedia()
+  const { entries, loading: mediaLoading, loadEntries } = useMedia()
   const [profile, setProfile] = useState<UserProfile>(EMPTY_PROFILE)
   const [username, setUsername] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [lists, setLists] = useState<PublicListDocument[]>([])
+  const [lists, setLists] = useState<OwnerListDocument[]>([])
 
   useEffect(() => {
-    if (!user) return
+    if (!user || mediaLoading) return
     getUserProfile(user.uid)
       .then(async (value) => {
         setProfile(value)
         setUsername(value.publicUsername ?? '')
-        if (value.publicUsername) setLists(await getOwnerLists(value.publicUsername))
+        setLists(await getOwnerLists(user.uid, value.publicUsername, entries))
       })
       .catch(() => toast.error('Could not load public profile settings.'))
       .finally(() => setLoading(false))
-  }, [user])
+  }, [user, mediaLoading])
 
   function setStatusVisibility(status: MediaStatus, checked: boolean) {
     setProfile((current) => ({
@@ -97,7 +98,7 @@ export function PublicProfileSettings() {
       setProfile(saved)
       setUsername(saved.publicUsername ?? username)
       await loadEntries()
-      setLists(await getOwnerLists(saved.publicUsername!))
+      setLists(await getOwnerLists(user.uid, saved.publicUsername, entries))
       if (beforeEnabled !== saved.publicProfileEnabled) {
         addActivity(user.uid, {
           category: 'system',
@@ -215,14 +216,14 @@ export function PublicProfileSettings() {
 
 function PublicListsManager({ entries, lists, username, profileEnabled, visibility, onListsChange }: {
   entries: MediaEntry[]
-  lists: PublicListDocument[]
+  lists: OwnerListDocument[]
   username: string | null
   profileEnabled: boolean
   visibility: PublicVisibilitySettings
-  onListsChange: (lists: PublicListDocument[]) => void
+  onListsChange: (lists: OwnerListDocument[]) => void
 }) {
   const { user } = useAuthStore()
-  const [editing, setEditing] = useState<PublicListDocument | null>(null)
+  const [editing, setEditing] = useState<OwnerListDocument | null>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [isPublic, setIsPublic] = useState(false)
@@ -230,14 +231,14 @@ function PublicListsManager({ entries, lists, username, profileEnabled, visibili
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const byPublicId = useMemo(() => new Map(entries.filter((entry) => entry.publicId).map((entry) => [entry.publicId!, entry])), [entries])
+  const byEntryId = useMemo(() => new Map(entries.filter((entry) => entry.id).map((entry) => [entry.id!, entry])), [entries])
   const searchResults = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase()
     if (!needle) return []
-    return entries.filter((entry) => entry.publicId && getDisplayTitle(entry).toLocaleLowerCase().includes(needle)).slice(0, 30)
+    return entries.filter((entry) => entry.id && getDisplayTitle(entry).toLocaleLowerCase().includes(needle)).slice(0, 30)
   }, [entries, search])
   const privateInList = titleIds.filter((id) => {
-    const entry = byPublicId.get(id)
+    const entry = byEntryId.get(id)
     return entry && !isEntryPublic(entry, profileEnabled, normalizePublicVisibility(visibility))
   }).length
 
@@ -245,12 +246,12 @@ function PublicListsManager({ entries, lists, username, profileEnabled, visibili
     setEditing(null); setName(''); setDescription(''); setIsPublic(false); setTitleIds([]); setSearch('')
   }
 
-  function editList(list: PublicListDocument) {
-    setEditing(list); setName(list.name); setDescription(list.description); setIsPublic(list.visibility === 'public'); setTitleIds(list.titleIds); setSearch('')
+  function editList(list: OwnerListDocument) {
+    setEditing(list); setName(list.name); setDescription(list.description); setIsPublic(list.visibility === 'public'); setTitleIds(list.entryIds); setSearch('')
   }
 
-  function toggleTitle(publicId: string) {
-    setTitleIds((current) => current.includes(publicId) ? current.filter((id) => id !== publicId) : [...current, publicId])
+  function toggleTitle(entryId: string) {
+    setTitleIds((current) => current.includes(entryId) ? current.filter((id) => id !== entryId) : [...current, entryId])
   }
 
   function move(index: number, delta: number) {
@@ -268,13 +269,19 @@ function PublicListsManager({ entries, lists, username, profileEnabled, visibili
     if (!name.trim()) { toast.error('Enter a list name.'); return }
     setSaving(true)
     try {
-      const saved = await savePublicList(username, {
+      if (!user) return
+      const saved = await saveOwnerList(user.uid, username, {
         slug: editing?.slug,
         name: name.trim(),
         description: description.trim(),
         visibility: isPublic ? 'public' : 'private',
-        titleIds,
-      })
+        kind: 'custom',
+        systemType: null,
+        autoUpdate: false,
+        titleCount: titleIds.length,
+        titleIds: [],
+        entryIds: titleIds,
+      }, entries, { ...profileFromProps(profileEnabled, visibility), publicUsername: username })
       onListsChange([...lists.filter((list) => list.slug !== saved.slug), saved])
       if (user) addActivity(user.uid, { category: 'library', action: editing ? 'Public List Edited' : 'Public List Created', summary: `${saved.name} was ${editing ? 'updated' : 'created'}.` }).catch(() => {})
       toast.success(editing ? 'List updated.' : 'List created.')
@@ -284,9 +291,9 @@ function PublicListsManager({ entries, lists, username, profileEnabled, visibili
     } finally { setSaving(false) }
   }
 
-  async function removeList(list: PublicListDocument) {
-    if (!username || !confirm(`Delete “${list.name}”?`)) return
-    await deletePublicList(username, list.slug)
+  async function removeList(list: OwnerListDocument) {
+    if (!user || !confirm(`Delete “${list.name}”?`)) return
+    await deleteOwnerList(user.uid, username, list.slug)
     onListsChange(lists.filter((item) => item.slug !== list.slug))
     if (user) addActivity(user.uid, { category: 'library', action: 'Public List Deleted', summary: `${list.name} was deleted.` }).catch(() => {})
     toast.success('List deleted.')
@@ -298,7 +305,7 @@ function PublicListsManager({ entries, lists, username, profileEnabled, visibili
       <p className="mt-1 text-xs text-white/40">Lists default to private. Public lists never reveal titles that resolve to private.</p>
       {lists.length > 0 && <div className="mt-4 space-y-2">{lists.map((list) => (
         <div key={list.slug} className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.025] p-3">
-          <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-white">{list.name}</p><p className="text-xs text-white/35">{list.titleIds.length} titles · {list.visibility === 'public' ? 'Public' : 'Private'}</p></div>
+          <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-white">{list.name}</p><p className="text-xs text-white/35">{list.entryIds.length} titles · {list.visibility === 'public' ? 'Public' : 'Private'}</p></div>
           <Button size="sm" variant="ghost" onClick={() => editList(list)}>Edit</Button>
           <Button size="sm" variant="ghost" className="text-red-300" onClick={() => removeList(list)}><Trash2 className="h-4 w-4" /></Button>
         </div>
@@ -310,10 +317,10 @@ function PublicListsManager({ entries, lists, username, profileEnabled, visibili
         <Textarea className="mt-3" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description (optional)" />
         <Input className="mt-3" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search your library to add titles…" />
         {searchResults.length > 0 && <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-white/10">{searchResults.map((entry) => (
-          <button key={entry.publicId} type="button" onClick={() => toggleTitle(entry.publicId!)} className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-white/70 last:border-0 hover:bg-white/5"><span className="truncate">{getDisplayTitle(entry)}</span><span className="ml-2 text-xs text-blue-300">{titleIds.includes(entry.publicId!) ? 'Added' : 'Add'}</span></button>
+          <button key={entry.id} type="button" onClick={() => toggleTitle(entry.id!)} className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-white/70 last:border-0 hover:bg-white/5"><span className="truncate">{getDisplayTitle(entry)}</span><span className="ml-2 text-xs text-blue-300">{titleIds.includes(entry.id!) ? 'Added' : 'Add'}</span></button>
         ))}</div>}
         {titleIds.length > 0 && <div className="mt-3 space-y-1">{titleIds.map((id, index) => {
-          const entry = byPublicId.get(id)
+          const entry = byEntryId.get(id)
           return <div key={id} className="flex items-center gap-2 rounded-lg bg-white/[0.035] px-2 py-1.5"><span className="w-6 text-center text-xs text-white/30">{index + 1}</span><span className="min-w-0 flex-1 truncate text-xs text-white/70">{entry ? getDisplayTitle(entry) : 'Unavailable title'}</span><button onClick={() => move(index, -1)} disabled={index === 0}><ArrowUp className="h-3.5 w-3.5" /></button><button onClick={() => move(index, 1)} disabled={index === titleIds.length - 1}><ArrowDown className="h-3.5 w-3.5" /></button><button onClick={() => toggleTitle(id)} className="text-red-300">×</button></div>
         })}</div>}
         {isPublic && privateInList > 0 && <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">{privateInList} title{privateInList === 1 ? ' is' : 's are'} private and will not appear to public viewers.</p>}
@@ -321,6 +328,10 @@ function PublicListsManager({ entries, lists, username, profileEnabled, visibili
       </div>
     </GlassCard>
   )
+}
+
+function profileFromProps(enabled: boolean, visibility: PublicVisibilitySettings): UserProfile {
+  return { displayName: null, profilePhotoUrl: null, bio: '', publicProfileEnabled: enabled, publicUsername: null, showPublicStats: false, publicVisibility: visibility, systemLists: {} }
 }
 
 function Toggle({ checked, onChange, label, description }: { checked: boolean; onChange: (checked: boolean) => void; label: string; description?: string }) {

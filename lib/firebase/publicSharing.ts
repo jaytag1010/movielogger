@@ -23,6 +23,7 @@ import { initApp } from './config'
 import type { MediaEntry } from '@/types/media'
 import type {
   PublicListDocument,
+  OwnerListDocument,
   PublicProfileDocument,
   PublicTitleDocument,
   PublicVisibilitySettings,
@@ -35,6 +36,7 @@ import {
   slugifyPublicList,
   toPublicTitle,
 } from '@/utils/publicVisibility'
+import { getSystemListConfig, resolveSystemListEntries, SYSTEM_LISTS } from '@/utils/systemLists'
 
 const RESERVED_USERNAMES = new Set([
   'admin', 'api', 'app', 'dashboard', 'login', 'logout', 'profile', 'settings',
@@ -193,14 +195,16 @@ export async function savePublicProfileSettings(
   },
   previousUsername?: string | null
 ): Promise<UserProfile> {
+  const currentProfile = await getUserProfile(userId)
   const preservedLists = previousUsername && normalizePublicUsername(previousUsername) !== normalizePublicUsername(settings.publicUsername)
-    ? await getOwnerLists(previousUsername)
+    ? await getOwnerLists(userId, previousUsername, entries)
     : []
   const username = await claimPublicUsername(userId, settings.publicUsername, previousUsername)
   const profile: UserProfile = {
     ...settings,
     publicUsername: username,
     publicVisibility: normalizePublicVisibility(settings.publicVisibility),
+    systemLists: currentProfile.systemLists ?? {},
   }
   await updateUserProfile(userId, profile)
   // Close the public read gate before rebuilding. This prevents stale titles
@@ -212,14 +216,28 @@ export async function savePublicProfileSettings(
   }, { merge: true })
   await rebuildPublicLibrary(userId, entries, profile)
   if (preservedLists.length > 0) {
-    await Promise.all(preservedLists.map((list) => savePublicList(username, {
-      slug: list.slug,
-      name: list.name,
-      description: list.description,
-      visibility: list.visibility,
-      titleIds: list.titleIds,
-    })))
+    await Promise.all(preservedLists.map((list) => publishOwnerList(username, list, entries, profile)))
   }
+  await Promise.all(SYSTEM_LISTS.map(async (definition) => {
+    const config = getSystemListConfig(profile.systemLists, definition.type)
+    if (config.visibility !== 'public') return
+    const resolved = resolveSystemListEntries(definition.type, config, entries)
+    const visibleIds = resolved
+      .filter((entry) => isEntryPublic(entry, profile.publicProfileEnabled, profile.publicVisibility))
+      .map((entry) => entry.publicId)
+      .filter((id): id is string => !!id)
+    await publishSystemList(username, {
+      slug: definition.type,
+      name: definition.name,
+      description: definition.description,
+      visibility: 'public',
+      kind: 'system',
+      systemType: definition.type,
+      autoUpdate: config.autoUpdate,
+      titleCount: visibleIds.length,
+      titleIds: config.autoUpdate ? [] : visibleIds,
+    })
+  }))
   return profile
 }
 
@@ -326,9 +344,83 @@ export async function getPublicLists(username: string): Promise<PublicListDocume
   return snap.docs.map((item) => item.data() as PublicListDocument)
 }
 
-export async function getOwnerLists(username: string): Promise<PublicListDocument[]> {
-  const snap = await getDocs(collection(db(), 'publicProfiles', normalizePublicUsername(username), 'lists'))
-  return snap.docs.map((item) => item.data() as PublicListDocument)
+export async function getOwnerLists(userId: string, legacyUsername?: string | null, entries: MediaEntry[] = []): Promise<OwnerListDocument[]> {
+  const ownerRef = collection(db(), 'userLists', userId, 'lists')
+  const snap = await getDocs(ownerRef)
+  if (!snap.empty) return snap.docs.map((item) => item.data() as OwnerListDocument)
+
+  // One-time compatibility bridge for lists created in Version 5.0.
+  if (!legacyUsername) return []
+  const legacy = await getDocs(collection(db(), 'publicProfiles', normalizePublicUsername(legacyUsername), 'lists'))
+  const entryIdByPublicId = new Map(entries.filter((entry) => entry.id && entry.publicId).map((entry) => [entry.publicId!, entry.id!]))
+  const migrated: OwnerListDocument[] = legacy.docs
+    .map((item) => item.data() as PublicListDocument)
+    .filter((item) => (item.kind ?? 'custom') === 'custom')
+    .map((item) => ({ ...item, ownerUid: userId, entryIds: item.titleIds.map((id) => entryIdByPublicId.get(id)).filter((id): id is string => !!id) }))
+  await Promise.all(migrated.map((item) => setDoc(doc(ownerRef, item.slug), item)))
+  return migrated
+}
+
+async function publishOwnerList(
+  username: string,
+  list: OwnerListDocument,
+  entries: MediaEntry[],
+  profile: UserProfile
+): Promise<void> {
+  const normalized = normalizePublicVisibility(profile.publicVisibility)
+  const byEntryId = new Map(entries.filter((entry) => entry.id).map((entry) => [entry.id!, entry]))
+  const titleIds = list.entryIds
+    .map((id) => byEntryId.get(id))
+    .filter((entry): entry is MediaEntry => !!entry && isEntryPublic(entry, profile.publicProfileEnabled, normalized))
+    .map((entry) => entry.publicId)
+    .filter((id): id is string => !!id)
+  await savePublicList(username, {
+    slug: list.slug,
+    name: list.name,
+    description: list.description,
+    visibility: list.visibility,
+    kind: 'custom',
+    systemType: null,
+    autoUpdate: false,
+    titleCount: titleIds.length,
+    titleIds,
+  })
+}
+
+export async function saveOwnerList(
+  userId: string,
+  username: string | null,
+  input: Omit<OwnerListDocument, 'ownerUid' | 'slug' | 'createdAt' | 'updatedAt'> & { slug?: string },
+  entries: MediaEntry[],
+  profile: UserProfile
+): Promise<OwnerListDocument> {
+  const slug = input.slug || slugifyPublicList(input.name)
+  if (!slug) throw new Error('Enter a valid list name.')
+  const ref = doc(db(), 'userLists', userId, 'lists', slug)
+  const existing = await getDoc(ref)
+  const payload: OwnerListDocument = {
+    ...input,
+    slug,
+    ownerUid: userId,
+    titleIds: [],
+    createdAt: existing.exists() ? (existing.data().createdAt ?? Timestamp.now()) : Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  }
+  await setDoc(ref, { ...payload, updatedAt: serverTimestamp(), ...(existing.exists() ? {} : { createdAt: serverTimestamp() }) })
+  if (username) await publishOwnerList(username, payload, entries, profile)
+  return payload
+}
+
+export async function deleteOwnerList(userId: string, username: string | null, slug: string): Promise<void> {
+  await deleteDoc(doc(db(), 'userLists', userId, 'lists', slug))
+  if (username) await deletePublicList(username, slug).catch(() => {})
+}
+
+export async function publishSystemList(
+  username: string,
+  list: Omit<PublicListDocument, 'createdAt' | 'updatedAt'>
+): Promise<void> {
+  await savePublicList(username, list)
 }
 
 export async function savePublicList(
@@ -371,4 +463,15 @@ export async function getPublicTitlesByIds(username: string, ids: string[]): Pro
   }
   const byId = new Map(results.map((item) => [item.publicId, item]))
   return ids.map((id) => byId.get(id)).filter(Boolean) as PublicTitleDocument[]
+}
+
+export async function getAllPublicTitles(username: string): Promise<PublicTitleDocument[]> {
+  const titles: PublicTitleDocument[] = []
+  let cursor: QueryDocumentSnapshot | null = null
+  do {
+    const page = await getPublicTitles(username, { pageSize: 100, cursor, sort: 'newest' })
+    titles.push(...page.titles)
+    cursor = page.hasMore ? page.cursor : null
+  } while (cursor)
+  return titles
 }

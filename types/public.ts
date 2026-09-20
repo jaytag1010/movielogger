@@ -82,7 +82,33 @@ export interface PublicListDocument {
   name: string
   description: string
   visibility: 'private' | 'public'
+  kind?: 'custom' | 'system'
+  systemType?: SystemListType | null
+  autoUpdate?: boolean
+  titleCount?: number
   titleIds: string[]
   createdAt?: Timestamp | null
   updatedAt?: Timestamp | null
+}
+
+export type SystemListType =
+  | 'all-titles'
+  | 'movies'
+  | 'series'
+  | 'shorts'
+  | 'top-10-movies'
+  | 'top-10-series'
+  | 'top-10-shorts'
+
+export interface SystemListConfig {
+  visibility: 'private' | 'public'
+  autoUpdate: boolean
+  /** Private media document IDs in user-defined order. Used only for snapshots. */
+  snapshotEntryIds: string[]
+}
+
+export interface OwnerListDocument extends PublicListDocument {
+  ownerUid: string
+  /** Private media document IDs in user-defined order. */
+  entryIds: string[]
 }
