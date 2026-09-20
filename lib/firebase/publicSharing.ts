@@ -31,7 +31,6 @@ import type {
 import { getUserProfile, updateUserProfile, UserProfile } from './firestore'
 import {
   calculatePublicStats,
-  isEntryPublic,
   normalizePublicVisibility,
   slugifyPublicList,
   toPublicTitle,
@@ -82,8 +81,6 @@ export async function claimPublicUsername(
   if (validationError) throw new Error(validationError)
   if (username === currentUsername) return username
 
-  if (currentUsername) await deletePublicProfileTree(currentUsername)
-
   const firestore = db()
   try {
     await runTransaction(firestore, async (transaction) => {
@@ -93,15 +90,23 @@ export async function claimPublicUsername(
         throw new Error('That public username is already taken.')
       }
       transaction.set(nextRef, { ownerUid: userId, claimedAt: serverTimestamp() })
-      transaction.set(doc(firestore, 'userProfiles', userId), { publicUsername: username }, { merge: true })
-      if (currentUsername && currentUsername !== username) {
-        transaction.delete(doc(firestore, 'publicUsernames', currentUsername))
+      if (!currentUsername) {
+        transaction.set(doc(firestore, 'userProfiles', userId), { publicUsername: username }, { merge: true })
       }
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : ''
     if (message.includes('taken')) throw error
     throw new Error('That public username is unavailable. Please choose another.')
+  }
+  if (currentUsername && currentUsername !== username) {
+    // Keep ownership pointed at the old username until its public mirror has
+    // been removed; Firestore rules use that ownership to authorize cleanup.
+    await deletePublicProfileTree(currentUsername)
+    await runTransaction(firestore, async (transaction) => {
+      transaction.set(doc(firestore, 'userProfiles', userId), { publicUsername: username }, { merge: true })
+      transaction.delete(doc(firestore, 'publicUsernames', currentUsername))
+    })
   }
   return username
 }
@@ -138,26 +143,94 @@ function publicProfilePayload(profile: UserProfile, stats: ReturnType<typeof cal
   }
 }
 
+interface PublicFolderContext {
+  entries: MediaEntry[]
+  publicEntries: MediaEntry[]
+  lists: PublicListDocument[]
+}
+
+async function buildPublicFolderContext(
+  userId: string,
+  sourceEntries: MediaEntry[],
+  profile: UserProfile
+): Promise<PublicFolderContext> {
+  const entries = await ensurePublicIds(sourceEntries)
+  const ownerLists = await getOwnerLists(userId, profile.publicUsername, entries)
+  const byEntryId = new Map(entries.filter((entry) => entry.id).map((entry) => [entry.id!, entry]))
+  const publicEntryIds = new Set<string>()
+  const lists: PublicListDocument[] = []
+
+  SYSTEM_LISTS.forEach((definition) => {
+    const config = getSystemListConfig(profile.systemLists, definition.type)
+    if (config.visibility !== 'public') return
+    const resolved = resolveSystemListEntries(definition.type, config, entries)
+    const titleIds = resolved.map((entry) => {
+      if (entry.id) publicEntryIds.add(entry.id)
+      return entry.publicId
+    }).filter((id): id is string => !!id)
+    lists.push({
+      slug: definition.type,
+      name: definition.name,
+      description: definition.description,
+      visibility: 'public',
+      kind: 'system',
+      systemType: definition.type,
+      autoUpdate: config.autoUpdate,
+      titleCount: titleIds.length,
+      titleIds,
+    })
+  })
+
+  ownerLists.filter((list) => list.visibility === 'public').forEach((list) => {
+    const titleIds = list.entryIds.map((id) => {
+      const entry = byEntryId.get(id)
+      if (entry) publicEntryIds.add(id)
+      return entry?.publicId
+    }).filter((id): id is string => !!id)
+    lists.push({
+      slug: list.slug,
+      name: list.name,
+      description: list.description,
+      visibility: 'public',
+      kind: 'custom',
+      systemType: null,
+      autoUpdate: false,
+      titleCount: titleIds.length,
+      titleIds,
+    })
+  })
+
+  return {
+    entries,
+    publicEntries: entries.filter((entry) => entry.id && publicEntryIds.has(entry.id)),
+    lists,
+  }
+}
+
 export async function rebuildPublicLibrary(
   userId: string,
   sourceEntries: MediaEntry[],
-  profileOverride?: UserProfile
+  profileOverride?: UserProfile,
+  changedEntryId?: string
 ): Promise<{ published: number; private: number }> {
   const profile = profileOverride ?? await getUserProfile(userId)
   if (!profile.publicUsername) return { published: 0, private: sourceEntries.length }
-  const entries = await ensurePublicIds(sourceEntries)
-  const visibility = normalizePublicVisibility(profile.publicVisibility)
-  const publicEntries = entries.filter((entry) => isEntryPublic(entry, profile.publicProfileEnabled, visibility))
+  const { entries, publicEntries, lists } = await buildPublicFolderContext(userId, sourceEntries, profile)
   const firestore = db()
   const titlesRef = collection(firestore, 'publicProfiles', profile.publicUsername, 'titles')
-  const existing = await getDocs(titlesRef)
+  const existingLists = await getDocs(collection(firestore, 'publicProfiles', profile.publicUsername, 'lists'))
+  const existingTitleDocs = changedEntryId ? null : await getDocs(titlesRef)
+  const existingIds = existingTitleDocs
+    ? new Set(existingTitleDocs.docs.map((item) => item.id))
+    : new Set(existingLists.docs.flatMap((item) => (item.data().titleIds as string[] | undefined) ?? []))
   const keep = new Set(publicEntries.map((entry) => entry.publicId!))
 
   const writes: Array<{ kind: 'set' | 'delete'; ref: ReturnType<typeof doc>; value?: PublicTitleDocument }> = []
-  existing.docs.forEach((item) => {
-    if (!keep.has(item.id)) writes.push({ kind: 'delete', ref: item.ref })
+  existingIds.forEach((id) => {
+    if (!keep.has(id)) writes.push({ kind: 'delete', ref: doc(titlesRef, id) })
   })
   publicEntries.forEach((entry) => {
+    if (existingIds.has(entry.publicId!) && entry.id !== changedEntryId) return
     writes.push({
       kind: 'set',
       ref: doc(firestore, 'publicProfiles', profile.publicUsername!, 'titles', entry.publicId!),
@@ -172,6 +245,12 @@ export async function rebuildPublicLibrary(
     })
     await batch.commit()
   }
+
+  const keepLists = new Set(lists.map((list) => list.slug))
+  for (const item of existingLists.docs) {
+    if (!keepLists.has(item.id)) await deleteDoc(item.ref)
+  }
+  await Promise.all(lists.map((list) => savePublicList(profile.publicUsername!, list)))
 
   await setDoc(
     doc(firestore, 'publicProfiles', profile.publicUsername),
@@ -196,9 +275,9 @@ export async function savePublicProfileSettings(
   previousUsername?: string | null
 ): Promise<UserProfile> {
   const currentProfile = await getUserProfile(userId)
-  const preservedLists = previousUsername && normalizePublicUsername(previousUsername) !== normalizePublicUsername(settings.publicUsername)
-    ? await getOwnerLists(userId, previousUsername, entries)
-    : []
+  if (previousUsername && normalizePublicUsername(previousUsername) !== normalizePublicUsername(settings.publicUsername)) {
+    await getOwnerLists(userId, previousUsername, entries)
+  }
   const username = await claimPublicUsername(userId, settings.publicUsername, previousUsername)
   const profile: UserProfile = {
     ...settings,
@@ -207,37 +286,13 @@ export async function savePublicProfileSettings(
     systemLists: currentProfile.systemLists ?? {},
   }
   await updateUserProfile(userId, profile)
-  // Close the public read gate before rebuilding. This prevents stale titles
-  // from being visible while stricter status/type settings are applied.
+  // Close the public read gate while rebuilding the sanitized folder mirror.
   await setDoc(doc(db(), 'publicProfiles', username), {
     username,
     enabled: false,
     updatedAt: serverTimestamp(),
   }, { merge: true })
   await rebuildPublicLibrary(userId, entries, profile)
-  if (preservedLists.length > 0) {
-    await Promise.all(preservedLists.map((list) => publishOwnerList(username, list, entries, profile)))
-  }
-  await Promise.all(SYSTEM_LISTS.map(async (definition) => {
-    const config = getSystemListConfig(profile.systemLists, definition.type)
-    if (config.visibility !== 'public') return
-    const resolved = resolveSystemListEntries(definition.type, config, entries)
-    const visibleIds = resolved
-      .filter((entry) => isEntryPublic(entry, profile.publicProfileEnabled, profile.publicVisibility))
-      .map((entry) => entry.publicId)
-      .filter((id): id is string => !!id)
-    await publishSystemList(username, {
-      slug: definition.type,
-      name: definition.name,
-      description: definition.description,
-      visibility: 'public',
-      kind: 'system',
-      systemType: definition.type,
-      autoUpdate: config.autoUpdate,
-      titleCount: visibleIds.length,
-      titleIds: config.autoUpdate ? [] : visibleIds,
-    })
-  }))
   return profile
 }
 
@@ -248,21 +303,8 @@ export async function syncPublicEntry(
 ): Promise<void> {
   const profile = await getUserProfile(userId)
   if (!profile.publicUsername) return
-  const [ensuredEntry] = await ensurePublicIds([entry])
-  const visibility = normalizePublicVisibility(profile.publicVisibility)
-  const publicEntries = allEntries
-    .map((item) => item.id === ensuredEntry.id ? ensuredEntry : item)
-    .filter((item) => isEntryPublic(item, profile.publicProfileEnabled, visibility))
-  const ref = doc(db(), 'publicProfiles', profile.publicUsername, 'titles', ensuredEntry.publicId!)
-  if (isEntryPublic(ensuredEntry, profile.publicProfileEnabled, visibility)) {
-    await setDoc(ref, toPublicTitle(ensuredEntry, ensuredEntry.publicId!))
-  } else {
-    await deleteDoc(ref).catch(() => {})
-  }
-  await setDoc(doc(db(), 'publicProfiles', profile.publicUsername), {
-    ...publicProfilePayload(profile, calculatePublicStats(publicEntries)),
-    updatedAt: serverTimestamp(),
-  }, { merge: true })
+  const merged = allEntries.map((item) => item.id === entry.id ? entry : item)
+  await rebuildPublicLibrary(userId, merged, profile, entry.id)
 }
 
 export async function removePublicEntry(
@@ -271,21 +313,14 @@ export async function removePublicEntry(
   remainingEntries: MediaEntry[]
 ): Promise<void> {
   const profile = await getUserProfile(userId)
-  if (!profile.publicUsername || !entry.publicId) return
-  await deleteDoc(doc(db(), 'publicProfiles', profile.publicUsername, 'titles', entry.publicId)).catch(() => {})
-  const visibility = normalizePublicVisibility(profile.publicVisibility)
-  const publicEntries = remainingEntries.filter((item) => isEntryPublic(item, profile.publicProfileEnabled, visibility))
-  await setDoc(doc(db(), 'publicProfiles', profile.publicUsername), {
-    stats: calculatePublicStats(publicEntries),
-    updatedAt: serverTimestamp(),
-  }, { merge: true })
-  const lists = await getDocs(collection(db(), 'publicProfiles', profile.publicUsername, 'lists'))
-  await Promise.all(lists.docs.map(async (list) => {
-    const titleIds = (list.data().titleIds as string[] | undefined) ?? []
-    if (titleIds.includes(entry.publicId!)) {
-      await updateDoc(list.ref, { titleIds: titleIds.filter((id) => id !== entry.publicId), updatedAt: serverTimestamp() })
-    }
-  }))
+  const ownerLists = await getOwnerLists(userId, profile.publicUsername, remainingEntries)
+  await Promise.all(ownerLists.filter((list) => list.entryIds.includes(entry.id!)).map((list) => (
+    updateDoc(doc(db(), 'userLists', userId, 'lists', list.slug), {
+      entryIds: list.entryIds.filter((id) => id !== entry.id),
+      updatedAt: serverTimestamp(),
+    })
+  )))
+  if (profile.publicUsername) await rebuildPublicLibrary(userId, remainingEntries, profile)
 }
 
 export async function getPublicProfile(username: string): Promise<PublicProfileDocument | null> {
@@ -361,32 +396,6 @@ export async function getOwnerLists(userId: string, legacyUsername?: string | nu
   return migrated
 }
 
-async function publishOwnerList(
-  username: string,
-  list: OwnerListDocument,
-  entries: MediaEntry[],
-  profile: UserProfile
-): Promise<void> {
-  const normalized = normalizePublicVisibility(profile.publicVisibility)
-  const byEntryId = new Map(entries.filter((entry) => entry.id).map((entry) => [entry.id!, entry]))
-  const titleIds = list.entryIds
-    .map((id) => byEntryId.get(id))
-    .filter((entry): entry is MediaEntry => !!entry && isEntryPublic(entry, profile.publicProfileEnabled, normalized))
-    .map((entry) => entry.publicId)
-    .filter((id): id is string => !!id)
-  await savePublicList(username, {
-    slug: list.slug,
-    name: list.name,
-    description: list.description,
-    visibility: list.visibility,
-    kind: 'custom',
-    systemType: null,
-    autoUpdate: false,
-    titleCount: titleIds.length,
-    titleIds,
-  })
-}
-
 export async function saveOwnerList(
   userId: string,
   username: string | null,
@@ -407,13 +416,13 @@ export async function saveOwnerList(
     updatedAt: Timestamp.now(),
   }
   await setDoc(ref, { ...payload, updatedAt: serverTimestamp(), ...(existing.exists() ? {} : { createdAt: serverTimestamp() }) })
-  if (username) await publishOwnerList(username, payload, entries, profile)
+  if (username) await rebuildPublicLibrary(userId, entries, profile)
   return payload
 }
 
-export async function deleteOwnerList(userId: string, username: string | null, slug: string): Promise<void> {
+export async function deleteOwnerList(userId: string, username: string | null, slug: string, entries: MediaEntry[] = [], profile?: UserProfile): Promise<void> {
   await deleteDoc(doc(db(), 'userLists', userId, 'lists', slug))
-  if (username) await deletePublicList(username, slug).catch(() => {})
+  if (username) await rebuildPublicLibrary(userId, entries, profile)
 }
 
 export async function publishSystemList(

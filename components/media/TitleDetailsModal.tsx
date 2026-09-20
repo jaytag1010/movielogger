@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
-import { Film, GitCompare, Globe2, Info, Lock, Search, Star, Trash2, Tv, X, Clapperboard } from 'lucide-react'
+import { Film, GitCompare, Info, Search, Star, Trash2, Tv, X, Clapperboard } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { Button } from '@/components/ui/button'
 import {
@@ -31,9 +31,6 @@ import {
 } from '@/utils/formatters'
 import { calculateEntryWatchHours } from '@/utils/watchTime'
 import { MEDIA_STATUS_LABELS } from '@/types/media'
-import { useAuthStore } from '@/store/authStore'
-import { getUserProfile } from '@/lib/firebase/firestore'
-import { isEntryPublic, normalizePublicVisibility } from '@/utils/publicVisibility'
 
 interface TitleDetailsModalProps {
   entry: MediaEntry | null
@@ -54,8 +51,6 @@ export function TitleDetailsModal({
 }: TitleDetailsModalProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
-  const [resolvedPublic, setResolvedPublic] = useState(false)
-  const { user } = useAuthStore()
   const detailReleaseEntries = useMemo(() => entry ? [entry] : [], [
     entry?.id,
     entry?.status,
@@ -67,13 +62,6 @@ export function TitleDetailsModal({
     entry?.tmdbReleaseDate,
   ])
   const releaseStatuses = useProgressReleaseStatuses(detailReleaseEntries)
-
-  useEffect(() => {
-    if (!open || !entry || !user) return
-    getUserProfile(user.uid)
-      .then((profile) => setResolvedPublic(isEntryPublic(entry, profile.publicProfileEnabled, normalizePublicVisibility(profile.publicVisibility))))
-      .catch(() => setResolvedPublic(false))
-  }, [open, entry, user])
 
   useEffect(() => {
     let cancelled = false
@@ -174,10 +162,6 @@ export function TitleDetailsModal({
                       {entry.personalRating.toFixed(2)}
                     </span>
                   )}
-                  <Badge variant="outline" className={resolvedPublic ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/5 text-white/45'}>
-                    {resolvedPublic ? <Globe2 className="mr-1 h-3 w-3" /> : <Lock className="mr-1 h-3 w-3" />}
-                    {resolvedPublic ? 'Public' : 'Private'}
-                  </Badge>
                 </div>
               </div>
             </div>

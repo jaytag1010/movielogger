@@ -21,12 +21,14 @@ import {
   CalendarDays,
   Wrench,
   History,
-  Globe2,
+  Copy,
+  ExternalLink,
 } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { GlassCard } from '@/components/common/GlassCard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   Dialog,
@@ -47,18 +49,9 @@ import { useActivityHistory } from '@/hooks/useActivityHistory'
 import { DEFAULT_PUBLIC_VISIBILITY } from '@/types/public'
 import { OverallSummary } from '@/components/profile/OverallSummary'
 import { MyLists } from '@/components/profile/MyLists'
+import { savePublicProfileSettings, validatePublicUsername } from '@/lib/firebase/publicSharing'
 
 const CONFIRM_PHRASE = 'CONTINUE'
-
-/** Mask email: preserve first char, last char before @, mask everything between, preserve domain. */
-function maskEmail(email: string): string {
-  const atIdx = email.indexOf('@')
-  if (atIdx < 0) return email
-  const local = email.slice(0, atIdx)
-  const domain = email.slice(atIdx) // includes '@'
-  if (local.length <= 2) return email
-  return local[0] + '*'.repeat(local.length - 2) + local[local.length - 1] + domain
-}
 
 /** Format Firebase creationTime → "June 2025" */
 function formatMemberSince(creationTime: string | undefined): string | null {
@@ -98,6 +91,10 @@ export default function ProfilePage() {
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const [usernameInput, setUsernameInput] = useState('')
+  const [bioInput, setBioInput] = useState('')
+  const [savingUnifiedProfile, setSavingUnifiedProfile] = useState(false)
+  const [savingSharing, setSavingSharing] = useState(false)
 
   // Photo upload
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
@@ -117,6 +114,8 @@ export default function ProfilePage() {
       .then((p) => {
         setProfile(p)
         setNameInput(p.displayName ?? user.displayName ?? '')
+        setUsernameInput(p.publicUsername ?? '')
+        setBioInput(p.bio ?? '')
       })
       .catch(() => {
         setNameInput(user.displayName ?? '')
@@ -130,7 +129,6 @@ export default function ProfilePage() {
   const effectivePhotoUrl    = rawPhotoUrl && avatarVersion > 0
     ? `${rawPhotoUrl}${rawPhotoUrl.includes('?') ? '&' : '?'}mlv=${avatarVersion}`
     : rawPhotoUrl
-  const maskedEmail          = user?.email ? maskEmail(user.email) : ''
   const memberSince          = formatMemberSince(user?.metadata?.creationTime)
   const unmatchedCount       = entries.filter((entry) => entry.tmdbId == null && !entry.tmdbUnmatchedDismissedAt).length
   const lastScanMillis       = entries.reduce((latest, entry) => Math.max(latest, entry.tmdbLastCheckedAt?.toMillis() ?? 0), 0)
@@ -283,6 +281,66 @@ export default function ProfilePage() {
     }
   }
 
+  async function persistUnifiedProfile(next: UserProfile): Promise<UserProfile> {
+    if (!user) throw new Error('Not authenticated')
+    const username = usernameInput.trim().toLocaleLowerCase()
+    if (next.publicProfileEnabled && !username) throw new Error('Choose a public username before enabling your Public Profile.')
+    if (username) {
+      const validation = validatePublicUsername(username)
+      if (validation) throw new Error(validation)
+      return savePublicProfileSettings(user.uid, entries, {
+        publicProfileEnabled: next.publicProfileEnabled,
+        publicUsername: username,
+        displayName: next.displayName,
+        profilePhotoUrl: next.profilePhotoUrl,
+        bio: next.bio,
+        showPublicStats: next.showPublicStats,
+        publicVisibility: next.publicVisibility,
+      }, profile.publicUsername)
+    }
+    await updateUserProfile(user.uid, {
+      displayName: next.displayName,
+      bio: next.bio,
+      publicProfileEnabled: false,
+      showPublicStats: next.showPublicStats,
+    })
+    return { ...next, publicProfileEnabled: false, publicUsername: null }
+  }
+
+  async function handleSaveUnifiedProfile() {
+    if (!user) return
+    setSavingUnifiedProfile(true)
+    try {
+      const next = { ...profile, displayName: nameInput.trim() || null, bio: bioInput.trim() }
+      const saved = await persistUnifiedProfile(next)
+      setProfile(saved)
+      setUsernameInput(saved.publicUsername ?? '')
+      setBioInput(saved.bio)
+      useAuthStore.getState().setProfileDisplayName(saved.displayName)
+      toast.success('Profile updated.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not update profile.')
+    } finally { setSavingUnifiedProfile(false) }
+  }
+
+  async function handleSharingChange(updates: Partial<UserProfile>) {
+    setSavingSharing(true)
+    try {
+      const saved = await persistUnifiedProfile({ ...profile, ...updates, bio: bioInput.trim(), displayName: nameInput.trim() || null })
+      setProfile(saved)
+      setUsernameInput(saved.publicUsername ?? '')
+      toast.success('Public sharing updated.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not update public sharing.')
+    } finally { setSavingSharing(false) }
+  }
+
+  async function copyPublicUrl() {
+    if (!profile.publicUsername) return
+    await navigator.clipboard.writeText(`${window.location.origin}/u/${profile.publicUsername}`)
+    toast.success('Public profile link copied.')
+  }
+
   function handleCancelName() {
     setNameInput(profile.displayName ?? user?.displayName ?? '')
     setEditingName(false)
@@ -423,14 +481,25 @@ export default function ProfilePage() {
             )}
           </div>
 
-          {/* Email (masked) */}
-          <div className="mb-3">
-            <p className="text-xs text-white/40 mb-1">Email</p>
-            <div className="flex items-center gap-1.5">
-              <Mail className="w-3.5 h-3.5 text-white/30 flex-shrink-0" />
-              <p className="text-sm text-white/50 font-mono">{maskedEmail}</p>
+          <div className="mb-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-1.5 text-xs text-white/40">Public Username</p>
+              <div className="flex items-center rounded-lg border border-white/10 bg-white/5 pl-3 focus-within:border-blue-500/50"><span className="text-sm text-white/30">@</span><Input value={usernameInput} onChange={(event) => setUsernameInput(event.target.value.toLocaleLowerCase())} className="border-0 bg-transparent" placeholder="your_username" /></div>
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs text-white/40">Email</p>
+              <div className="flex h-10 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.025] px-3"><Mail className="h-3.5 w-3.5 shrink-0 text-white/30" /><p className="truncate text-sm text-white/55">{user?.email ?? ''}</p></div>
             </div>
           </div>
+
+          <div className="mb-3">
+            <p className="mb-1.5 text-xs text-white/40">Short Bio</p>
+            <Textarea value={bioInput} onChange={(event) => setBioInput(event.target.value)} maxLength={240} rows={3} placeholder="A short introduction for your profile…" />
+          </div>
+
+          <Button className="mb-4 w-full" variant="outline" onClick={handleSaveUnifiedProfile} disabled={savingUnifiedProfile || profileLoading}>
+            <Pencil className="mr-2 h-4 w-4" />{savingUnifiedProfile ? 'Saving Profile…' : 'Save Profile'}
+          </Button>
 
           {/* Member Since */}
           {memberSince && (
@@ -457,6 +526,12 @@ export default function ProfilePage() {
 
         <GlassCard padding="md">
           <OverallSummary entries={entries} />
+        </GlassCard>
+
+        <GlassCard padding="md">
+          <div className="flex items-start justify-between gap-4"><div><h3 className="text-xs font-semibold uppercase tracking-wider text-white/40">Public Sharing</h3><p className="mt-1 text-xs text-white/35">Your account profile is also your public identity. Email and account controls are never shared.</p></div><button disabled={savingSharing} onClick={() => handleSharingChange({ publicProfileEnabled: !profile.publicProfileEnabled })} className={`relative h-6 w-11 shrink-0 rounded-full transition ${profile.publicProfileEnabled ? 'bg-emerald-500' : 'bg-white/15'}`} aria-label="Toggle public profile"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${profile.publicProfileEnabled ? 'left-6' : 'left-1'}`} /></button></div>
+          <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.025] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium text-white">Show Overall Summary</p><p className="mt-0.5 text-xs text-white/35">Calculated only from titles available through your Public folders.</p></div><button disabled={savingSharing} onClick={() => handleSharingChange({ showPublicStats: !profile.showPublicStats })} className={`relative h-6 w-11 shrink-0 rounded-full transition ${profile.showPublicStats ? 'bg-blue-500' : 'bg-white/15'}`} aria-label="Toggle public summary"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${profile.showPublicStats ? 'left-6' : 'left-1'}`} /></button></div></div>
+          {profile.publicUsername ? <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center"><div className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/15 px-3 py-2 text-xs text-white/45"><span className="truncate">{typeof window !== 'undefined' ? window.location.origin : ''}/u/{profile.publicUsername}</span></div><Button size="sm" variant="outline" onClick={copyPublicUrl}><Copy className="mr-1.5 h-3.5 w-3.5" />Copy</Button>{profile.publicProfileEnabled && <Button size="sm" asChild><a href={`/u/${profile.publicUsername}`} target="_blank" rel="noreferrer"><ExternalLink className="mr-1.5 h-3.5 w-3.5" />View Public Profile</a></Button>}</div> : <p className="mt-3 text-xs text-amber-200/75">Save a Public Username above to create your public URL.</p>}
         </GlassCard>
 
         <GlassCard padding="md">
@@ -516,18 +591,6 @@ export default function ProfilePage() {
                 <span className="ml-2 text-red-400/60">({entries.length})</span>
               )}
             </Button>
-          </div>
-        </GlassCard>
-
-        {/* ── Section 3: Library Tools ── */}
-        <GlassCard padding="md">
-          <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">Privacy &amp; Sharing</h3>
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0"><Globe2 className="w-4 h-4 text-emerald-300" /></div>
-              <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-white">Public Profile &amp; Lists</p><p className="text-xs text-white/40 mt-1">Private by default. Choose exactly what visitors may see.</p></div>
-              <Button size="sm" asChild><Link href="/public-profile">Manage</Link></Button>
-            </div>
           </div>
         </GlassCard>
 

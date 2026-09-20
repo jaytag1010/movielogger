@@ -1,71 +1,32 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Clapperboard, Copy, Film, Globe2, Search, Share2, Star, Tv } from 'lucide-react'
-import type { QueryDocumentSnapshot } from 'firebase/firestore'
+import { Clapperboard, Film, Folder, Globe2, Share2, Star, Tv } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
-import { getPublicLists, getPublicProfile, getPublicTitles } from '@/lib/firebase/publicSharing'
+import { getPublicLists, getPublicProfile } from '@/lib/firebase/publicSharing'
 import type { PublicListDocument, PublicProfileDocument, PublicTitleDocument } from '@/types/public'
-import { MEDIA_STATUS_LABELS, MediaStatus, MediaType } from '@/types/media'
-import { PublicTitleDetails } from './PublicTitleDetails'
-import { formatWatchHours, getMediaTypeLabel } from '@/utils/formatters'
-
-const PAGE_SIZE = 24
+import { MEDIA_STATUS_LABELS } from '@/types/media'
+import { getMediaTypeLabel } from '@/utils/formatters'
 
 export function PublicProfileView({ username }: { username: string }) {
   const [profile, setProfile] = useState<PublicProfileDocument | null>(null)
-  const [titles, setTitles] = useState<PublicTitleDocument[]>([])
-  const [lists, setLists] = useState<PublicListDocument[]>([])
+  const [folders, setFolders] = useState<PublicListDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [privateProfile, setPrivateProfile] = useState(false)
-  const [hasMore, setHasMore] = useState(false)
-  const [cursor, setCursor] = useState<QueryDocumentSnapshot | null>(null)
-  const [type, setType] = useState<'all' | MediaType>('all')
-  const [status, setStatus] = useState<'all' | MediaStatus>('all')
-  const [sort, setSort] = useState<'newest' | 'title' | 'rating'>('newest')
-  const [search, setSearch] = useState('')
-  const [appliedSearch, setAppliedSearch] = useState('')
-  const [selected, setSelected] = useState<PublicTitleDocument | null>(null)
-  const [watchingTitles, setWatchingTitles] = useState<PublicTitleDocument[]>([])
-  const [topRatedTitles, setTopRatedTitles] = useState<PublicTitleDocument[]>([])
-
-  const loadTitles = useCallback(async (append = false) => {
-    const result = await getPublicTitles(username, { type, status, search: appliedSearch, sort, pageSize: PAGE_SIZE, cursor: append ? cursor : null })
-    setTitles((current) => append ? [...current, ...result.titles] : result.titles)
-    setCursor(result.cursor)
-    setHasMore(result.hasMore)
-  }, [username, type, status, appliedSearch, sort, cursor])
 
   useEffect(() => {
     Promise.all([getPublicProfile(username), getPublicLists(username)])
-      .then(async ([nextProfile, nextLists]) => {
+      .then(([nextProfile, nextFolders]) => {
         if (!nextProfile?.enabled) { setPrivateProfile(true); return }
-        setProfile(nextProfile); setLists(nextLists)
-        const [initial, watching, topRated] = await Promise.all([
-          getPublicTitles(username, { pageSize: PAGE_SIZE }),
-          getPublicTitles(username, { status: 'watching', pageSize: 6 }),
-          getPublicTitles(username, { sort: 'rating', pageSize: 6 }),
-        ])
-        setTitles(initial.titles); setCursor(initial.cursor); setHasMore(initial.hasMore)
-        setWatchingTitles(watching.titles)
-        setTopRatedTitles(topRated.titles.filter((title) => title.personalRating != null))
+        setProfile(nextProfile)
+        setFolders(nextFolders)
       })
       .catch(() => setPrivateProfile(true))
       .finally(() => setLoading(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username])
-
-  useEffect(() => {
-    if (!profile) return
-    setCursor(null)
-    loadTitles(false).catch(() => toast.error('Could not load public titles.'))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type, status, sort, appliedSearch])
 
   async function share() {
     const url = window.location.href
@@ -77,29 +38,18 @@ export function PublicProfileView({ username }: { username: string }) {
   if (privateProfile || !profile) return <PublicShell><div className="mx-auto mt-24 max-w-md rounded-xl border border-white/10 bg-white/5 p-8 text-center"><Globe2 className="mx-auto h-9 w-9 text-white/25" /><h1 className="mt-4 text-xl font-semibold text-white">This MovieLogger profile is private.</h1><p className="mt-2 text-sm text-white/40">The owner has not made this profile available publicly.</p></div></PublicShell>
 
   return <PublicShell>
-    <header className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-7">
-      <div className="flex items-start gap-4">
-        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/5">{profile.profilePhotoUrl ? <TMDBPosterImage src={profile.profilePhotoUrl} alt={profile.displayName} width={80} height={80} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-2xl font-bold text-white/40">{profile.displayName.slice(0, 2).toUpperCase()}</div>}</div>
-        <div className="min-w-0 flex-1"><h1 className="truncate text-2xl font-bold text-white">{profile.displayName}</h1><p className="text-sm text-blue-300">@{profile.username}</p>{profile.bio && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/55">{profile.bio}</p>}</div>
-        <Button size="icon" variant="outline" onClick={share} title="Share public profile"><Share2 className="h-4 w-4" /></Button>
-      </div>
-      {profile.showStats && <Stats profile={profile} />}
+    <header className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-7">
+      <div className="flex items-start gap-4"><div className="h-20 w-20 shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/5">{profile.profilePhotoUrl ? <TMDBPosterImage src={profile.profilePhotoUrl} alt={profile.displayName} width={80} height={80} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-2xl font-bold text-white/40">{profile.displayName.slice(0, 2).toUpperCase()}</div>}</div><div className="min-w-0 flex-1"><h1 className="truncate text-2xl font-bold text-white">{profile.displayName}</h1><p className="text-sm text-blue-300">@{profile.username}</p>{profile.bio && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/55">{profile.bio}</p>}</div><Button size="icon" variant="outline" onClick={share} title="Share public profile"><Share2 className="h-4 w-4" /></Button></div>
+      {profile.showStats && <PublicSummary profile={profile} />}
     </header>
-    {watchingTitles.length > 0 && <FeaturedRow title="Currently Watching" titles={watchingTitles} onSelect={setSelected} />}
-    {topRatedTitles.length > 0 && <FeaturedRow title="Top Rated" titles={topRatedTitles} onSelect={setSelected} />}
-
-    {lists.length > 0 && <section className="mt-6"><h2 className="mb-3 text-lg font-semibold text-white">Public Lists</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{lists.map((list) => { const count = list.titleCount ?? list.titleIds.length; return <Link key={list.slug} href={`/u/${profile.username}/lists/${list.slug}`} className="rounded-xl border border-white/10 bg-white/[0.035] p-4 transition hover:border-blue-500/30 hover:bg-white/[0.06]"><p className="font-semibold text-white">{list.name}</p>{list.description && <p className="mt-1 line-clamp-2 text-xs text-white/40">{list.description}</p>}<p className="mt-2 text-xs text-blue-300">{count} title{count === 1 ? '' : 's'}</p></Link> })}</div></section>}
-
-    <section className="mt-7">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-lg font-semibold text-white">Public Library</h2><p className="text-xs text-white/35">Only titles deliberately shared by @{profile.username}</p></div><div className="flex gap-2"><select value={status} onChange={(event) => setStatus(event.target.value as typeof status)} className="h-10 rounded-lg border border-white/10 bg-[#11131d] px-3 text-sm text-white"><option value="all">All Statuses</option>{Object.entries(MEDIA_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="h-10 rounded-lg border border-white/10 bg-[#11131d] px-3 text-sm text-white"><option value="newest">Newest Added</option><option value="title">Title A–Z</option><option value="rating">Highest Rated</option></select></div></div>
-      <div className="mt-4 grid grid-cols-4 gap-2">{(['all', 'movie', 'series', 'shorts'] as const).map((value) => <button key={value} onClick={() => setType(value)} className={`rounded-lg border px-2 py-2 text-xs font-medium ${type === value ? 'border-blue-500/40 bg-blue-500/15 text-blue-200' : 'border-white/10 bg-white/[0.025] text-white/45'}`}>{value === 'all' ? 'All' : `${getMediaTypeLabel(value)}${value === 'movie' ? 's' : ''}`}</button>)}</div>
-      <form className="relative mt-3" onSubmit={(event) => { event.preventDefault(); setAppliedSearch(search.trim()) }}><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" /><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-10 pr-24" placeholder="Search public titles…" /><Button type="submit" size="sm" className="absolute right-1.5 top-1.5 h-7">Search</Button></form>
-
-      {titles.length === 0 ? <div className="py-16 text-center text-sm text-white/35">No public titles match these filters.</div> : <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">{titles.map((title) => <PublicTitleCard key={title.publicId} title={title} onClick={() => setSelected(title)} />)}</div>}
-      {hasMore && <Button variant="outline" className="mx-auto mt-5 flex" onClick={() => loadTitles(true)}>Load More</Button>}
-    </section>
-    <PublicTitleDetails title={selected} open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null) }} />
+    <section className="mt-6"><h2 className="mb-3 text-lg font-semibold text-white">Public Folders</h2>{folders.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{folders.map((folder) => { const count = folder.titleCount ?? folder.titleIds.length; return <Link key={folder.slug} href={`/u/${profile.username}/lists/${folder.slug}`} className="rounded-xl border border-white/10 bg-white/[0.035] p-4 transition hover:border-blue-500/30 hover:bg-white/[0.06]"><div className="flex items-center gap-2"><Folder className="h-4 w-4 text-blue-300" /><p className="font-semibold text-white">{folder.name}</p></div>{folder.description && <p className="mt-2 line-clamp-2 text-xs text-white/40">{folder.description}</p>}<p className="mt-2 text-xs text-blue-300">{count} title{count === 1 ? '' : 's'}</p></Link> })}</div> : <p className="rounded-xl border border-dashed border-white/10 py-14 text-center text-sm text-white/35">No folders are currently public.</p>}</section>
   </PublicShell>
+}
+
+function PublicSummary({ profile }: { profile: PublicProfileDocument }) {
+  const stats = profile.stats
+  const items = [['Total Titles', stats.publicTitles], ['Movies', stats.movies], ['Series', stats.series], ['Shorts', stats.shorts], ['Watch Time', `${stats.watchHours.toFixed(2)} h`], ['Avg. Rating', stats.averageRating?.toFixed(1) ?? '—']]
+  return <div className="mt-5 grid grid-cols-2 gap-2 border-t border-white/10 pt-4 sm:grid-cols-3 lg:grid-cols-6">{items.map(([label, value]) => <div key={label} className="rounded-lg bg-white/[0.035] px-3 py-2"><p className="text-lg font-semibold text-white">{value}</p><p className="text-[10px] uppercase text-white/35">{label}</p></div>)}</div>
 }
 
 export function PublicShell({ children }: { children: React.ReactNode }) {
@@ -109,14 +59,4 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
 export function PublicTitleCard({ title, onClick }: { title: PublicTitleDocument; onClick: () => void }) {
   const Icon = title.type === 'movie' ? Film : title.type === 'shorts' ? Clapperboard : Tv
   return <button onClick={onClick} className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] text-left transition hover:-translate-y-0.5 hover:border-white/20"><div className="relative aspect-[2/3] w-full bg-white/5">{title.posterUrl ? <TMDBPosterImage src={title.posterUrl} alt={title.title} fill sizes="(max-width: 640px) 50vw, 180px" className="object-cover" /> : <div className="flex h-full items-center justify-center"><Icon className="h-7 w-7 text-white/20" /></div>}</div><div className="p-2.5"><p className="line-clamp-2 min-h-10 text-sm font-semibold text-white">{title.title}</p><div className="mt-1 flex items-center justify-between text-[11px] text-white/40"><span>{title.yearMade ?? getMediaTypeLabel(title.type)}</span>{title.personalRating != null && <span className="inline-flex items-center gap-0.5 text-amber-300"><Star className="h-3 w-3 fill-current" />{title.personalRating.toFixed(1)}</span>}</div><p className="mt-1 truncate text-[10px] text-blue-300/70">{MEDIA_STATUS_LABELS[title.status]}</p></div></button>
-}
-
-function Stats({ profile }: { profile: PublicProfileDocument }) {
-  const stats = profile.stats
-  const items = [['Titles', stats.publicTitles], ['Movies', stats.movies], ['Series', stats.series], ['Shorts', stats.shorts], ['Completed', stats.completed], ['Watch Hours', stats.watchHours.toFixed(2)], ['Average Rating', stats.averageRating?.toFixed(2) ?? '—']]
-  return <div className="mt-5 grid grid-cols-2 gap-2 border-t border-white/10 pt-4 sm:grid-cols-4 lg:grid-cols-7">{items.map(([label, value]) => <div key={label} className="rounded-lg bg-white/[0.035] px-3 py-2"><p className="text-lg font-semibold text-white">{value}</p><p className="text-[10px] uppercase text-white/35">{label}</p></div>)}</div>
-}
-
-function FeaturedRow({ title, titles, onSelect }: { title: string; titles: PublicTitleDocument[]; onSelect: (title: PublicTitleDocument) => void }) {
-  return <section className="mt-6"><h2 className="mb-3 text-lg font-semibold text-white">{title}</h2><div className="flex gap-3 overflow-x-auto pb-2">{titles.map((item) => <button key={item.publicId} onClick={() => onSelect(item)} className="w-24 shrink-0 text-left"><div className="relative aspect-[2/3] overflow-hidden rounded-lg border border-white/10 bg-white/5">{item.posterUrl ? <TMDBPosterImage src={item.posterUrl} alt={item.title} fill sizes="96px" className="object-cover" /> : null}</div><p className="mt-1.5 line-clamp-2 text-xs font-medium text-white/75">{item.title}</p></button>)}</div></section>
 }

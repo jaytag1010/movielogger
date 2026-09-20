@@ -830,22 +830,6 @@ export function EditEntryModal({ entry, open, onOpenChange }: EditEntryModalProp
             />
           </div>
 
-          {/* ── Privacy ── */}
-          <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-            <Label>Public Visibility</Label>
-            <Controller name="publicVisibility" control={control} render={({ field }) => (
-              <Select value={field.value ?? 'inherit'} onValueChange={field.onChange}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="inherit">Use Library Setting</SelectItem>
-                  <SelectItem value="public">Public</SelectItem>
-                  <SelectItem value="private">Private</SelectItem>
-                </SelectContent>
-              </Select>
-            )} />
-            <p className="text-xs text-white/35">Notes for public titles may be visible on your public profile. The Public Profile master switch always takes precedence.</p>
-          </div>
-
           {/* ── Notes ── */}
           <div className="space-y-1.5">
             <Label>Notes</Label>
