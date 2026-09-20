@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { TMDBPosterImage } from '@/components/common/TMDBPosterImage'
-import { Search, Film, Tv, X, Loader2, Plus, Check, Clapperboard } from 'lucide-react'
+import { Search, Film, Tv, X, Loader2, Plus, Check, Clapperboard, ListFilter } from 'lucide-react'
 import { MediaEntry } from '@/types/media'
 import { getDisplayTitle, getEffectiveMediaType, getDisplayPosterUrl, getMediaTypeLabel } from '@/utils/formatters'
 import { useTMDBSearch } from '@/hooks/useTMDB'
@@ -89,7 +89,8 @@ export function GlobalSearch({ entries }: GlobalSearchProps) {
   const showDropdown  = open && query.trim().length >= 1
 
   return (
-    <div ref={containerRef} className="relative flex-1">
+    <div ref={containerRef} className="flex flex-1 items-start gap-2">
+      <div className="relative min-w-0 flex-1">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
       <input
         type="text"
@@ -229,6 +230,8 @@ export function GlobalSearch({ entries }: GlobalSearchProps) {
           )}
         </div>
       )}
+      </div>
+      <button type="button" onClick={() => { setOpen(false); router.push(`/search${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ''}`) }} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-blue-500/25 bg-blue-500/10 px-3 text-sm font-medium text-blue-200 transition hover:bg-blue-500/20"><ListFilter className="h-4 w-4" /><span className="hidden sm:inline">Search All</span><span className="sm:hidden">All</span></button>
     </div>
   )
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowDown, ArrowLeft, ArrowUp, Calculator, ChevronLeft, ChevronRight, Globe2, Lock, Settings2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Calculator, ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,7 @@ import type { MediaEntry } from '@/types/media'
 import { isSystemListType, getSystemListConfig, resolveSystemListEntries, SYSTEM_LISTS } from '@/utils/systemLists'
 import type { OwnerListDocument, SystemListConfig } from '@/types/public'
 import { getDisplayTitle } from '@/utils/formatters'
+import { FolderSort, OWNER_FOLDER_SORT_OPTIONS, sortFolderEntries } from '@/utils/folderSort'
 
 const PAGE_SIZE = 24
 
@@ -36,6 +37,7 @@ export default function OwnerListPage({ params }: { params: { slug: string } }) 
   const [manageOpen, setManageOpen] = useState(false)
   const [draftIds, setDraftIds] = useState<string[]>([])
   const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<FolderSort>('title-asc')
   useEffect(() => {
     if (!user || mediaLoading) return
     Promise.all([getUserProfile(user.uid), getOwnerLists(user.uid, null, entries)])
@@ -45,18 +47,21 @@ export default function OwnerListPage({ params }: { params: { slug: string } }) 
           const definition = SYSTEM_LISTS.find((item) => item.type === params.slug)!
           const config = getSystemListConfig(profile.systemLists, params.slug)
           setSystemConfig(config)
+          setSort(params.slug.startsWith('top-10-') ? 'folder-order' : 'title-asc')
           setName(definition.name); setDescription(definition.description); setListEntries(resolveSystemListEntries(params.slug, config, entries))
         } else {
           const list = custom.find((item) => item.slug === params.slug)
           if (!list) return
           setCustomFolder(list)
+          setSort('folder-order')
           const byId = new Map(entries.filter((entry) => entry.id).map((entry) => [entry.id!, entry]))
           setName(list.name); setDescription(list.description); setListEntries(list.entryIds.map((id) => byId.get(id)).filter(Boolean) as MediaEntry[])
         }
       }).finally(() => setLoading(false))
   }, [user, mediaLoading, entries, params.slug])
-  const pageCount = Math.max(1, Math.ceil(listEntries.length / PAGE_SIZE))
-  const visible = useMemo(() => listEntries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [listEntries, page])
+  const sortedEntries = useMemo(() => sortFolderEntries(listEntries, sort), [listEntries, sort])
+  const pageCount = Math.max(1, Math.ceil(sortedEntries.length / PAGE_SIZE))
+  const visible = useMemo(() => sortedEntries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [sortedEntries, page])
   const searchResults = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase()
     if (!needle) return []
@@ -78,24 +83,25 @@ export default function OwnerListPage({ params }: { params: { slug: string } }) 
       toast.success('Snapshot updated.')
     } catch { toast.error('Could not update snapshot.') }
   }
-  async function toggleVisibility() {
+  async function setFolderVisibility(visibility: 'public' | 'private') {
     if (!user || !profile) return
     try {
       if (systemConfig && isSystemListType(params.slug)) {
-        const nextConfig = { ...systemConfig, visibility: systemConfig.visibility === 'public' ? 'private' as const : 'public' as const }
+        const nextConfig = { ...systemConfig, visibility }
         const nextProfile = { ...profile, systemLists: { ...(profile.systemLists ?? {}), [params.slug]: nextConfig } }
         await updateUserProfile(user.uid, { systemLists: nextProfile.systemLists })
         if (nextProfile.publicUsername) await rebuildPublicLibrary(user.uid, entries, nextProfile)
         setProfile(nextProfile); setSystemConfig(nextConfig)
       } else if (customFolder) {
-        const saved = await saveOwnerList(user.uid, profile.publicUsername, { ...customFolder, slug: customFolder.slug, visibility: customFolder.visibility === 'public' ? 'private' : 'public' }, entries, profile)
+        const saved = await saveOwnerList(user.uid, profile.publicUsername, { ...customFolder, slug: customFolder.slug, visibility }, entries, profile)
         setCustomFolder(saved)
       }
       toast.success('Folder visibility updated.')
     } catch { toast.error('Could not update folder visibility.') }
   }
   return <AppLayout title={name} subtitle={`${listEntries.length} title${listEntries.length === 1 ? '' : 's'}`}>
-    <div className="space-y-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><Link href="/profile" className="inline-flex items-center text-xs text-white/40 hover:text-white"><ArrowLeft className="mr-1 h-3.5 w-3.5" />Back to Profile</Link>{description && <p className="mt-2 max-w-xl text-sm text-white/45">{description}</p>}</div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={toggleVisibility}>{(systemConfig?.visibility ?? customFolder?.visibility) === 'public' ? <Globe2 className="mr-2 h-4 w-4 text-emerald-300" /> : <Lock className="mr-2 h-4 w-4" />}{(systemConfig?.visibility ?? customFolder?.visibility) === 'public' ? 'Public' : 'Private'}</Button>{systemConfig && !systemConfig.autoUpdate && <Button variant="outline" onClick={openManager}><Settings2 className="mr-2 h-4 w-4" />Manage Snapshot</Button>}<Button onClick={() => setProjectionOpen(true)} disabled={!listEntries.length}><Calculator className="mr-2 h-4 w-4" />See Watch Time Projection</Button></div></div>
+    <div className="space-y-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><Link href="/profile" className="inline-flex items-center text-xs text-white/40 hover:text-white"><ArrowLeft className="mr-1 h-3.5 w-3.5" />Back to Profile</Link>{description && <p className="mt-2 max-w-xl text-sm text-white/45">{description}</p>}</div><div className="flex flex-wrap gap-2"><label className="flex h-10 items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-white/45">Privacy<select value={systemConfig?.visibility ?? customFolder?.visibility ?? 'private'} onChange={(event) => setFolderVisibility(event.target.value as 'public' | 'private')} className="bg-transparent text-sm text-white outline-none"><option className="bg-[#11131d]" value="private">Private</option><option className="bg-[#11131d]" value="public">Public</option></select></label>{systemConfig && !systemConfig.autoUpdate && <Button variant="outline" onClick={openManager}><Settings2 className="mr-2 h-4 w-4" />Manage Snapshot</Button>}<Button onClick={() => setProjectionOpen(true)} disabled={!listEntries.length}><Calculator className="mr-2 h-4 w-4" />See Watch Time Projection</Button></div></div>
+      <div className="flex justify-end"><label className="flex items-center gap-2 text-xs text-white/40">Sort<select value={sort} onChange={(event) => { setSort(event.target.value as FolderSort); setPage(1) }} className="h-9 rounded-md border border-white/10 bg-[#11131d] px-3 text-sm text-white"><option value="folder-order">{params.slug.startsWith('top-10-') ? 'Ranking Order' : 'Folder Order'}</option>{OWNER_FOLDER_SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label></div>
       {loading ? <p className="py-20 text-center text-sm text-white/40">Loading folder…</p> : visible.length ? <div className="space-y-3">{visible.map((entry, index) => <MediaCard key={entry.id || entry.internalId} entry={entry} index={index} />)}</div> : <p className="rounded-lg border border-dashed border-white/10 py-20 text-center text-sm text-white/35">This folder has no titles.</p>}
       {pageCount > 1 && <div className="flex items-center justify-center gap-3"><Button size="icon" variant="outline" disabled={page === 1} onClick={() => setPage((value) => value - 1)}><ChevronLeft className="h-4 w-4" /></Button><span className="text-xs text-white/40">Page {page} of {pageCount}</span><Button size="icon" variant="outline" disabled={page === pageCount} onClick={() => setPage((value) => value + 1)}><ChevronRight className="h-4 w-4" /></Button></div>}
     </div><ListWatchProjection entries={listEntries} owner open={projectionOpen} onOpenChange={setProjectionOpen} />

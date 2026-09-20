@@ -33,6 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -84,7 +85,7 @@ export default function ProfilePage() {
     showPublicStats: false,
     publicVisibility: DEFAULT_PUBLIC_VISIBILITY,
     systemLists: {},
-    publicSharingVersion: 2,
+    publicSharingVersion: 3,
   })
   const [profileLoading, setProfileLoading] = useState(true)
 
@@ -100,10 +101,12 @@ export default function ProfilePage() {
   // Photo upload
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [avatarVersion, setAvatarVersion] = useState(0)
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
   // ── Existing state ────────────────────────────────────────────────────────
   const [loggingOut, setLoggingOut] = useState(false)
+  const [signOutDialogOpen, setSignOutDialogOpen] = useState(false)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [confirmInput, setConfirmInput] = useState('')
   const [clearing, setClearing] = useState(false)
@@ -127,9 +130,10 @@ export default function ProfilePage() {
   // ── Derived values ────────────────────────────────────────────────────────
   const effectiveDisplayName = profile.displayName || user?.displayName || 'Anonymous User'
   const rawPhotoUrl          = profile.profilePhotoUrl || user?.photoURL || ''
-  const effectivePhotoUrl    = rawPhotoUrl && avatarVersion > 0
+  const versionedPhotoUrl    = rawPhotoUrl && avatarVersion > 0
     ? `${rawPhotoUrl}${rawPhotoUrl.includes('?') ? '&' : '?'}mlv=${avatarVersion}`
     : rawPhotoUrl
+  const effectivePhotoUrl    = photoPreviewUrl || versionedPhotoUrl
   const memberSince          = formatMemberSince(user?.metadata?.creationTime)
   const unmatchedCount       = entries.filter((entry) => entry.tmdbId == null && !entry.tmdbUnmatchedDismissedAt).length
   const lastScanMillis       = entries.reduce((latest, entry) => Math.max(latest, entry.tmdbLastCheckedAt?.toMillis() ?? 0), 0)
@@ -159,6 +163,11 @@ export default function ProfilePage() {
     .join('')
     .toUpperCase()
     .slice(0, 2) || 'U'
+  const profileDirty = !profileLoading && (
+    nameInput.trim() !== (profile.displayName ?? user?.displayName ?? '').trim() ||
+    usernameInput.trim().toLocaleLowerCase() !== (profile.publicUsername ?? '') ||
+    bioInput.trim() !== profile.bio.trim()
+  )
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -166,6 +175,7 @@ export default function ProfilePage() {
     setLoggingOut(true)
     try {
       await logOut()
+      setSignOutDialogOpen(false)
       router.replace('/login')
     } catch {
       toast.error('Failed to sign out')
@@ -224,10 +234,12 @@ export default function ProfilePage() {
     // Reset input so same file can be re-selected
     e.target.value = ''
 
+    const previewUrl = URL.createObjectURL(file)
+    setPhotoPreviewUrl(previewUrl)
     setUploadingPhoto(true)
     try {
       validatePosterFile(file)
-      const url = await uploadPoster(file)
+      const url = await uploadPoster(file, `profile_${user.uid}`)
       if (!/^https:\/\//i.test(url)) throw new Error('Image host returned an invalid URL.')
       await new Promise<void>((resolve, reject) => {
         const image = new Image()
@@ -240,10 +252,14 @@ export default function ProfilePage() {
       if (persisted.profilePhotoUrl !== url) throw new Error('Profile photo could not be verified after saving.')
       setProfile(persisted)
       setAvatarVersion(Date.now())
+      setPhotoPreviewUrl(null)
       toast.success('Profile photo updated')
     } catch (err) {
+      console.error('Profile photo update failed', err)
+      setPhotoPreviewUrl(null)
       toast.error(err instanceof Error ? err.message : 'Photo upload failed')
     } finally {
+      URL.revokeObjectURL(previewUrl)
       setUploadingPhoto(false)
     }
   }
@@ -302,9 +318,9 @@ export default function ProfilePage() {
       bio: next.bio,
       publicProfileEnabled: true,
       showPublicStats: next.showPublicStats,
-      publicSharingVersion: 2,
+      publicSharingVersion: 3,
     })
-    return { ...next, publicProfileEnabled: true, publicUsername: null, publicSharingVersion: 2 }
+    return { ...next, publicProfileEnabled: true, publicUsername: null, publicSharingVersion: 3 }
   }
 
   async function handleSaveUnifiedProfile() {
@@ -314,9 +330,11 @@ export default function ProfilePage() {
       const next = { ...profile, displayName: nameInput.trim() || null, bio: bioInput.trim() }
       const saved = await persistUnifiedProfile(next)
       setProfile(saved)
+      setNameInput(saved.displayName ?? user.displayName ?? '')
       setUsernameInput(saved.publicUsername ?? '')
       setBioInput(saved.bio)
       useAuthStore.getState().setProfileDisplayName(saved.displayName)
+      setEditingName(false)
       toast.success('Profile updated.')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not update profile.')
@@ -497,7 +515,7 @@ export default function ProfilePage() {
             <Textarea value={bioInput} onChange={(event) => setBioInput(event.target.value)} maxLength={240} rows={3} placeholder="A short introduction for your profile…" />
           </div>
 
-          <Button className="mb-4 w-full" variant="outline" onClick={handleSaveUnifiedProfile} disabled={savingUnifiedProfile || profileLoading}>
+          <Button className={`mb-4 w-full ${profileDirty ? 'bg-blue-600 text-white hover:bg-blue-500' : ''}`} variant={profileDirty ? 'default' : 'outline'} onClick={handleSaveUnifiedProfile} disabled={savingUnifiedProfile || profileLoading || !profileDirty}>
             <Pencil className="mr-2 h-4 w-4" />{savingUnifiedProfile ? 'Saving Profile…' : 'Save Profile'}
           </Button>
 
@@ -516,7 +534,7 @@ export default function ProfilePage() {
           <Button
             variant="outline"
             className="w-full border-white/10 text-white/60 hover:text-white hover:bg-white/5"
-            onClick={handleLogOut}
+            onClick={() => setSignOutDialogOpen(true)}
             disabled={loggingOut}
           >
             <LogOut className="w-4 h-4 mr-2" />
@@ -706,6 +724,12 @@ export default function ProfilePage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={signOutDialogOpen} onOpenChange={(open) => { if (!loggingOut) setSignOutDialogOpen(open) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Sign Out</DialogTitle><DialogDescription>Are you sure you want to sign out?</DialogDescription></DialogHeader>
+          <div className="mt-3 flex gap-3"><Button variant="outline" className="flex-1" onClick={() => setSignOutDialogOpen(false)} disabled={loggingOut}>Cancel</Button><Button className="flex-1 bg-red-600 hover:bg-red-500" onClick={handleLogOut} disabled={loggingOut}><LogOut className="mr-2 h-4 w-4" />{loggingOut ? 'Signing out…' : 'Sign Out'}</Button></div>
         </DialogContent>
       </Dialog>
     </AppLayout>

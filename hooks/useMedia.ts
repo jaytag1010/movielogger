@@ -24,7 +24,7 @@ import {
   buildTitleDeletedActivity,
   buildUpdateActivities,
 } from '@/utils/activity'
-import { migratePublicSharingV2, removePublicEntry, syncPublicEntry } from '@/lib/firebase/publicSharing'
+import { migratePublicSharing, removePublicEntry, syncPublicEntry } from '@/lib/firebase/publicSharing'
 
 export function useMedia() {
   const { entries, loading, filters, activeTab } = useMediaStore()
@@ -39,7 +39,7 @@ export function useMedia() {
       useMediaStore.getState().setEntries(data)
       // Run the Version 5.2 public-mirror migration once without delaying the
       // library UI. Existing summary/folder choices are preserved.
-      migratePublicSharingV2(user.uid, data).catch((error) => {
+      migratePublicSharing(user.uid, data).catch((error) => {
         console.warn('Failed to migrate public sharing metadata', error)
       })
     } catch (err) {

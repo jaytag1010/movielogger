@@ -40,7 +40,9 @@ export interface PublicStats {
 
 export interface PublicProfileDocument {
   username: string
+  usernameLower?: string
   displayName: string
+  displayNameLower?: string
   profilePhotoUrl: string | null
   bio: string
   enabled: boolean

@@ -3,14 +3,18 @@ import {
   collection,
   deleteDoc,
   doc,
+  documentId,
+  endAt,
   getDoc,
   getDocs,
   getFirestore,
+  limit,
   orderBy,
   query,
   runTransaction,
   serverTimestamp,
   setDoc,
+  startAt,
   updateDoc,
   where,
   writeBatch,
@@ -129,7 +133,9 @@ async function ensurePublicIds(entries: MediaEntry[]): Promise<MediaEntry[]> {
 function publicProfilePayload(profile: UserProfile, stats: ReturnType<typeof calculatePublicStats>): PublicProfileDocument {
   return {
     username: profile.publicUsername!,
+    usernameLower: profile.publicUsername!.toLocaleLowerCase(),
     displayName: profile.displayName?.trim() || profile.publicUsername!,
+    displayNameLower: (profile.displayName?.trim() || profile.publicUsername!).toLocaleLowerCase(),
     profilePhotoUrl: profile.profilePhotoUrl ?? null,
     bio: profile.bio?.trim() ?? '',
     // Kept for document compatibility. Profile identity is public by default
@@ -283,7 +289,7 @@ export async function savePublicProfileSettings(
     publicUsername: username,
     publicVisibility: normalizePublicVisibility(settings.publicVisibility),
     systemLists: currentProfile.systemLists ?? {},
-    publicSharingVersion: 2,
+    publicSharingVersion: 3,
   }
   await updateUserProfile(userId, profile)
   await rebuildPublicLibrary(userId, entries, profile, undefined, (currentProfile.publicSharingVersion ?? 1) < 2)
@@ -293,21 +299,22 @@ export async function savePublicProfileSettings(
 /** One-time compatibility migration from the Version 5.1 master-toggle model. */
 const sharingMigrations = new Map<string, Promise<void>>()
 
-export function migratePublicSharingV2(userId: string, entries: MediaEntry[]): Promise<void> {
+export function migratePublicSharing(userId: string, entries: MediaEntry[]): Promise<void> {
   const active = sharingMigrations.get(userId)
   if (active) return active
   const migration = (async () => {
     const profile = await getUserProfile(userId)
-    if (!profile.publicUsername || (profile.publicSharingVersion ?? 1) >= 2) return
+    const currentVersion = profile.publicSharingVersion ?? 1
+    if (!profile.publicUsername || currentVersion >= 3) return
     const migrated: UserProfile = {
       ...profile,
       publicProfileEnabled: true,
-      publicSharingVersion: 2,
+      publicSharingVersion: 3,
     }
-    await rebuildPublicLibrary(userId, entries, migrated, undefined, true)
+    await rebuildPublicLibrary(userId, entries, migrated, undefined, currentVersion < 2)
     await updateUserProfile(userId, {
       publicProfileEnabled: true,
-      publicSharingVersion: 2,
+      publicSharingVersion: 3,
     })
   })().finally(() => sharingMigrations.delete(userId))
   sharingMigrations.set(userId, migration)
@@ -345,6 +352,23 @@ export async function getPublicProfile(username: string): Promise<PublicProfileD
   const normalized = normalizePublicUsername(username)
   const snap = await getDoc(doc(db(), 'publicProfiles', normalized))
   return snap.exists() ? snap.data() as PublicProfileDocument : null
+}
+
+export async function searchPublicProfiles(value: string, resultLimit = 20): Promise<PublicProfileDocument[]> {
+  const needle = value.trim().toLocaleLowerCase()
+  if (!needle) return []
+  const profiles = collection(db(), 'publicProfiles')
+  const searches = await Promise.allSettled([
+    getDocs(query(profiles, orderBy(documentId()), startAt(needle), endAt(`${needle}\uf8ff`), limit(resultLimit))),
+    getDocs(query(profiles, orderBy('displayNameLower'), startAt(needle), endAt(`${needle}\uf8ff`), limit(resultLimit))),
+  ])
+  const unique = new Map<string, PublicProfileDocument>()
+  const documents = searches.flatMap((result) => result.status === 'fulfilled' ? result.value.docs : [])
+  documents.forEach((item) => {
+    const profile = item.data() as PublicProfileDocument
+    if (profile.username) unique.set(profile.username, profile)
+  })
+  return Array.from(unique.values()).slice(0, resultLimit)
 }
 
 export async function getPublicLists(username: string): Promise<PublicListDocument[]> {

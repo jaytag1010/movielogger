@@ -88,7 +88,7 @@ async function createUserProfile(user: User): Promise<void> {
       publicProfileEnabled: true,
       publicUsername: null,
       showPublicStats: false,
-      publicSharingVersion: 2,
+      publicSharingVersion: 3,
       publicVisibility: {
         statuses: { completed: false, watching: false, planned: false, on_hold: false, dropped: false },
         types: { movie: false, series: false, shorts: false },

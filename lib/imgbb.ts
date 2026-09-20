@@ -74,7 +74,7 @@ export function validatePosterFile(file: File): void {
  * An AbortController enforces a 30-second timeout (matching TMDB fetch calls).
  * The returned URL is stored in Firestore as `manualPosterUrl`.
  */
-export async function uploadPoster(file: File): Promise<string> {
+export async function uploadPoster(file: File, namePrefix = 'poster'): Promise<string> {
   validatePosterFile(file)
 
   const key = getApiKey()
@@ -95,7 +95,7 @@ export async function uploadPoster(file: File): Promise<string> {
 
   const body = new FormData()
   body.append('image', base64)
-  body.append('name',  `poster_${Date.now()}`)
+  body.append('name', `${namePrefix.replace(/[^a-z0-9_-]/gi, '_')}_${Date.now()}`)
 
   try {
     const res = await fetch(`${IMGBB_ENDPOINT}?key=${key}`, {
@@ -113,14 +113,15 @@ export async function uploadPoster(file: File): Promise<string> {
 
     const json = (await res.json()) as ImgbbResponse
 
-    if (!json.success || !json.data?.url) {
+    const hostedUrl = json.data?.display_url || json.data?.url
+    if (!json.success || !hostedUrl) {
       throw new Error(
         `ImgBB upload failed: ${json.error?.message ?? JSON.stringify(json)}`
       )
     }
 
-    console.log('[ImgBB] Upload succeeded ✓', json.data.url.slice(0, 70) + '…')
-    return json.data.url
+    console.log('[ImgBB] Upload succeeded ✓', hostedUrl.slice(0, 70) + '…')
+    return hostedUrl
 
   } catch (err: unknown) {
     clearTimeout(timer)

@@ -350,7 +350,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile> {
     showPublicStats: false,
     publicVisibility: DEFAULT_PUBLIC_VISIBILITY,
     systemLists: {},
-    publicSharingVersion: 2,
+    publicSharingVersion: 3,
   }
   const data = snap.data()
   return {
@@ -393,8 +393,12 @@ export async function updateUserProfile(
   const batch = writeBatch(firestore)
   batch.set(profileRef, { ...updates, updatedAt: serverTimestamp() }, { merge: true })
   if (username) {
+    const publicDisplayName = next.displayName || username
     batch.set(doc(firestore, 'publicProfiles', username), {
-      displayName: next.displayName || username,
+      username,
+      usernameLower: String(username).toLocaleLowerCase(),
+      displayName: publicDisplayName,
+      displayNameLower: String(publicDisplayName).toLocaleLowerCase(),
       profilePhotoUrl: next.profilePhotoUrl ?? null,
       bio: next.bio ?? '',
       updatedAt: serverTimestamp(),
