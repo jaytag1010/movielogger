@@ -45,7 +45,7 @@ import { useRouter } from 'next/navigation'
 import { exportToExcel, exportToCSV } from '@/lib/export/exporter'
 import { deleteAllUserEntries, getUserProfile, updateUserProfile, UserProfile } from '@/lib/firebase/firestore'
 import { addActivity } from '@/lib/firebase/activity'
-import { validatePosterFile, uploadPoster } from '@/lib/imgbb'
+import { prepareProfilePhoto } from '@/utils/profilePhoto'
 import { useActivityHistory } from '@/hooks/useActivityHistory'
 import { DEFAULT_PUBLIC_VISIBILITY } from '@/types/public'
 import { OverallSummary } from '@/components/profile/OverallSummary'
@@ -55,16 +55,8 @@ import { getPublicProfile, savePublicProfileSettings, validatePublicUsername } f
 const CONFIRM_PHRASE = 'CONTINUE'
 
 function cacheBustImageUrl(url: string, version: number): string {
+  if (url.startsWith('data:')) return url
   return `${url}${url.includes('?') ? '&' : '?'}mlv=${version}`
-}
-
-function waitForImage(url: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.onload = () => resolve()
-    image.onerror = () => reject(new Error('The persisted profile image is not ready on the CDN yet.'))
-    image.src = url
-  })
 }
 
 /** Format Firebase creationTime → "June 2025" */
@@ -255,28 +247,26 @@ export default function ProfilePage() {
 
     setUploadingPhoto(true)
     try {
-      console.info('[ProfilePhoto] 1/7 Image selected', { name: file.name, type: file.type, size: file.size })
-      validatePosterFile(file)
+      console.info('[ProfilePhoto] 1/6 Image selected', { name: file.name, type: file.type, size: file.size })
       const previewUrl = URL.createObjectURL(file)
       setPhotoPreviewUrl(previewUrl)
 
-      console.info('[ProfilePhoto] 2/7 Uploading image to ImgBB')
-      const url = await uploadPoster(file, `profile_${user.uid}`)
-      if (!/^https:\/\//i.test(url)) throw new Error('Image host returned an invalid URL.')
-      console.info('[ProfilePhoto] 3/7 Upload complete', { host: new URL(url).hostname })
+      // ImgBB's image CDN is not consistently reachable after a page reload.
+      // Profile photos are small, so store a bounded, compressed data URL in
+      // the existing profilePhotoUrl field. Poster uploads continue using ImgBB.
+      console.info('[ProfilePhoto] 2/6 Preparing compressed profile image')
+      const url = await prepareProfilePhoto(file)
+      console.info('[ProfilePhoto] 3/6 Image prepared', { storedBytes: url.length })
 
-      // Do not require an immediate CDN preload before persistence. Newly
-      // uploaded ImgBB assets can take a moment to propagate even though the
-      // upload succeeded; the local preview remains visible during that time.
-      console.info('[ProfilePhoto] 4/7 Saving profilePhotoUrl to Firestore')
+      console.info('[ProfilePhoto] 4/6 Saving profilePhotoUrl to Firestore')
       await updateUserProfile(user.uid, { profilePhotoUrl: url })
 
-      console.info('[ProfilePhoto] 5/7 Verifying private profile persistence')
+      console.info('[ProfilePhoto] 5/6 Verifying private profile persistence')
       const persisted = await getUserProfile(user.uid)
       if (persisted.profilePhotoUrl !== url) throw new Error('Profile photo could not be verified after saving.')
 
       if (persisted.publicUsername) {
-        console.info('[ProfilePhoto] 6/7 Verifying public profile mirror')
+        console.info('[ProfilePhoto] Verifying public profile mirror')
         const publicProfile = await getPublicProfile(persisted.publicUsername)
         if (publicProfile?.profilePhotoUrl !== url) {
           throw new Error('The public profile photo could not be verified after saving.')
@@ -286,19 +276,8 @@ export default function ProfilePage() {
       const version = Date.now()
       setProfile(persisted)
       setAvatarVersion(version)
-      console.info('[ProfilePhoto] 7/7 Profile state updated')
-
-      // Swap the immediate local preview for the persisted URL only after the
-      // CDN image is actually loadable. Failure here does not discard a URL
-      // that has already been successfully stored in Firestore.
-      waitForImage(cacheBustImageUrl(url, version))
-        .then(() => {
-          setPhotoPreviewUrl((current) => current === previewUrl ? null : current)
-          console.info('[ProfilePhoto] Persisted image rendered successfully')
-        })
-        .catch((error) => {
-          console.warn('[ProfilePhoto] CDN image is not ready; retaining local preview', error)
-        })
+      setPhotoPreviewUrl((current) => current === previewUrl ? null : current)
+      console.info('[ProfilePhoto] 6/6 Persisted image rendered from profilePhotoUrl')
       toast.success('Profile photo updated')
     } catch (err) {
       console.error('Profile photo update failed', err)
