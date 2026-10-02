@@ -113,7 +113,9 @@ export async function uploadPoster(file: File, namePrefix = 'poster'): Promise<s
 
     const json = (await res.json()) as ImgbbResponse
 
-    const hostedUrl = json.data?.display_url || json.data?.url
+    // `url` is ImgBB's canonical direct image URL. `display_url` can point to
+    // a derived presentation asset, so use it only as a compatibility fallback.
+    const hostedUrl = json.data?.url || json.data?.display_url
     if (!json.success || !hostedUrl) {
       throw new Error(
         `ImgBB upload failed: ${json.error?.message ?? JSON.stringify(json)}`

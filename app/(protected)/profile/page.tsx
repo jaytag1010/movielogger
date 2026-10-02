@@ -50,9 +50,22 @@ import { useActivityHistory } from '@/hooks/useActivityHistory'
 import { DEFAULT_PUBLIC_VISIBILITY } from '@/types/public'
 import { OverallSummary } from '@/components/profile/OverallSummary'
 import { MyLists } from '@/components/profile/MyLists'
-import { savePublicProfileSettings, validatePublicUsername } from '@/lib/firebase/publicSharing'
+import { getPublicProfile, savePublicProfileSettings, validatePublicUsername } from '@/lib/firebase/publicSharing'
 
 const CONFIRM_PHRASE = 'CONTINUE'
+
+function cacheBustImageUrl(url: string, version: number): string {
+  return `${url}${url.includes('?') ? '&' : '?'}mlv=${version}`
+}
+
+function waitForImage(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve()
+    image.onerror = () => reject(new Error('The persisted profile image is not ready on the CDN yet.'))
+    image.src = url
+  })
+}
 
 /** Format Firebase creationTime → "June 2025" */
 function formatMemberSince(creationTime: string | undefined): string | null {
@@ -127,11 +140,17 @@ export default function ProfilePage() {
       .finally(() => setProfileLoading(false))
   }, [user])
 
+  useEffect(() => {
+    return () => {
+      if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl)
+    }
+  }, [photoPreviewUrl])
+
   // ── Derived values ────────────────────────────────────────────────────────
   const effectiveDisplayName = profile.displayName || user?.displayName || 'Anonymous User'
   const rawPhotoUrl          = profile.profilePhotoUrl || user?.photoURL || ''
   const versionedPhotoUrl    = rawPhotoUrl && avatarVersion > 0
-    ? `${rawPhotoUrl}${rawPhotoUrl.includes('?') ? '&' : '?'}mlv=${avatarVersion}`
+    ? cacheBustImageUrl(rawPhotoUrl, avatarVersion)
     : rawPhotoUrl
   const effectivePhotoUrl    = photoPreviewUrl || versionedPhotoUrl
   const memberSince          = formatMemberSince(user?.metadata?.creationTime)
@@ -234,32 +253,58 @@ export default function ProfilePage() {
     // Reset input so same file can be re-selected
     e.target.value = ''
 
-    const previewUrl = URL.createObjectURL(file)
-    setPhotoPreviewUrl(previewUrl)
     setUploadingPhoto(true)
     try {
+      console.info('[ProfilePhoto] 1/7 Image selected', { name: file.name, type: file.type, size: file.size })
       validatePosterFile(file)
+      const previewUrl = URL.createObjectURL(file)
+      setPhotoPreviewUrl(previewUrl)
+
+      console.info('[ProfilePhoto] 2/7 Uploading image to ImgBB')
       const url = await uploadPoster(file, `profile_${user.uid}`)
       if (!/^https:\/\//i.test(url)) throw new Error('Image host returned an invalid URL.')
-      await new Promise<void>((resolve, reject) => {
-        const image = new Image()
-        image.onload = () => resolve()
-        image.onerror = () => reject(new Error('The uploaded image could not be loaded.'))
-        image.src = url
-      })
+      console.info('[ProfilePhoto] 3/7 Upload complete', { host: new URL(url).hostname })
+
+      // Do not require an immediate CDN preload before persistence. Newly
+      // uploaded ImgBB assets can take a moment to propagate even though the
+      // upload succeeded; the local preview remains visible during that time.
+      console.info('[ProfilePhoto] 4/7 Saving profilePhotoUrl to Firestore')
       await updateUserProfile(user.uid, { profilePhotoUrl: url })
+
+      console.info('[ProfilePhoto] 5/7 Verifying private profile persistence')
       const persisted = await getUserProfile(user.uid)
       if (persisted.profilePhotoUrl !== url) throw new Error('Profile photo could not be verified after saving.')
+
+      if (persisted.publicUsername) {
+        console.info('[ProfilePhoto] 6/7 Verifying public profile mirror')
+        const publicProfile = await getPublicProfile(persisted.publicUsername)
+        if (publicProfile?.profilePhotoUrl !== url) {
+          throw new Error('The public profile photo could not be verified after saving.')
+        }
+      }
+
+      const version = Date.now()
       setProfile(persisted)
-      setAvatarVersion(Date.now())
-      setPhotoPreviewUrl(null)
+      setAvatarVersion(version)
+      console.info('[ProfilePhoto] 7/7 Profile state updated')
+
+      // Swap the immediate local preview for the persisted URL only after the
+      // CDN image is actually loadable. Failure here does not discard a URL
+      // that has already been successfully stored in Firestore.
+      waitForImage(cacheBustImageUrl(url, version))
+        .then(() => {
+          setPhotoPreviewUrl((current) => current === previewUrl ? null : current)
+          console.info('[ProfilePhoto] Persisted image rendered successfully')
+        })
+        .catch((error) => {
+          console.warn('[ProfilePhoto] CDN image is not ready; retaining local preview', error)
+        })
       toast.success('Profile photo updated')
     } catch (err) {
       console.error('Profile photo update failed', err)
       setPhotoPreviewUrl(null)
       toast.error(err instanceof Error ? err.message : 'Photo upload failed')
     } finally {
-      URL.revokeObjectURL(previewUrl)
       setUploadingPhoto(false)
     }
   }
@@ -382,7 +427,7 @@ export default function ProfilePage() {
           <div className="flex flex-col items-center mb-5">
             <div className="relative">
               <Avatar className="w-20 h-20 border-2 border-white/10">
-                <AvatarImage src={effectivePhotoUrl} />
+                <AvatarImage key={effectivePhotoUrl} src={effectivePhotoUrl} referrerPolicy="no-referrer" />
                 <AvatarFallback className="text-xl">{initials}</AvatarFallback>
               </Avatar>
 

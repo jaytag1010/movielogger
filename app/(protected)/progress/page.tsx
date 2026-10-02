@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { RefreshCw, Sparkles, TrendingUp, X } from 'lucide-react'
+import { Info, RefreshCw, Sparkles, TrendingUp, X } from 'lucide-react'
 import { Timestamp } from 'firebase/firestore'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { GlassCard } from '@/components/common/GlassCard'
@@ -1134,6 +1134,16 @@ export default function ProgressPage() {
             )}
           </AnimatePresence>
         </GlassCard>
+
+        {filter === 'watching' && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3.5 py-3 text-xs leading-relaxed text-white/40">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-300/70" />
+            <div className="space-y-1.5">
+              <p><span className="font-medium text-white/60">Keep your Watching list focused.</span> Keep only titles you are actively watching here. Consider moving inactive titles to On Hold or Planned.</p>
+              <p><span className="font-medium text-white/60">About the time remaining.</span> The estimate includes unwatched released episodes only. Unreleased episodes are excluded.</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Dialogs ── */}

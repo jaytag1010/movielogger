@@ -1,6 +1,6 @@
 'use client'
 
-import { Minus, Plus, CheckCircle, Film, MoreVertical, Pencil, Search, RefreshCw } from 'lucide-react'
+import { Minus, Plus, CheckCircle, Film, MoreVertical, Pencil, Search, RefreshCw, Hourglass } from 'lucide-react'
 import { MediaEntry, MEDIA_STATUS_COLORS } from '@/types/media'
 import { getDisplayTitle, getEffectiveMediaType, getEpisodesWatched, getDisplayPosterUrl, isEpisodicMediaType } from '@/utils/formatters'
 import { cn } from '@/utils/cn'
@@ -75,6 +75,16 @@ export function ProgressCard({
         : releaseStatus?.tone === 'airing'
           ? 'text-sky-300'
           : 'text-white/35'
+  const releasedUnwatchedEpisodes = releaseStatus?.releasedEpisodes != null
+    ? Math.max(0, releaseStatus.releasedEpisodes - currentProgress)
+    : null
+  const releasedWatchHoursRemaining = entry.status === 'watching' &&
+    releasedUnwatchedEpisodes != null &&
+    releasedUnwatchedEpisodes > 0 &&
+    entry.episodeDurationMinutes != null &&
+    entry.episodeDurationMinutes > 0
+      ? releasedUnwatchedEpisodes * entry.episodeDurationMinutes / 60
+      : null
 
   return (
     <div
@@ -187,6 +197,13 @@ export function ProgressCard({
         {releaseStatus && (
           <p className={cn('text-[11px] leading-tight truncate', releaseStatusTone)}>
             {releaseStatus.label}
+          </p>
+        )}
+
+        {releasedWatchHoursRemaining != null && (
+          <p className="flex items-center gap-1 text-[11px] leading-tight text-amber-200/80">
+            <Hourglass className="h-3 w-3 shrink-0" />
+            <span>{releasedWatchHoursRemaining.toFixed(2)} hr remaining</span>
           </p>
         )}
       </div>
